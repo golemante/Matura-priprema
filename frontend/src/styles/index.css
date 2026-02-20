@@ -1,76 +1,148 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-* {
+
+/* ─── CSS Design Tokens ─────────────────────────────────────────── */
+:root {
+  --bg-app: #f7f6f2;
+  --bg-surface: #ffffff;
+  --border: #e5e3dc;
+
+  --text-primary: #1a1916;
+  --text-secondary: #726e68;
+  --text-muted: #9b9690;
+
+  --primary: #2d54e8;
+  --primary-100: #e0e7ff;
+  --accent: #f97316;
+
+  --radius-card: 16px;
+  --radius-btn: 10px;
+
+  --shadow-card:
+    0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --shadow-card-md:
+    0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+}
+
+/* ─── Base Reset ────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
 }
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
 }
 
 body {
-  margin: 0;
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100dvh;
+}
+
+#root {
+  min-height: 100dvh;
   display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  flex-direction: column;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* ─── Typography Scale ──────────────────────────────────────────── */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
+/* ─── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-button:hover {
-  border-color: #646cff;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c8c4ba;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+/* ─── Focus Styles ──────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Selection ─────────────────────────────────────────────────── */
+::selection {
+  background-color: #c7d4fb;
+  color: #1a1916;
+}
+
+/* ─── Utility Classes ───────────────────────────────────────────── */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
   }
-  a:hover {
-    color: #747bff;
+
+  .bg-app {
+    background-color: var(--bg-app);
   }
-  button {
-    background-color: #f9f9f9;
+  .bg-surface {
+    background-color: var(--bg-surface);
+  }
+
+  .border-default {
+    border-color: var(--border);
+  }
+
+  .text-primary-color {
+    color: var(--text-primary);
+  }
+  .text-secondary-color {
+    color: var(--text-secondary);
+  }
+  .text-muted-color {
+    color: var(--text-muted);
+  }
+
+  /* Subtle inner highlight on surfaces */
+  .surface-highlight {
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.7);
+  }
+}
+
+/* ─── Component Base Classes ────────────────────────────────────── */
+@layer components {
+  .card-base {
+    @apply bg-white rounded-2xl border border-warm-300 shadow-card;
+  }
+
+  .page-container {
+    @apply max-w-6xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .btn-base {
+    @apply inline-flex items-center justify-center gap-2 font-semibold
+           rounded-[10px] transition-all duration-150 select-none
+           focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-600
+           disabled:opacity-50 disabled:pointer-events-none;
   }
 }
