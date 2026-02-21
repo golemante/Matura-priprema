@@ -1,50 +1,53 @@
 // hooks/useTimer.js
 import { useState, useEffect, useCallback, useRef } from "react";
 
-export function useTimer(initialSeconds, { onExpire, autoStart = true } = {}) {
+export function useTimer(
+  initialSeconds,
+  { onExpire, onWarning, warningAt = 600 } = {},
+) {
   const [timeLeft, setTimeLeft] = useState(initialSeconds);
-  const [running, setRunning] = useState(autoStart);
-  const intervalRef = useRef(null);
+  const [running, setRunning] = useState(true);
+  const warned = useRef(false);
 
   useEffect(() => {
-    if (!running) return;
-    intervalRef.current = setInterval(() => {
+    if (!running || timeLeft <= 0) return;
+    const id = setInterval(() => {
       setTimeLeft((t) => {
-        if (t <= 1) {
+        const next = t - 1;
+        if (next <= warningAt && !warned.current) {
+          warned.current = true;
+          onWarning?.();
+        }
+        if (next <= 0) {
           setRunning(false);
           onExpire?.();
           return 0;
         }
-        return t - 1;
+        return next;
       });
     }, 1000);
-    return () => clearInterval(intervalRef.current);
-  }, [running, onExpire]);
+    return () => clearInterval(id);
+  }, [running, timeLeft, onExpire, onWarning, warningAt]);
 
-  const pause = useCallback(() => setRunning(false), []);
-  const resume = useCallback(() => setRunning(true), []);
-  const reset = useCallback(() => {
-    setTimeLeft(initialSeconds);
-    setRunning(autoStart);
-  }, [initialSeconds, autoStart]);
-
-  const format = useCallback(() => {
-    const h = Math.floor(timeLeft / 3600);
-    const m = Math.floor((timeLeft % 3600) / 60);
-    const s = timeLeft % 60;
-    if (h > 0)
-      return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  }, [timeLeft]);
+  const format = useCallback(
+    (secs = timeLeft) => {
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const s = secs % 60;
+      if (h > 0)
+        return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    },
+    [timeLeft],
+  );
 
   return {
     timeLeft,
     formatted: format(),
     running,
-    pause,
-    resume,
-    reset,
-    isWarning: timeLeft < 600, // last 10 min
-    isDanger: timeLeft < 120, // last 2 min
+    pause: () => setRunning(false),
+    resume: () => setRunning(true),
+    isWarning: timeLeft < warningAt,
+    isDanger: timeLeft < 120,
   };
 }

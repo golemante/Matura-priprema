@@ -5,7 +5,7 @@ import { CheckCircle2, XCircle, Info, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/utils/utils";
 
 // Toast store (mikro-store)
-export const useToastStore = create((set) => ({
+const useToastStore = create((set) => ({
   toasts: [],
   add: (toast) => {
     const id = Date.now().toString();

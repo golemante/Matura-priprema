@@ -4,58 +4,59 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { cn } from "@/utils/utils";
 
-export function Modal({ open, onClose, title, children, size = "md" }) {
-  const overlayRef = useRef(null);
+const SIZES = {
+  sm: "max-w-sm",
+  md: "max-w-md",
+  lg: "max-w-lg",
+  xl: "max-w-2xl",
+};
 
-  // Focus trap + Escape key
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  size = "md",
+  className,
+}) {
+  const ref = useRef(null);
+
+  // Escape key
   useEffect(() => {
     if (!open) return;
-    const prev = document.activeElement;
-    overlayRef.current?.focus();
-    const onKey = (e) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      prev?.focus();
-    };
+    const fn = (e) => e.key === "Escape" && onClose?.();
+    document.addEventListener("keydown", fn);
+    return () => document.removeEventListener("keydown", fn);
   }, [open, onClose]);
 
-  // Prevent body scroll
+  // Scroll lock
   useEffect(() => {
-    if (open) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "";
+    document.body.style.overflow = open ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
   }, [open]);
 
-  const sizes = {
-    sm: "max-w-sm",
-    md: "max-w-md",
-    lg: "max-w-lg",
-    xl: "max-w-2xl",
-  };
-
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          ref={overlayRef}
-          tabIndex={-1}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-warm-900/40 backdrop-blur-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={(e) => e.target === e.currentTarget && onClose()}
+          onClick={(e) => e.target === e.currentTarget && onClose?.()}
         >
           <motion.div
+            ref={ref}
             className={cn(
               "bg-white rounded-2xl shadow-card-lg border border-warm-200 w-full",
-              sizes[size],
+              SIZES[size],
+              className,
             )}
-            initial={{ scale: 0.95, opacity: 0, y: 8 }}
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 8 }}
+            exit={{ scale: 0.95, opacity: 0, y: 10 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
             {title && (
@@ -74,5 +75,22 @@ export function Modal({ open, onClose, title, children, size = "md" }) {
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+export function ModalBody({ children, className }) {
+  return <div className={cn("p-6", className)}>{children}</div>;
+}
+
+export function ModalFooter({ children, className }) {
+  return (
+    <div
+      className={cn(
+        "px-6 py-4 border-t border-warm-200 flex gap-3 justify-end",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "@/components/common/Toast";
 import {
   ArrowLeft,
   ArrowRight,
@@ -14,6 +15,10 @@ import {
 import { useExamStore } from "@/store/examStore";
 import { Button } from "@/components/common/Button";
 import { cn } from "@/utils/utils";
+import { useTimer } from "@/hooks/useTimer";
+import { useKeyPress } from "@/hooks/useKeyPress";
+import { draftStorage } from "@/utils/storage";
+import { Modal, ModalBody, ModalFooter } from "@/components/common/Modal";
 
 // Mock question data
 function generateQuestions(examId) {
@@ -47,7 +52,12 @@ export function QuizPage() {
     goToQuestion,
   } = useExamStore();
 
-  const [timeLeft, setTimeLeft] = useState(90 * 60); // 90 min in seconds
+  const { formatted, isWarning, isDanger } = useTimer(90 * 60, {
+    onExpire: () => handleSubmit(),
+    onWarning: () =>
+      toast.warning("Ostalo je manje od 10 minuta!", { type: "warning" }),
+  });
+
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [direction, setDirection] = useState(1);
 
@@ -63,20 +73,22 @@ export function QuizPage() {
   const answeredCount = Object.keys(answers).length;
   const progress = totalQ > 0 ? (answeredCount / totalQ) * 100 : 0;
 
-  // Timer
-  useEffect(() => {
-    if (timeLeft <= 0) return;
-    const id = setInterval(() => setTimeLeft((t) => t - 1), 1000);
-    return () => clearInterval(id);
-  }, [timeLeft]);
+  useKeyPress({
+    ArrowRight: () => currentIndex < totalQ - 1 && handleGoTo(currentIndex + 1),
+    ArrowLeft: () => currentIndex > 0 && handleGoTo(currentIndex - 1),
+    a: () => setAnswer("a"),
+    b: () => setAnswer("b"),
+    c: () => setAnswer("c"),
+    d: () => setAnswer("d"),
+    f: () => toggleFlag(),
+  });
 
-  const formatTime = (secs) => {
-    const m = Math.floor(secs / 60)
-      .toString()
-      .padStart(2, "0");
-    const s = (secs % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
-  };
+  useEffect(() => {
+    const id = setInterval(() => {
+      draftStorage.save(examId, answers);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [examId, answers]);
 
   const handleGoTo = (idx) => {
     setDirection(idx > currentIndex ? 1 : -1);
@@ -88,8 +100,6 @@ export function QuizPage() {
   };
 
   if (!current) return null;
-
-  const timerWarning = timeLeft < 10 * 60; // last 10 min
 
   const slideVariants = {
     enter: (dir) => ({ x: dir > 0 ? 40 : -40, opacity: 0 }),
@@ -136,17 +146,16 @@ export function QuizPage() {
             <div className="flex items-center gap-2">
               <div
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold",
-                  timerWarning
-                    ? "bg-red-50 text-red-600 border border-red-200"
-                    : "bg-warm-100 text-warm-700",
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors",
+                  isDanger
+                    ? "bg-red-100 text-red-700 border border-red-200 animate-pulse" // Zadnja minuta
+                    : isWarning
+                      ? "bg-amber-50 text-amber-600 border border-amber-200" // Zadnjih 10 min
+                      : "bg-warm-100 text-warm-700",
                 )}
               >
-                <Timer
-                  size={14}
-                  className={timerWarning ? "animate-pulse" : ""}
-                />
-                {formatTime(timeLeft)}
+                <Timer size={14} className={isWarning ? "animate-pulse" : ""} />
+                {formatted}
               </div>
               <Button size="sm" onClick={() => setShowSubmitModal(true)}>
                 Predaj
@@ -326,77 +335,60 @@ export function QuizPage() {
       </div>
 
       {/* Submit confirmation modal */}
-      <AnimatePresence>
-        {showSubmitModal && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-warm-900/40 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      <Modal
+        open={showSubmitModal}
+        onClose={() => setShowSubmitModal(false)}
+        title="Predaj ispit?"
+      >
+        <ModalBody>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary-100 rounded-xl flex items-center justify-center">
+                <AlertCircle size={20} className="text-primary-600" />
+              </div>
+              <p className="text-xs text-warm-500">
+                Ova radnja se ne može poništiti. Provjeri svoje odgovore prije
+                predaje.
+              </p>
+            </div>
+
+            <div className="bg-warm-50 rounded-xl p-3 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-warm-600">Odgovoreno</span>
+                <span className="font-semibold text-warm-900">
+                  {answeredCount}/{totalQ}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-warm-600">Nije odgovoreno</span>
+                <span
+                  className={cn(
+                    "font-semibold",
+                    totalQ - answeredCount > 0
+                      ? "text-amber-600"
+                      : "text-warm-900",
+                  )}
+                >
+                  {totalQ - answeredCount}
+                </span>
+              </div>
+            </div>
+          </div>
+        </ModalBody>
+
+        <ModalFooter>
+          <Button
+            variant="secondary"
+            className="flex-1"
             onClick={() => setShowSubmitModal(false)}
           >
-            <motion.div
-              className="bg-white rounded-2xl shadow-card-lg border border-warm-300 p-6 max-w-sm w-full"
-              initial={{ scale: 0.94, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.94, opacity: 0 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-primary-100 rounded-xl flex items-center justify-center">
-                  <AlertCircle size={20} className="text-primary-600" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-warm-900">Predaj ispit?</h3>
-                  <p className="text-xs text-warm-500">
-                    Ova radnja se ne može poništiti
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-warm-50 rounded-xl p-3 mb-5 space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-warm-600">Odgovoreno</span>
-                  <span className="font-semibold text-warm-900">
-                    {answeredCount}/{totalQ}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-warm-600">Nije odgovoreno</span>
-                  <span
-                    className={cn(
-                      "font-semibold",
-                      totalQ - answeredCount > 0
-                        ? "text-amber-600"
-                        : "text-warm-900",
-                    )}
-                  >
-                    {totalQ - answeredCount}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <Button
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() => setShowSubmitModal(false)}
-                >
-                  Odustani
-                </Button>
-                <Button
-                  variant="primary"
-                  className="flex-1"
-                  onClick={handleSubmit}
-                >
-                  Predaj
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            Odustani
+          </Button>
+          <Button variant="primary" className="flex-1" onClick={handleSubmit}>
+            Predaj
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }
