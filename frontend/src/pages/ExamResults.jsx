@@ -1,5 +1,6 @@
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useEffect } from "react";
 import {
   CheckCircle2,
   XCircle,
@@ -46,6 +47,22 @@ function getScoreLabel(pct) {
   if (pct >= 60) return "Dobro! 👍";
   if (pct >= 50) return "Dovoljno 📖";
   return "Treba vježbati 💪";
+}
+
+function Confetti({ active }) {
+  useEffect(() => {
+    if (!active) return;
+    // Koristiti canvas-confetti ili mini implementacija
+    import("canvas-confetti").then((confetti) => {
+      confetti.default({
+        particleCount: 120,
+        spread: 80,
+        origin: { y: 0.4 },
+        colors: ["#2D54E8", "#22C55E", "#F97316", "#8B5CF6"],
+      });
+    });
+  }, [active]);
+  return null;
 }
 
 export function ResultsPage() {
@@ -100,6 +117,7 @@ export function ResultsPage() {
 
   return (
     <PageWrapper>
+      <Confetti active={pct >= 50} />
       <motion.div
         initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}

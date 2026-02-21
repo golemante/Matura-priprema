@@ -11,6 +11,7 @@ import {
   AlertCircle,
   SkipForward,
 } from "lucide-react";
+import { useExamStore } from "@/store/examStore";
 import { Button } from "@/components/common/Button";
 import { cn } from "@/utils/utils";
 
@@ -35,18 +36,32 @@ export function QuizPage() {
   const { examId } = useParams();
   const navigate = useNavigate();
 
-  const [questions] = useState(() => generateQuestions(examId));
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [flagged, setFlagged] = useState(new Set());
+  const {
+    questions,
+    answers,
+    flagged,
+    currentIndex,
+    startExam,
+    setAnswer,
+    toggleFlag,
+    goToQuestion,
+  } = useExamStore();
+
   const [timeLeft, setTimeLeft] = useState(90 * 60); // 90 min in seconds
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [direction, setDirection] = useState(1);
 
+  useEffect(() => {
+    // Ako pitanja još nisu učitana, generiraj ih i pokreni ispit u store-u
+    if (!questions || questions.length === 0) {
+      startExam(examId, generateQuestions(examId));
+    }
+  }, [examId, questions, startExam]);
+
   const current = questions[currentIndex];
   const totalQ = questions.length;
-  const answered = Object.keys(answers).length;
-  const progress = (answered / totalQ) * 100;
+  const answeredCount = Object.keys(answers).length;
+  const progress = totalQ > 0 ? (answeredCount / totalQ) * 100 : 0;
 
   // Timer
   useEffect(() => {
@@ -63,30 +78,16 @@ export function QuizPage() {
     return `${m}:${s}`;
   };
 
-  const goTo = useCallback(
-    (idx) => {
-      setDirection(idx > currentIndex ? 1 : -1);
-      setCurrentIndex(idx);
-    },
-    [currentIndex],
-  );
-
-  const handleAnswer = (optionId) => {
-    setAnswers((prev) => ({ ...prev, [current.id]: optionId }));
-  };
-
-  const toggleFlag = () => {
-    setFlagged((prev) => {
-      const next = new Set(prev);
-      if (next.has(current.id)) next.delete(current.id);
-      else next.add(current.id);
-      return next;
-    });
+  const handleGoTo = (idx) => {
+    setDirection(idx > currentIndex ? 1 : -1);
+    goToQuestion(idx); // Poziva store akciju
   };
 
   const handleSubmit = () => {
     navigate(`/rezultati/${examId}`, { state: { answers, questions } });
   };
+
+  if (!current) return null;
 
   const timerWarning = timeLeft < 10 * 60; // last 10 min
 
@@ -127,7 +128,7 @@ export function QuizPage() {
                 />
               </div>
               <p className="text-xs text-warm-400 mt-1 text-center">
-                {answered}/{totalQ} odgovoreno
+                {answeredCount}/{totalQ} odgovoreno
               </p>
             </div>
 
@@ -204,7 +205,7 @@ export function QuizPage() {
                   return (
                     <motion.button
                       key={option.id}
-                      onClick={() => handleAnswer(option.id)}
+                      onClick={() => setAnswer(option.id)}
                       whileTap={{ scale: 0.99 }}
                       className={cn(
                         "w-full text-left p-4 rounded-xl border-2 transition-all duration-150",
@@ -252,7 +253,7 @@ export function QuizPage() {
               variant="secondary"
               leftIcon={ArrowLeft}
               disabled={currentIndex === 0}
-              onClick={() => goTo(currentIndex - 1)}
+              onClick={() => handleGoTo(currentIndex - 1)}
             >
               Prethodno
             </Button>
@@ -260,7 +261,7 @@ export function QuizPage() {
               <Button
                 variant="primary"
                 rightIcon={ArrowRight}
-                onClick={() => goTo(currentIndex + 1)}
+                onClick={() => handleGoTo(currentIndex + 1)}
               >
                 Sljedeće
               </Button>
@@ -289,7 +290,7 @@ export function QuizPage() {
                 return (
                   <button
                     key={q.id}
-                    onClick={() => goTo(idx)}
+                    onClick={() => handleGoTo(idx)}
                     className={cn(
                       "w-full aspect-square rounded-lg text-xs font-semibold transition-all duration-100",
                       isCurrent
@@ -358,7 +359,7 @@ export function QuizPage() {
                 <div className="flex justify-between">
                   <span className="text-warm-600">Odgovoreno</span>
                   <span className="font-semibold text-warm-900">
-                    {answered}/{totalQ}
+                    {answeredCount}/{totalQ}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -366,12 +367,12 @@ export function QuizPage() {
                   <span
                     className={cn(
                       "font-semibold",
-                      totalQ - answered > 0
+                      totalQ - answeredCount > 0
                         ? "text-amber-600"
                         : "text-warm-900",
                     )}
                   >
-                    {totalQ - answered}
+                    {totalQ - answeredCount}
                   </span>
                 </div>
               </div>
