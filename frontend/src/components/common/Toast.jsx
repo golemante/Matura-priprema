@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Info, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/utils/utils";
-import { useToastStore } from "@/store/toastStore";
+import useToastStore from "@/store/toastStore";
 
 const ICONS = {
   success: CheckCircle2,
