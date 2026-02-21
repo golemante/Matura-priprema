@@ -1,27 +1,28 @@
 // api/client.js
 import axios from "axios";
-import { useAuthStore } from "@/store/authStore"; // Adjust path as needed
+import { useAuthStore } from "@/store/authStore";
 
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/api",
-  timeout: 10000,
+  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:3000/api",
+  timeout: 10_000,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true, // za httpOnly cookie auth
 });
 
-// Request interceptor — dodaj auth token
+// Automatski dodaj JWT token
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("auth_token");
+  const token = useAuthStore.getState().token;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Response interceptor — handle 401
+// Handle 401 → logout
 apiClient.interceptors.response.use(
-  (res) => res,
+  (res) => res.data, // unwrap data odmah
   (err) => {
     if (err.response?.status === 401) {
       useAuthStore.getState().logout();
     }
-    return Promise.reject(err);
+    return Promise.reject(err.response?.data ?? err);
   },
 );
