@@ -1,4 +1,5 @@
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
+// eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
 import { useEffect } from "react";
 import {
@@ -238,6 +239,7 @@ export function ResultsPage() {
                   label: "Preskočeno",
                   color: "text-warm-500 bg-warm-100",
                 },
+                // eslint-disable-next-line no-unused-vars
               ].map(({ icon: Icon, value, label, color }) => (
                 <div
                   key={label}

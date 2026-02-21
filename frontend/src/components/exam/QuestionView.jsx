@@ -1,4 +1,5 @@
 // components/exam/QuestionView.jsx
+// eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
 import { Flag, CheckCircle } from "lucide-react";
 import { MathText } from "@/components/math/MathRenderer";

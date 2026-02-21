@@ -1,4 +1,5 @@
 import { useNavigate, useParams, Link } from "react-router-dom";
+// eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
 import { ArrowLeft, Calendar, Clock, ChevronRight, Filter } from "lucide-react";
 import { PageWrapper } from "@/components/layout/Wrapper";

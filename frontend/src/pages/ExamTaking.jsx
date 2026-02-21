@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
+// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "@/components/common/Toast";
+import { toast } from "@/store/toastStore";
 import {
   ArrowLeft,
   ArrowRight,
