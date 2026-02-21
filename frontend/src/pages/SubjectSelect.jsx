@@ -3,9 +3,6 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Calendar, Clock, ChevronRight, Filter } from "lucide-react";
 import { PageWrapper } from "@/components/layout/Wrapper";
-import { Card } from "@/components/common/Card";
-import { Badge } from "@/components/common/Badge";
-import { Button } from "@/components/common/Button";
 import { ExamCard } from "@/components/exam/ExamCard";
 import {
   SUBJECTS,
