@@ -5,7 +5,7 @@ import { registerSchema } from "@/utils/validators";
 import { useMutation } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/api/authApi";
-import { toast } from "@store/toastStore";
+import { toast } from "@/store/toastStore";
 import { Input } from "@/components/common/Input";
 import { Button } from "@/components/common/Button";
 import { Link, useNavigate } from "react-router-dom";
