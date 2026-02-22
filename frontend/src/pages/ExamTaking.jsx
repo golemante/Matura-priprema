@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,6 +12,7 @@ import {
   Circle,
   AlertCircle,
   SkipForward,
+  TimerIcon,
 } from "lucide-react";
 import { useExamStore } from "@/store/examStore";
 import { Button } from "@/components/common/Button";
@@ -20,6 +21,8 @@ import { useTimer } from "@/hooks/useTimer";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import { draftStorage } from "@/utils/storage";
 import { Modal, ModalBody, ModalFooter } from "@/components/common/Modal";
+import { QuestionView } from "@/components/exam/QuestionView";
+import { QuestionNav } from "@/components/exam/QuestionNav";
 
 // Mock question data
 function generateQuestions(examId) {
@@ -53,19 +56,19 @@ export function QuizPage() {
     goToQuestion,
   } = useExamStore();
 
-  const { formatted, isWarning, isDanger } = useTimer(90 * 60, {
-    onExpire: () => handleSubmit(),
-    onWarning: () =>
-      toast.warning("Ostalo je manje od 10 minuta!", { type: "warning" }),
-  });
-
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [direction, setDirection] = useState(1);
 
   useEffect(() => {
-    // Ako pitanja još nisu učitana, generiraj ih i pokreni ispit u store-u
     if (!questions || questions.length === 0) {
+      const draft = draftStorage.load(examId);
       startExam(examId, generateQuestions(examId));
+      // TODO: ako postoji draft, ponudi obnavljanje odgovora
+      if (draft) {
+        toast.info(
+          "Pronađeni su prethodni odgovori. Nastavljaš od mjesta gdje si stao.",
+        );
+      }
     }
   }, [examId, questions, startExam]);
 
@@ -74,15 +77,18 @@ export function QuizPage() {
   const answeredCount = Object.keys(answers).length;
   const progress = totalQ > 0 ? (answeredCount / totalQ) * 100 : 0;
 
-  useKeyPress({
-    ArrowRight: () => currentIndex < totalQ - 1 && handleGoTo(currentIndex + 1),
-    ArrowLeft: () => currentIndex > 0 && handleGoTo(currentIndex - 1),
-    a: () => setAnswer("a"),
-    b: () => setAnswer("b"),
-    c: () => setAnswer("c"),
-    d: () => setAnswer("d"),
-    f: () => toggleFlag(),
-  });
+  const handleAnswer = useCallback(
+    (optionId) => {
+      if (!current) return;
+      setAnswer(current.id, optionId);
+    },
+    [current, setAnswer],
+  );
+
+  const handleToggleFlag = useCallback(() => {
+    if (!current) return;
+    toggleFlag(current.id);
+  }, [current, toggleFlag]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -91,22 +97,54 @@ export function QuizPage() {
     return () => clearInterval(id);
   }, [examId, answers]);
 
-  const handleGoTo = (idx) => {
-    setDirection(idx > currentIndex ? 1 : -1);
-    goToQuestion(idx); // Poziva store akciju
-  };
+  const handleGoTo = useCallback(
+    (idx) => {
+      setDirection(idx > currentIndex ? 1 : -1);
+      goToQuestion(idx);
+    },
+    [currentIndex, goToQuestion],
+  );
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
+    draftStorage.clear(examId);
     navigate(`/rezultati/${examId}`, { state: { answers, questions } });
-  };
+  }, [examId, navigate, answers, questions]);
 
-  if (!current) return null;
+  useKeyPress({
+    ArrowRight: () => currentIndex < totalQ - 1 && handleGoTo(currentIndex + 1),
+    ArrowLeft: () => currentIndex > 0 && handleGoTo(currentIndex - 1),
+    // FIX: šaljemo option ID → handleAnswer pronalazi current.id interno
+    a: () => handleAnswer("a"),
+    b: () => handleAnswer("b"),
+    c: () => handleAnswer("c"),
+    d: () => handleAnswer("d"),
+    // FIX: toggleFlag bez argumenta, handler ga pokupi interno
+    f: handleToggleFlag,
+  });
+
+  useEffect(() => {
+    if (!examId || answeredCount === 0) return;
+    const id = setInterval(() => {
+      draftStorage.save(examId, answers);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [examId, answers, answeredCount]);
+
+  const { formatted, isWarning, isDanger } = useTimer(90 * 60, {
+    onExpire: () => handleSubmit(),
+    onWarning: () =>
+      toast.warning("Ostalo je manje od 10 minuta!", { type: "warning" }),
+  });
 
   const slideVariants = {
     enter: (dir) => ({ x: dir > 0 ? 40 : -40, opacity: 0 }),
     center: { x: 0, opacity: 1 },
     exit: (dir) => ({ x: dir > 0 ? -40 : 40, opacity: 0 }),
   };
+
+  if (!current) return null;
+
+  const isCurrentFlagged = flagged.includes(current.id);
 
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
@@ -155,7 +193,10 @@ export function QuizPage() {
                       : "bg-warm-100 text-warm-700",
                 )}
               >
-                <Timer size={14} className={isWarning ? "animate-pulse" : ""} />
+                <TimerIcon
+                  size={14}
+                  className={isWarning ? "animate-pulse" : ""}
+                />
                 {formatted}
               </div>
               <Button size="sm" onClick={() => setShowSubmitModal(true)}>
@@ -180,80 +221,14 @@ export function QuizPage() {
               exit="exit"
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             >
-              {/* Question card */}
-              <div className="bg-white rounded-2xl border border-warm-300 shadow-card p-6 mb-4">
-                <div className="flex items-start justify-between gap-3 mb-5">
-                  <span
-                    className="text-xs font-bold text-primary-600 bg-primary-50 border border-primary-200
-                                   px-2.5 py-1 rounded-full"
-                  >
-                    Pitanje {currentIndex + 1}
-                  </span>
-                  <button
-                    onClick={toggleFlag}
-                    className={cn(
-                      "p-1.5 rounded-lg transition-colors",
-                      flagged.has(current.id)
-                        ? "text-amber-600 bg-amber-50"
-                        : "text-warm-400 hover:text-warm-700 hover:bg-warm-100",
-                    )}
-                    title="Označi pitanje"
-                  >
-                    <Flag size={16} />
-                  </button>
-                </div>
-
-                <p className="text-warm-900 font-medium text-base leading-relaxed">
-                  {current.text}
-                </p>
-              </div>
-
-              {/* Answer options */}
-              <div className="space-y-2.5">
-                {current.options.map((option) => {
-                  const selected = answers[current.id] === option.id;
-                  return (
-                    <motion.button
-                      key={option.id}
-                      onClick={() => setAnswer(option.id)}
-                      whileTap={{ scale: 0.99 }}
-                      className={cn(
-                        "w-full text-left p-4 rounded-xl border-2 transition-all duration-150",
-                        "flex items-center gap-3 group",
-                        selected
-                          ? "border-primary-500 bg-primary-50 shadow-sm"
-                          : "border-warm-200 bg-white hover:border-warm-400 hover:bg-warm-50",
-                      )}
-                    >
-                      {/* Option indicator */}
-                      <div
-                        className={cn(
-                          "w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 text-xs font-bold transition-all",
-                          selected
-                            ? "border-primary-500 bg-primary-500 text-white"
-                            : "border-warm-300 text-warm-400 group-hover:border-warm-500",
-                        )}
-                      >
-                        {option.id.toUpperCase()}
-                      </div>
-                      <span
-                        className={cn(
-                          "text-sm font-medium leading-relaxed",
-                          selected ? "text-primary-800" : "text-warm-700",
-                        )}
-                      >
-                        {option.text}
-                      </span>
-                      {selected && (
-                        <CheckCircle
-                          size={16}
-                          className="text-primary-500 ml-auto flex-shrink-0"
-                        />
-                      )}
-                    </motion.button>
-                  );
-                })}
-              </div>
+              <QuestionView
+                question={current}
+                selectedAnswer={answers[current.id]}
+                onAnswer={handleAnswer} // FIX #2: ispravna signatura
+                onFlag={handleToggleFlag} // FIX #3: ispravna signatura
+                isFlagged={isCurrentFlagged} // FIX #1: array.includes()
+                index={currentIndex}
+              />
             </motion.div>
           </AnimatePresence>
 
@@ -288,50 +263,13 @@ export function QuizPage() {
 
         {/* Question navigator sidebar */}
         <div className="lg:w-56 xl:w-64">
-          <div className="bg-white rounded-2xl border border-warm-300 shadow-card p-4 sticky top-20">
-            <h3 className="text-xs font-bold text-warm-500 uppercase tracking-wider mb-3">
-              Navigacija
-            </h3>
-            <div className="grid grid-cols-6 lg:grid-cols-5 gap-1.5">
-              {questions.map((q, idx) => {
-                const isAnswered = !!answers[q.id];
-                const isFlagged = flagged.has(q.id);
-                const isCurrent = idx === currentIndex;
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => handleGoTo(idx)}
-                    className={cn(
-                      "w-full aspect-square rounded-lg text-xs font-semibold transition-all duration-100",
-                      isCurrent
-                        ? "bg-primary-600 text-white shadow-sm"
-                        : isAnswered
-                          ? "bg-primary-100 text-primary-700 hover:bg-primary-200"
-                          : isFlagged
-                            ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                            : "bg-warm-100 text-warm-500 hover:bg-warm-200",
-                    )}
-                  >
-                    {idx + 1}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Legend */}
-            <div className="mt-4 space-y-1.5 text-xs text-warm-500">
-              {[
-                { color: "bg-primary-100", label: "Odgovoreno" },
-                { color: "bg-amber-100", label: "Označeno" },
-                { color: "bg-warm-100", label: "Nije odgovoreno" },
-              ].map(({ color, label }) => (
-                <div key={label} className="flex items-center gap-2">
-                  <div className={cn("w-3.5 h-3.5 rounded", color)} />
-                  {label}
-                </div>
-              ))}
-            </div>
-          </div>
+          <QuestionNav
+            questions={questions}
+            answers={answers}
+            flagged={flagged} // FIX #1: QuestionNav već koristi .includes()
+            currentIndex={currentIndex}
+            onNavigate={handleGoTo}
+          />
         </div>
       </div>
 
@@ -352,7 +290,6 @@ export function QuizPage() {
                 predaje.
               </p>
             </div>
-
             <div className="bg-warm-50 rounded-xl p-3 space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-warm-600">Odgovoreno</span>
@@ -366,11 +303,17 @@ export function QuizPage() {
                   className={cn(
                     "font-semibold",
                     totalQ - answeredCount > 0
-                      ? "text-amber-600"
-                      : "text-warm-900",
+                      ? "text-red-600"
+                      : "text-success-600",
                   )}
                 >
                   {totalQ - answeredCount}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-warm-600">Označeno zastavicom</span>
+                <span className="font-semibold text-amber-600">
+                  {flagged.length}
                 </span>
               </div>
             </div>
@@ -378,15 +321,11 @@ export function QuizPage() {
         </ModalBody>
 
         <ModalFooter>
-          <Button
-            variant="secondary"
-            className="flex-1"
-            onClick={() => setShowSubmitModal(false)}
-          >
-            Odustani
+          <Button variant="secondary" onClick={() => setShowSubmitModal(false)}>
+            Nastavi rješavati
           </Button>
-          <Button variant="primary" className="flex-1" onClick={handleSubmit}>
-            Predaj
+          <Button variant="primary" onClick={handleSubmit}>
+            Predaj ispit
           </Button>
         </ModalFooter>
       </Modal>

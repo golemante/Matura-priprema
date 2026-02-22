@@ -9,25 +9,39 @@ export function useTimer(
   const [running, setRunning] = useState(true);
   const warned = useRef(false);
 
+  const onExpireRef = useRef(onExpire);
+  const onWarningRef = useRef(onWarning);
   useEffect(() => {
-    if (!running || timeLeft <= 0) return;
+    onExpireRef.current = onExpire;
+  }, [onExpire]);
+  useEffect(() => {
+    onWarningRef.current = onWarning;
+  }, [onWarning]);
+
+  useEffect(() => {
+    if (!running) return;
+
     const id = setInterval(() => {
       setTimeLeft((t) => {
         const next = t - 1;
+
         if (next <= warningAt && !warned.current) {
           warned.current = true;
-          onWarning?.();
+          onWarningRef.current?.();
         }
+
         if (next <= 0) {
           setRunning(false);
-          onExpire?.();
+          onExpireRef.current?.();
           return 0;
         }
+
         return next;
       });
     }, 1000);
+
     return () => clearInterval(id);
-  }, [running, timeLeft, onExpire, onWarning, warningAt]);
+  }, [running, warningAt]);
 
   const format = useCallback(
     (secs = timeLeft) => {
@@ -47,7 +61,7 @@ export function useTimer(
     running,
     pause: () => setRunning(false),
     resume: () => setRunning(true),
-    isWarning: timeLeft < warningAt,
-    isDanger: timeLeft < 120,
+    isWarning: timeLeft <= warningAt && timeLeft > 120,
+    isDanger: timeLeft <= 120,
   };
 }

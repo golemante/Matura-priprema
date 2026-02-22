@@ -21,13 +21,19 @@ export function useLogin() {
 }
 
 export function useLogout() {
-  const { logout } = useAuthStore();
+  const navigate = useNavigate();
+
   return () => {
-    logout();
+    useAuthStore.setState({ user: null, token: null });
     toast.info("Uspješno ste se odjavili");
+    navigate("/login");
   };
 }
 
 export function useCurrentUser() {
   return useAuthStore((s) => s.user);
+}
+
+export function useIsAuthenticated() {
+  return useAuthStore((s) => !!s.token);
 }

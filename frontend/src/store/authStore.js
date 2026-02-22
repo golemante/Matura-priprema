@@ -7,11 +7,10 @@ export const useAuthStore = create(
     (set) => ({
       user: null,
       token: null,
-      isAuthenticated: false,
 
-      setAuth: (user, token) => set({ user, token, isAuthenticated: true }),
+      setAuth: (user, token) => set({ user, token }),
       logout: () => {
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, token: null });
         window.location.href = "/login";
       },
       updateUser: (data) => set((s) => ({ user: { ...s.user, ...data } })),
