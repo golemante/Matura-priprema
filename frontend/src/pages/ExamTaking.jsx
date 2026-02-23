@@ -1,142 +1,58 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "@/store/toastStore";
 import { ArrowLeft, ArrowRight, AlertCircle } from "lucide-react";
-import { useExamStore } from "@/store/examStore";
 import { Button } from "@/components/common/Button";
 import { cn } from "@/utils/utils";
-import { useTimer } from "@/hooks/useTimer";
-import { useKeyPress } from "@/hooks/useKeyPress";
-import { draftStorage } from "@/utils/storage";
 import { Modal, ModalBody, ModalFooter } from "@/components/common/Modal";
 import { QuestionView } from "@/components/exam/QuestionView";
 import { QuestionNav } from "@/components/exam/QuestionNav";
 import { ProgressBar } from "@/components/exam/ProgressBar";
 import { ExamTimer } from "@/components/exam/Timer";
+import { useExamSession } from "@/hooks/useExamSession";
 
-// Mock question data
-function generateQuestions(examId) {
-  const count = examId?.includes("visa") ? 40 : 30;
-  return Array.from({ length: count }, (_, i) => ({
-    id: i + 1,
-    text: `Pitanje ${i + 1}: Ovo je primjer pitanja koje bi se nalazilo na stvarnom ispitu. Odaberite točan odgovor.`,
-    options: [
-      { id: "a", text: "Ovo je opcija A – mogući točan odgovor" },
-      { id: "b", text: "Ovo je opcija B – alternativni odgovor" },
-      { id: "c", text: "Ovo je opcija C – još jedna mogućnost" },
-      { id: "d", text: "Ovo je opcija D – posljednja opcija" },
-    ],
-    correct: ["a", "b", "c", "d"][Math.floor(Math.random() * 4)],
-    points: examId?.includes("visa") ? 2 : 1,
-  }));
-}
+const slideVariants = {
+  enter: (dir) => ({ x: dir > 0 ? 40 : -40, opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit: (dir) => ({ x: dir > 0 ? -40 : 40, opacity: 0 }),
+};
 
 export function QuizPage() {
   const { examId } = useParams();
-  const navigate = useNavigate();
 
   const {
     questions,
     answers,
     flagged,
+    current,
     currentIndex,
-    startExam,
-    setAnswer,
-    toggleFlag,
-    goToQuestion,
-  } = useExamStore();
+    totalQ,
+    answeredCount,
+    isCurrentFlagged,
+    direction,
+    showSubmitModal,
+    setShowSubmitModal,
+    showDraftModal,
+    confirmRestoreDraft,
+    discardDraft,
+    handleAnswer,
+    handleToggleFlag,
+    handleGoTo,
+    handleSubmit,
+    timer,
+  } = useExamSession(examId);
 
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [direction, setDirection] = useState(1);
+  const { formatted, isWarning, isDanger } = timer;
 
-  useEffect(() => {
-    if (!questions || questions.length === 0) {
-      const draft = draftStorage.load(examId);
-      startExam(examId, generateQuestions(examId));
-      // TODO: ako postoji draft, ponudi obnavljanje odgovora
-      if (draft) {
-        toast.info(
-          "Pronađeni su prethodni odgovori. Nastavljaš od mjesta gdje si stao.",
-        );
-      }
-    }
-  }, [examId, questions, startExam]);
-
-  const current = questions[currentIndex];
-  const totalQ = questions.length;
-  const answeredCount = Object.keys(answers).length;
-  const progress = totalQ > 0 ? (answeredCount / totalQ) * 100 : 0;
-
-  const handleAnswer = useCallback(
-    (optionId) => {
-      if (!current) return;
-      setAnswer(current.id, optionId);
-    },
-    [current, setAnswer],
-  );
-
-  const handleToggleFlag = useCallback(() => {
-    if (!current) return;
-    toggleFlag(current.id);
-  }, [current, toggleFlag]);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      draftStorage.save(examId, answers);
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [examId, answers]);
-
-  const handleGoTo = useCallback(
-    (idx) => {
-      setDirection(idx > currentIndex ? 1 : -1);
-      goToQuestion(idx);
-    },
-    [currentIndex, goToQuestion],
-  );
-
-  const handleSubmit = useCallback(() => {
-    draftStorage.clear(examId);
-    navigate(`/rezultati/${examId}`, { state: { answers, questions } });
-  }, [examId, navigate, answers, questions]);
-
-  useKeyPress({
-    ArrowRight: () => currentIndex < totalQ - 1 && handleGoTo(currentIndex + 1),
-    ArrowLeft: () => currentIndex > 0 && handleGoTo(currentIndex - 1),
-    // FIX: šaljemo option ID → handleAnswer pronalazi current.id interno
-    a: () => handleAnswer("a"),
-    b: () => handleAnswer("b"),
-    c: () => handleAnswer("c"),
-    d: () => handleAnswer("d"),
-    // FIX: toggleFlag bez argumenta, handler ga pokupi interno
-    f: handleToggleFlag,
-  });
-
-  useEffect(() => {
-    if (!examId || answeredCount === 0) return;
-    const id = setInterval(() => {
-      draftStorage.save(examId, answers);
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [examId, answers, answeredCount]);
-
-  const { formatted, isWarning, isDanger } = useTimer(90 * 60, {
-    onExpire: () => handleSubmit(),
-    onWarning: () =>
-      toast.warning("Ostalo je manje od 10 minuta!", { type: "warning" }),
-  });
-
-  const slideVariants = {
-    enter: (dir) => ({ x: dir > 0 ? 40 : -40, opacity: 0 }),
-    center: { x: 0, opacity: 1 },
-    exit: (dir) => ({ x: dir > 0 ? -40 : 40, opacity: 0 }),
-  };
-
-  if (!current) return null;
-
-  const isCurrentFlagged = flagged.includes(current.id);
+  if (!current) {
+    return (
+      <div className="min-h-dvh bg-warm-100 flex items-center justify-center">
+        <div className="animate-pulse text-warm-400 text-sm">
+          Učitavanje ispita...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
@@ -166,7 +82,6 @@ export function QuizPage() {
                 max={totalQ}
                 showLabel={true}
                 variant={answeredCount === totalQ ? "success" : "default"}
-                className="w-full"
               />
             </div>
 
@@ -304,6 +219,27 @@ export function QuizPage() {
           </Button>
           <Button variant="primary" onClick={handleSubmit}>
             Predaj ispit
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal
+        open={showDraftModal}
+        onClose={discardDraft}
+        title="Nastavi od gdje si stao?"
+      >
+        <ModalBody>
+          <p className="text-sm text-warm-600">
+            Pronađeni su prethodni odgovori za ovaj ispit. Želiš li nastaviti od
+            mjesta gdje si stao ili početi ispočetka?
+          </p>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="secondary" onClick={discardDraft}>
+            Počni ispočetka
+          </Button>
+          <Button variant="primary" onClick={confirmRestoreDraft}>
+            Nastavi
           </Button>
         </ModalFooter>
       </Modal>

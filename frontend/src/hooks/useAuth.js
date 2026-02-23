@@ -1,4 +1,5 @@
 // hooks/useAuth.js
+import { useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/api/authApi";
@@ -23,11 +24,18 @@ export function useLogin() {
 export function useLogout() {
   const navigate = useNavigate();
 
-  return () => {
-    useAuthStore.setState({ user: null, token: null });
-    toast.info("Uspješno ste se odjavili");
-    navigate("/login");
-  };
+  const { mutate: logoutMutation, isPending } = useMutation({
+    mutationFn: authApi.logout, // invalidira refresh token na serveru
+    onSettled: () => {
+      useAuthStore.getState().logout();
+      toast.info("Uspješno ste se odjavili");
+      navigate("/login");
+    },
+  });
+
+  const logout = useCallback(() => logoutMutation(), [logoutMutation]);
+
+  return { logout, isPending };
 }
 
 export function useCurrentUser() {

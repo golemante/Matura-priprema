@@ -1,4 +1,4 @@
-// pages/Login.jsx
+// pages/Register.jsx
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema } from "@/utils/validators";

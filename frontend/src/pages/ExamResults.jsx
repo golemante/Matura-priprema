@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 // eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
 import { useEffect } from "react";
@@ -17,6 +17,8 @@ import { Card, CardContent } from "@/components/common/Card";
 import { Button } from "@/components/common/Button";
 import { Badge } from "@/components/common/Badge";
 import { SUBJECTS } from "@/utils/constants";
+import { calculateScore } from "@/utils/helpers";
+import { useExamStore } from "@/store/examStore";
 import { cn } from "@/utils/utils";
 
 function getScoreColor(pct) {
@@ -50,18 +52,26 @@ function getScoreLabel(pct) {
   return "Treba vježbati 💪";
 }
 
+function formatElapsed(seconds) {
+  if (!seconds) return null;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function Confetti({ active }) {
   useEffect(() => {
     if (!active) return;
-    // Koristiti canvas-confetti ili mini implementacija
-    import("canvas-confetti").then((confetti) => {
-      confetti.default({
-        particleCount: 120,
-        spread: 80,
-        origin: { y: 0.4 },
-        colors: ["#2D54E8", "#22C55E", "#F97316", "#8B5CF6"],
-      });
-    });
+    import("canvas-confetti")
+      .then((mod) => {
+        mod.default({
+          particleCount: 120,
+          spread: 80,
+          origin: { y: 0.4 },
+          colors: ["#2D54E8", "#22C55E", "#F97316", "#8B5CF6"],
+        });
+      })
+      .catch(() => {}); // tiho ignoriraj ako modul nije instaliran
   }, [active]);
   return null;
 }
@@ -69,131 +79,97 @@ function Confetti({ active }) {
 export function ResultsPage() {
   const { examId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { answers = {}, questions = [] } = location.state || {};
+
+  const lastResult = useExamStore((s) => s.lastResult);
+
+  useEffect(() => {
+    if (!lastResult || lastResult.examId !== examId) {
+      navigate("/", { replace: true });
+    }
+  }, [lastResult, examId, navigate]);
+
+  if (!lastResult || lastResult.examId !== examId) {
+    return null; // useEffect će napraviti redirect
+  }
+
+  const { questions, answers, elapsedSeconds } = lastResult;
 
   const subjectId = examId?.split("-")[0];
   const subject = SUBJECTS.find((s) => s.id === subjectId);
 
-  // Calculate results
-  const results = questions.map((q) => ({
-    ...q,
-    userAnswer: answers[q.id] || null,
-    isCorrect: answers[q.id] === q.correct,
-  }));
+  const score = calculateScore(answers, questions);
+  const {
+    correct,
+    incorrect,
+    skipped,
+    totalPoints,
+    maxPoints,
+    percentage: pct,
+  } = score;
 
-  const correctCount = results.filter((r) => r.isCorrect).length;
-  const incorrectCount = results.filter(
-    (r) => r.userAnswer && !r.isCorrect,
-  ).length;
-  const skippedCount = results.filter((r) => !r.userAnswer).length;
-  const totalPoints = results.reduce(
-    (sum, q) => sum + (q.isCorrect ? q.points : 0),
-    0,
-  );
-  const maxPoints = results.reduce((sum, q) => sum + q.points, 0);
-  const pct =
-    questions.length > 0
-      ? Math.round((correctCount / questions.length) * 100)
-      : 0;
   const scoreColors = getScoreColor(pct);
+  const showConfetti = pct >= 75;
 
   // Circular progress
-  const radius = 52;
+  const radius = 40;
   const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - (pct / 100) * circumference;
-
-  const containerVariants = {
-    hidden: {},
-    show: { transition: { staggerChildren: 0.06 } },
-  };
-  const itemVariants = {
-    hidden: { opacity: 0, y: 12 },
-    show: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] },
-    },
-  };
+  const strokeDashoffset = circumference - (pct / 100) * circumference;
 
   return (
-    <PageWrapper>
-      <Confetti active={pct >= 50} />
-      <motion.div
-        initial={{ opacity: 0, x: -10 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <Link
-          to={subject ? `/predmeti/${subjectId}` : "/"}
-          className="inline-flex items-center gap-1.5 text-sm text-warm-500 hover:text-warm-800 font-medium mb-6 transition-colors"
-        >
-          <ArrowLeft size={15} />
-          Natrag na ispite
-        </Link>
-      </motion.div>
+    <PageWrapper className="max-w-3xl mx-auto">
+      <Confetti active={showConfetti} />
 
-      <motion.div
-        className="grid grid-cols-1 lg:grid-cols-3 gap-6"
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
+      {/* Back link */}
+      <Link
+        to={subject ? `/predmeti/${subject.id}` : "/"}
+        className="inline-flex items-center gap-2 text-sm text-warm-500 hover:text-warm-800 mb-6 transition-colors"
       >
-        {/* Score hero card */}
-        <motion.div variants={itemVariants} className="lg:col-span-1">
-          <Card className="p-6 text-center">
-            <div className="flex justify-center mb-4">
-              <svg width="140" height="140" viewBox="0 0 140 140">
-                {/* Background ring */}
+        <ArrowLeft size={16} />
+        Natrag na predmet
+      </Link>
+
+      {/* Score card */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <Card className="p-6 text-center mb-6">
+          <CardContent>
+            {/* Circular progress ring */}
+            <div className="relative w-28 h-28 mx-auto mb-4">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                 <circle
-                  cx="70"
-                  cy="70"
+                  cx="50"
+                  cy="50"
                   r={radius}
                   fill="none"
-                  strokeWidth="10"
-                  className="stroke-warm-200"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  className="text-warm-200"
                 />
-                {/* Progress ring */}
                 <motion.circle
-                  cx="70"
-                  cy="70"
+                  cx="50"
+                  cy="50"
                   r={radius}
                   fill="none"
-                  strokeWidth="10"
+                  strokeWidth="8"
                   strokeLinecap="round"
                   strokeDasharray={circumference}
-                  className={scoreColors.ring}
-                  transform="rotate(-90 70 70)"
                   initial={{ strokeDashoffset: circumference }}
-                  animate={{ strokeDashoffset: dashOffset }}
+                  animate={{ strokeDashoffset }}
                   transition={{ duration: 1.2, ease: "easeOut", delay: 0.3 }}
+                  className={scoreColors.ring}
                 />
-                {/* Center text */}
-                <text
-                  x="70"
-                  y="62"
-                  textAnchor="middle"
-                  className="fill-warm-900"
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 800,
-                    fontFamily: "Plus Jakarta Sans",
-                  }}
-                >
-                  {pct}%
-                </text>
-                <text
-                  x="70"
-                  y="82"
-                  textAnchor="middle"
-                  className="fill-warm-400"
-                  style={{ fontSize: 12, fontFamily: "Plus Jakarta Sans" }}
-                >
-                  {totalPoints}/{maxPoints} bod.
-                </text>
               </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className={cn("text-2xl font-bold", scoreColors.text)}>
+                  {pct}%
+                </span>
+              </div>
             </div>
 
+            {/* Label + subject */}
             <div
               className={cn(
                 "inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-semibold mb-3",
@@ -207,7 +183,7 @@ export function ResultsPage() {
             </div>
 
             {subject && (
-              <div className="flex items-center justify-center gap-2 text-sm text-warm-500">
+              <div className="flex items-center justify-center gap-2 text-sm text-warm-500 mb-5">
                 <span
                   className={cn(
                     "w-2 h-2 rounded-full",
@@ -218,45 +194,58 @@ export function ResultsPage() {
               </div>
             )}
 
-            {/* Stat pills */}
-            <div className="grid grid-cols-3 gap-2 mt-5">
+            {/* Stats grid */}
+            <div className="grid grid-cols-3 gap-2">
               {[
                 {
                   icon: CheckCircle2,
-                  value: correctCount,
+                  value: correct,
                   label: "Točno",
                   color: "text-success-600 bg-success-50",
                 },
                 {
                   icon: XCircle,
-                  value: incorrectCount,
+                  value: incorrect,
                   label: "Netočno",
                   color: "text-error-600 bg-error-50",
                 },
                 {
                   icon: Clock,
-                  value: skippedCount,
+                  value: skipped,
                   label: "Preskočeno",
                   color: "text-warm-500 bg-warm-100",
                 },
-                // eslint-disable-next-line no-unused-vars
-              ].map(({ icon: Icon, value, label, color }) => (
-                <div
-                  key={label}
-                  className={cn("rounded-xl p-2.5", color.split(" ")[1])}
-                >
-                  <Icon
-                    size={14}
-                    className={cn("mx-auto mb-1", color.split(" ")[0])}
-                  />
-                  <div className={cn("text-lg font-bold", color.split(" ")[0])}>
-                    {value}
+              ].map(({ icon: Icon, value, label, color }) => {
+                const [textCls, bgCls] = color.split(" ");
+                return (
+                  <div key={label} className={cn("rounded-xl p-2.5", bgCls)}>
+                    <Icon size={14} className={cn("mx-auto mb-1", textCls)} />
+                    <div className={cn("text-lg font-bold", textCls)}>
+                      {value}
+                    </div>
+                    <div className="text-xs text-warm-500">{label}</div>
                   </div>
-                  <div className="text-xs text-warm-500">{label}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
+            {/* Points + elapsed time */}
+            <div className="flex justify-center gap-4 mt-4 text-sm text-warm-500">
+              <span>
+                <span className="font-semibold text-warm-900">
+                  {totalPoints}
+                </span>
+                /{maxPoints} bodova
+              </span>
+              {elapsedSeconds && (
+                <span>
+                  <TrendingUp size={12} className="inline mr-1" />
+                  {formatElapsed(elapsedSeconds)} min
+                </span>
+              )}
+            </div>
+
+            {/* CTA buttons */}
             <div className="flex gap-2 mt-5">
               <Button
                 variant="secondary"
@@ -273,110 +262,102 @@ export function ResultsPage() {
                 leftIcon={Target}
                 className="flex-1"
                 onClick={() =>
-                  navigate(subject ? `/predmeti/${subjectId}` : "/")
+                  navigate(subject ? `/predmeti/${subject.id}` : "/")
                 }
               >
-                Novi ispit
+                Drugi ispit
               </Button>
             </div>
-          </Card>
-        </motion.div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
-        {/* Answer review */}
-        <motion.div variants={itemVariants} className="lg:col-span-2">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp size={15} className="text-primary-600" />
-            <h2 className="font-bold text-warm-800">Pregled odgovora</h2>
-          </div>
+      {/* Per-question review */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+        className="space-y-3"
+      >
+        <h2 className="text-sm font-bold text-warm-500 uppercase tracking-wider mb-3">
+          Pregled odgovora
+        </h2>
+        {questions.map((q, idx) => {
+          const userAnswer = answers[q.id];
+          const isCorrect = userAnswer === q.correct;
+          const isSkipped = !userAnswer;
 
-          <div className="space-y-3">
-            {results.map((result, idx) => (
-              <motion.div key={result.id} variants={itemVariants}>
-                <Card
-                  className={cn(
-                    "p-4 border-l-4",
-                    result.isCorrect
-                      ? "border-l-green-500"
-                      : result.userAnswer
-                        ? "border-l-red-400"
-                        : "border-l-warm-300",
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 mt-0.5">
-                      {result.isCorrect ? (
-                        <CheckCircle2 size={18} className="text-success-600" />
-                      ) : result.userAnswer ? (
-                        <XCircle size={18} className="text-error-600" />
-                      ) : (
-                        <Clock size={18} className="text-warm-400" />
+          return (
+            <Card
+              key={q.id}
+              className={cn(
+                "p-4 border-l-4",
+                isCorrect
+                  ? "border-l-green-400"
+                  : isSkipped
+                    ? "border-l-warm-300"
+                    : "border-l-red-400",
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-semibold text-warm-400">
+                      Pitanje {idx + 1}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs",
+                        isCorrect
+                          ? "text-success-600 border-green-200 bg-success-50"
+                          : isSkipped
+                            ? "text-warm-500 border-warm-200"
+                            : "text-error-600 border-red-200 bg-error-50",
                       )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span className="text-xs font-bold text-warm-500">
-                          P{idx + 1}
-                        </span>
-                        {result.isCorrect ? (
-                          <Badge variant="success" size="sm">
-                            Točno
-                          </Badge>
-                        ) : result.userAnswer ? (
-                          <Badge variant="error" size="sm">
-                            Netočno
-                          </Badge>
-                        ) : (
-                          <Badge variant="default" size="sm">
-                            Preskočeno
-                          </Badge>
-                        )}
-                        <span className="text-xs text-warm-400">
-                          {result.points} bod.
-                        </span>
-                      </div>
-
-                      <p className="text-sm text-warm-700 line-clamp-2 mb-2">
-                        {result.text}
-                      </p>
-
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        {result.userAnswer && (
-                          <span
-                            className={cn(
-                              "px-2 py-0.5 rounded-md font-semibold",
-                              result.isCorrect
-                                ? "bg-green-100 text-green-700"
-                                : "bg-red-100 text-red-700",
-                            )}
-                          >
-                            Vaš: {result.userAnswer.toUpperCase()}
-                          </span>
-                        )}
-                        {!result.isCorrect && (
-                          <span className="px-2 py-0.5 rounded-md font-semibold bg-green-100 text-green-700">
-                            Točno: {result.correct.toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    >
+                      {isCorrect
+                        ? "Točno"
+                        : isSkipped
+                          ? "Preskočeno"
+                          : "Netočno"}
+                    </Badge>
                   </div>
-                </Card>
-              </motion.div>
-            ))}
-
-            {results.length === 0 && (
-              <div className="text-center py-16 text-warm-400">
-                <p>Nema podataka za prikaz.</p>
-                <Link
-                  to="/"
-                  className="text-primary-600 font-medium mt-2 inline-block text-sm"
-                >
-                  Idi na početnu
-                </Link>
+                  <p className="text-sm text-warm-800 mb-2">{q.text}</p>
+                  <div className="space-y-1 text-xs">
+                    {q.options.map((opt) => (
+                      <div
+                        key={opt.id}
+                        className={cn(
+                          "flex items-center gap-2 px-2 py-1 rounded-lg",
+                          opt.id === q.correct &&
+                            "bg-green-50 text-green-700 font-medium",
+                          opt.id === userAnswer &&
+                            !isCorrect &&
+                            "bg-red-50 text-red-700",
+                        )}
+                      >
+                        <span className="font-bold uppercase w-4">
+                          {opt.id}
+                        </span>
+                        <span>{opt.text}</span>
+                        {opt.id === q.correct && (
+                          <CheckCircle2
+                            size={12}
+                            className="ml-auto text-green-600"
+                          />
+                        )}
+                        {opt.id === userAnswer && !isCorrect && (
+                          <XCircle size={12} className="ml-auto text-red-500" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        </motion.div>
+            </Card>
+          );
+        })}
       </motion.div>
     </PageWrapper>
   );
