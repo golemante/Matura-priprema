@@ -20,8 +20,7 @@ export function ProgressBar({
             "h-full rounded-full transition-colors",
             // Dinamička promjena boje ovisno o varijanti ili postotku
             variant === "default" && "bg-primary-600",
-            variant === "success" && "bg-green-500",
-            pct === 100 && "bg-green-600",
+            (variant === "success" || pct === 100) && "bg-green-500",
           )}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.4, ease: "easeOut" }}

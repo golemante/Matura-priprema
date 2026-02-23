@@ -23,6 +23,7 @@ import { draftStorage } from "@/utils/storage";
 import { Modal, ModalBody, ModalFooter } from "@/components/common/Modal";
 import { QuestionView } from "@/components/exam/QuestionView";
 import { QuestionNav } from "@/components/exam/QuestionNav";
+import { ProgressBar } from "@/components/exam/ProgressBar";
 
 // Mock question data
 function generateQuestions(examId) {
@@ -169,16 +170,13 @@ export function QuizPage() {
 
             {/* Center: progress bar */}
             <div className="flex-1 max-w-xs hidden md:block">
-              <div className="h-2 bg-warm-200 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-primary-600 rounded-full"
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.4 }}
-                />
-              </div>
-              <p className="text-xs text-warm-400 mt-1 text-center">
-                {answeredCount}/{totalQ} odgovoreno
-              </p>
+              <ProgressBar
+                value={answeredCount}
+                max={totalQ}
+                showLabel={true}
+                variant={answeredCount === totalQ ? "success" : "default"}
+                className="w-full"
+              />
             </div>
 
             {/* Right: timer + submit */}
