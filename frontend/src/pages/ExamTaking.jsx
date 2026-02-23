@@ -3,17 +3,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "@/store/toastStore";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Timer,
-  Flag,
-  CheckCircle,
-  Circle,
-  AlertCircle,
-  SkipForward,
-  TimerIcon,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, AlertCircle } from "lucide-react";
 import { useExamStore } from "@/store/examStore";
 import { Button } from "@/components/common/Button";
 import { cn } from "@/utils/utils";
@@ -24,6 +14,7 @@ import { Modal, ModalBody, ModalFooter } from "@/components/common/Modal";
 import { QuestionView } from "@/components/exam/QuestionView";
 import { QuestionNav } from "@/components/exam/QuestionNav";
 import { ProgressBar } from "@/components/exam/ProgressBar";
+import { ExamTimer } from "@/components/exam/Timer";
 
 // Mock question data
 function generateQuestions(examId) {
@@ -181,22 +172,11 @@ export function QuizPage() {
 
             {/* Right: timer + submit */}
             <div className="flex items-center gap-2">
-              <div
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors",
-                  isDanger
-                    ? "bg-red-100 text-red-700 border border-red-200 animate-pulse" // Zadnja minuta
-                    : isWarning
-                      ? "bg-amber-50 text-amber-600 border border-amber-200" // Zadnjih 10 min
-                      : "bg-warm-100 text-warm-700",
-                )}
-              >
-                <TimerIcon
-                  size={14}
-                  className={isWarning ? "animate-pulse" : ""}
-                />
-                {formatted}
-              </div>
+              <ExamTimer
+                formatted={formatted}
+                isWarning={isWarning}
+                isDanger={isDanger}
+              />
               <Button size="sm" onClick={() => setShowSubmitModal(true)}>
                 Predaj
               </Button>
