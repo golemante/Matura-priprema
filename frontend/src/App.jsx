@@ -22,19 +22,56 @@ function App() {
   const setAuth = useAuthStore((s) => s.setAuth);
 
   useEffect(() => {
-    // Pri pokretanju app — provjeri postoji li aktivna sesija (npr. refresh stranice)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    // FIX: Koristi onAuthStateChange umjesto getSession()
+    // razlog: kada Google redirecta na /auth/callback, token je u URL hash-u.
+    // Supabase ga procesira asinkrono i emitira INITIAL_SESSION event —
+    // getSession() pozvan prerano vraća null jer hash još nije procesiran.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION") {
+        // Prva inicijalizacija — sesija može biti null (nije prijavljen)
+        // ili aktivna (refresh stranice dok je prijavljen)
+        if (session) {
+          setAuth(
+            {
+              ...session.user,
+              name:
+                session.user.user_metadata?.full_name ??
+                session.user.user_metadata?.name ??
+                session.user.email,
+            },
+            session.access_token,
+          );
+        }
+        // Tek nakon INITIAL_SESSION znamo stvarno stanje → renderaj app
+        setAuthReady(true);
+      }
+
+      if (event === "SIGNED_IN" && session) {
         setAuth(
           {
             ...session.user,
-            name: session.user.user_metadata?.name ?? session.user.email,
+            name:
+              session.user.user_metadata?.full_name ??
+              session.user.user_metadata?.name ??
+              session.user.email,
           },
           session.access_token,
         );
       }
-      setAuthReady(true); // tek sada renderaj app — izbjegava flash na protected routeovima
+
+      if (event === "SIGNED_OUT") {
+        useAuthStore.setState({ user: null, token: null });
+      }
+
+      if (event === "TOKEN_REFRESHED" && session) {
+        // Tiho ažuriraj token u storeu kad Supabase automatski refresha
+        useAuthStore.setState({ token: session.access_token });
+      }
     });
+
+    return () => subscription.unsubscribe();
   }, [setAuth]);
 
   // Kratki loading dok Supabase ne vrati sesiju (obično <100ms)
