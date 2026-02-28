@@ -32,6 +32,21 @@ const LoginPage = lazy(() =>
 const RegisterPage = lazy(() =>
   import("@/pages/Register").then((m) => ({ default: m.RegisterPage })),
 );
+const ForgotPasswordPage = lazy(() =>
+  import("@/pages/ForgotPassword").then((m) => ({
+    default: m.ForgotPasswordPage,
+  })),
+);
+const ResetPasswordPage = lazy(() =>
+  import("@/pages/ResetPassword").then((m) => ({
+    default: m.ResetPasswordPage,
+  })),
+);
+const AuthCallbackPage = lazy(() =>
+  import("@/pages/AuthCallback").then((m) => ({
+    default: m.AuthCallbackPage,
+  })),
+);
 // Full-screen exam (bez headera)
 const QuizPage = lazy(() =>
   import("@/pages/ExamTaking").then((m) => ({ default: m.QuizPage })),
@@ -55,6 +70,12 @@ export const router = createBrowserRouter([
   // Auth routes (full-screen, bez headera)
   { path: "/login", element: withSuspense(<LoginPage />) },
   { path: "/register", element: withSuspense(<RegisterPage />) },
+  {
+    path: "/zaboravljena-lozinka",
+    element: withSuspense(<ForgotPasswordPage />),
+  },
+  { path: "/reset-password", element: withSuspense(<ResetPasswordPage />) },
+  { path: "/auth/callback", element: withSuspense(<AuthCallbackPage />) },
 
   // Exam route (full-screen, bez headera, s ErrorBoundary)
   {
