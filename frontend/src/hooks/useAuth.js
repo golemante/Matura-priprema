@@ -23,13 +23,25 @@ export function useLogin() {
 
 export function useLogout() {
   const navigate = useNavigate();
+  const { clearAuth } = useAuthStore();
 
   const { mutate: logoutMutation, isPending } = useMutation({
-    mutationFn: authApi.logout, // invalidira refresh token na serveru
-    onSettled: () => {
-      useAuthStore.getState().logout();
+    mutationFn: async () => {
+      // Samo JEDAN signOut poziv — stari kod ga je zvao dvaput:
+      // jednom ovdje kroz authApi.logout(), i jednom u authStore.logout()
+      const { error } = await authApi.logout();
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      // clearAuth čisti Zustand store (bez window.location redirect — koristimo navigate)
+      clearAuth();
       toast.info("Uspješno ste se odjavili");
-      navigate("/login");
+      navigate("/login", { replace: true });
+    },
+    onError: () => {
+      // Čak i ako signOut fail-a, očisti lokalni state i redirectaj
+      clearAuth();
+      navigate("/login", { replace: true });
     },
   });
 

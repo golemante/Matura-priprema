@@ -17,62 +17,71 @@ const queryClient = new QueryClient({
   },
 });
 
+function extractName(user) {
+  return (
+    user.user_metadata?.full_name ??
+    user.user_metadata?.name ??
+    user.email?.split("@")[0] ??
+    "Korisnik"
+  );
+}
+
 function App() {
   const [authReady, setAuthReady] = useState(false);
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const { setAuth, clearAuth } = useAuthStore();
 
   useEffect(() => {
-    // FIX: Koristi onAuthStateChange umjesto getSession()
-    // razlog: kada Google redirecta na /auth/callback, token je u URL hash-u.
-    // Supabase ga procesira asinkrono i emitira INITIAL_SESSION event —
-    // getSession() pozvan prerano vraća null jer hash još nije procesiran.
+    // JEDINI onAuthStateChange listener u cijeloj aplikaciji.
+    // authStore.js više NEMA vlastiti listener — uklonjeno jer je uzrokovalo:
+    //   • race condition pri Google OAuth redirect-u
+    //   • dupli setAuth pozivi koji su se međusobno gazili
+    //   • memory leak (nije bio moguć unsubscribe)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "INITIAL_SESSION") {
-        // Prva inicijalizacija — sesija može biti null (nije prijavljen)
-        // ili aktivna (refresh stranice dok je prijavljen)
+        // Uvijek se okine pri startu — sa sesijom ili bez nje
         if (session) {
           setAuth(
-            {
-              ...session.user,
-              name:
-                session.user.user_metadata?.full_name ??
-                session.user.user_metadata?.name ??
-                session.user.email,
-            },
+            { ...session.user, name: extractName(session.user) },
             session.access_token,
           );
         }
-        // Tek nakon INITIAL_SESSION znamo stvarno stanje → renderaj app
+        // Bez obzira ima li sesije, authReady = true → renderaj app
         setAuthReady(true);
+        return;
       }
 
       if (event === "SIGNED_IN" && session) {
         setAuth(
-          {
-            ...session.user,
-            name:
-              session.user.user_metadata?.full_name ??
-              session.user.user_metadata?.name ??
-              session.user.email,
-          },
+          { ...session.user, name: extractName(session.user) },
           session.access_token,
         );
+        return;
       }
 
       if (event === "SIGNED_OUT") {
-        useAuthStore.setState({ user: null, token: null });
+        clearAuth();
+        return;
       }
 
       if (event === "TOKEN_REFRESHED" && session) {
-        // Tiho ažuriraj token u storeu kad Supabase automatski refresha
+        // Tiho ažuriraj samo token — user objekt se nije promijenio
         useAuthStore.setState({ token: session.access_token });
+        return;
+      }
+
+      if (event === "USER_UPDATED" && session) {
+        setAuth(
+          { ...session.user, name: extractName(session.user) },
+          session.access_token,
+        );
+        return;
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [setAuth]);
+  }, [setAuth, clearAuth]);
 
   // Kratki loading dok Supabase ne vrati sesiju (obično <100ms)
   if (!authReady) {
