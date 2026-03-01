@@ -1,10 +1,9 @@
-// features/auth/components/SocialAuthButtons.jsx
+// components/auth/SocialAuthButtons.jsx
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/store/toastStore";
 import { cn } from "@/utils/utils";
 
-// Google SVG icon (brand color)
 function GoogleIcon({ size = 18 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -28,7 +27,6 @@ function GoogleIcon({ size = 18 }) {
   );
 }
 
-// Apple SVG icon
 function AppleIcon({ size = 18 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
@@ -54,6 +52,7 @@ export function SocialAuthButtons({ mode = "login" }) {
         },
       });
       if (error) throw error;
+      // Ne resetiramo loadingGoogle — browser radi redirect odmah
     } catch (err) {
       toast.error(err.message ?? "Greška s Google prijavom");
       setLoadingGoogle(false);
@@ -61,13 +60,15 @@ export function SocialAuthButtons({ mode = "login" }) {
   }
 
   async function handleApple() {
-    setLoadingApple(false);
+    // FIX: bio je setLoadingApple(false) — dugme nikad nije pokazivalo loading state
+    setLoadingApple(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "apple",
         options: { redirectTo: `${window.location.origin}/auth/callback` },
       });
       if (error) throw error;
+      // Ne resetiramo loadingApple — browser radi redirect odmah
     } catch (err) {
       toast.error(err.message ?? "Greška s Apple prijavom");
       setLoadingApple(false);
@@ -75,49 +76,45 @@ export function SocialAuthButtons({ mode = "login" }) {
   }
 
   return (
-    <div className="space-y-2.5">
+    <div className="flex flex-col gap-3">
       {/* Google */}
       <button
-        type="button"
         onClick={handleGoogle}
         disabled={loadingGoogle || loadingApple}
         className={cn(
-          "w-full flex items-center justify-center gap-3 px-4 py-2.5",
-          "rounded-xl border border-warm-300 bg-white text-sm font-medium text-warm-800",
-          "hover:bg-warm-50 hover:border-warm-400 transition-all duration-150",
-          "focus-visible:ring-2 focus-visible:ring-primary-200 outline-none",
+          "flex items-center justify-center gap-3 w-full py-2.5 px-4",
+          "rounded-xl border border-warm-300 bg-white",
+          "text-sm font-medium text-warm-700",
+          "transition-all duration-150 hover:bg-warm-50 hover:border-warm-400 hover:shadow-sm",
           "disabled:opacity-60 disabled:cursor-not-allowed",
-          "shadow-[0_1px_2px_0_rgb(0_0_0/0.04)]",
         )}
       >
         {loadingGoogle ? (
-          <span className="w-[18px] h-[18px] rounded-full border-2 border-warm-300 border-t-warm-600 animate-spin" />
+          <div className="w-4 h-4 rounded-full border-2 border-warm-300 border-t-warm-600 animate-spin" />
         ) : (
-          <GoogleIcon />
+          <GoogleIcon size={18} />
         )}
-        <span>{label} s Googleom</span>
+        {label} s Google
       </button>
 
       {/* Apple */}
       <button
-        type="button"
         onClick={handleApple}
-        disabled={loadingApple || loadingGoogle}
+        disabled={loadingGoogle || loadingApple}
         className={cn(
-          "w-full flex items-center justify-center gap-3 px-4 py-2.5",
-          "rounded-xl bg-warm-900 text-sm font-medium text-white",
-          "hover:bg-warm-800 transition-all duration-150",
-          "focus-visible:ring-2 focus-visible:ring-warm-400 outline-none",
+          "flex items-center justify-center gap-3 w-full py-2.5 px-4",
+          "rounded-xl border border-warm-300 bg-white",
+          "text-sm font-medium text-warm-700",
+          "transition-all duration-150 hover:bg-warm-50 hover:border-warm-400 hover:shadow-sm",
           "disabled:opacity-60 disabled:cursor-not-allowed",
-          "shadow-[0_1px_2px_0_rgb(0_0_0/0.08)]",
         )}
       >
         {loadingApple ? (
-          <span className="w-[18px] h-[18px] rounded-full border-2 border-white/30 border-t-white animate-spin" />
+          <div className="w-4 h-4 rounded-full border-2 border-warm-300 border-t-warm-600 animate-spin" />
         ) : (
-          <AppleIcon />
+          <AppleIcon size={18} />
         )}
-        <span>{label} s Appleom</span>
+        {label} s Apple
       </button>
     </div>
   );

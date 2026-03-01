@@ -21,7 +21,7 @@ apiClient.interceptors.response.use(
   (res) => res.data, // unwrap data odmah
   (err) => {
     if (err.response?.status === 401) {
-      useAuthStore.getState().logout();
+      useAuthStore.getState().clearAuth(); // force logout na 401
     }
     return Promise.reject(err.response?.data ?? err);
   },

@@ -26,20 +26,18 @@ export function useLogout() {
   const { clearAuth } = useAuthStore();
 
   const { mutate: logoutMutation, isPending } = useMutation({
-    mutationFn: async () => {
-      // Samo JEDAN signOut poziv — stari kod ga je zvao dvaput:
-      // jednom ovdje kroz authApi.logout(), i jednom u authStore.logout()
-      const { error } = await authApi.logout();
-      if (error) throw error;
-    },
+    // FIX: authApi.logout() poziva supabase.auth.signOut() koji ne vraća ništa korisno.
+    // Prethodni kod radio je `const { error } = await authApi.logout()` — destrukturiranje
+    // undefined objekta. error je uvijek bio undefined, Supabase greška se nikad nije
+    // propagirala. Sada direktno await-amo i bacamo ako signOut fail-a.
+    mutationFn: () => authApi.logout(),
     onSuccess: () => {
-      // clearAuth čisti Zustand store (bez window.location redirect — koristimo navigate)
       clearAuth();
       toast.info("Uspješno ste se odjavili");
       navigate("/login", { replace: true });
     },
     onError: () => {
-      // Čak i ako signOut fail-a, očisti lokalni state i redirectaj
+      // Čak i ako signOut fail-a na serveru, očisti lokalni state
       clearAuth();
       navigate("/login", { replace: true });
     },

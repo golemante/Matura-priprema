@@ -1,69 +1,49 @@
 // src/pages/AuthCallback.jsx
-// Ova stranica prima Google/Apple OAuth redirect.
-// Supabase detektira token iz URL-a (detectSessionInUrl: true),
-// mi samo čekamo onAuthStateChange event i onda redirectamo.
+// Prima Google/Apple OAuth redirect.
+//
+// ARHITEKTURA (zašto ovako):
+// App.jsx je jedini Supabase onAuthStateChange listener u cijeloj aplikaciji.
+// Kada Supabase procesira OAuth token iz URL-a, App.jsx poziva setAuth() →
+// Zustand store dobiva token. Ova stranica SAMO čeka da token postane dostupan
+// u storeu, a onda redirecta.
+//
+// Prethodni pristup (vlastiti onAuthStateChange ovdje) uzrokovao je:
+//  • Race condition: navigate("/") se okidao prije nego App.jsx postavio authReady=true
+//  • Korisnik bi bio redirectan na "/" ali stranica se renderala bez prijavljenog usera
+//  • React StrictMode duplo montiranje remetilo je handled.current logiku
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/store/toastStore";
 
 export function AuthCallbackPage() {
   const navigate = useNavigate();
-  const handled = useRef(false); // sprječava dvostruki redirect u Strict Mode
+  const token = useAuthStore((s) => s.token);
+  const toastShown = useRef(false);
 
   useEffect(() => {
-    // App.jsx već sluša sve auth evente i ažurira store.
-    // Ova komponenta SAMO treba znati kada je SIGNED_IN gotov → navigate.
-    // Ne diramo store ovdje — App.jsx to već rješava.
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (handled.current) return;
+    if (!token) return;
 
-      // SIGNED_IN: Supabase je uspješno procesirao OAuth token iz URL hash-a
-      if (event === "SIGNED_IN" && session) {
-        handled.current = true;
-        toast.success("Uspješna prijava!");
-        navigate("/", { replace: true });
-        return;
-      }
+    // Token je dostupan → App.jsx je već obradio OAuth event i pozvao setAuth()
+    // Sada je sigurno navigirati jer je cijeli auth state konzistentan
+    if (!toastShown.current) {
+      toastShown.current = true;
+      toast.success("Uspješna prijava!");
+    }
+    navigate("/", { replace: true });
+  }, [token, navigate]);
 
-      // INITIAL_SESSION s aktivnom sesijom znači da je korisnik VEĆ bio prijavljen
-      // (refresh stranice na /auth/callback) — redirect na home
-      if (event === "INITIAL_SESSION" && session) {
-        handled.current = true;
-        navigate("/", { replace: true });
-        return;
-      }
-
-      // INITIAL_SESSION bez sesije + nije SIGNED_IN → prijava nije uspjela
-      if (event === "INITIAL_SESSION" && !session) {
-        // Ne redirectamo odmah — čekamo da li će doći SIGNED_IN
-        // (Supabase nekad emitira INITIAL_SESSION pa tek onda SIGNED_IN)
-        return;
-      }
-
-      // Eksplicitna odjava ili error
-      if (event === "SIGNED_OUT") {
-        handled.current = true;
+  // Timeout fallback: ako za 10s nema tokena → nešto je krenulo krivo
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const currentToken = useAuthStore.getState().token;
+      if (!currentToken) {
         toast.error("Prijava nije uspjela. Pokušaj ponovo.");
         navigate("/login", { replace: true });
       }
-    });
+    }, 10_000);
 
-    // Timeout fallback: ako za 8s nema SIGNED_IN → nešto je krenulo krivo
-    const timeout = setTimeout(() => {
-      if (!handled.current) {
-        handled.current = true;
-        toast.error("Prijava je istekla. Pokušaj ponovo.");
-        navigate("/login", { replace: true });
-      }
-    }, 8000);
-
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeout);
-    };
+    return () => clearTimeout(timeout);
   }, [navigate]);
 
   return (
