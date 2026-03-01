@@ -362,7 +362,7 @@ export function SubjectsPage() {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="flex items-center justify-between mb-6"
+        className="relative z-30 items-center justify-between mb-6"
       >
         <Link
           to="/"
