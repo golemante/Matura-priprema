@@ -10,6 +10,7 @@ import { toast } from "@/store/toastStore";
 import { cn } from "@/utils/utils";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { resetPasswordSchema as schema } from "@/utils/validators";
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -19,7 +20,10 @@ export function ResetPasswordPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm({ resolver: zodResolver(schema), mode: "onTouched" });
+  } = useForm({
+    resolver: zodResolver(schema),
+    mode: "onTouched",
+  });
 
   async function onSubmit({ password }) {
     setIsPending(true);

@@ -115,7 +115,7 @@ function SubjectSwitcher({ currentId }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 4, scale: 0.97 }}
               transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute right-0 top-full mt-2 z-20 bg-white border border-warm-200 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.1)] overflow-hidden min-w-[200px]"
+              className="absolute right-0 top-full mt-2 z-50 bg-white border border-warm-200 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.1)] overflow-hidden min-w-[200px]"
             >
               {SUBJECTS.map((s) => {
                 const Icon = s.icon;
@@ -362,7 +362,7 @@ export function SubjectsPage() {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="relative z-30 items-center justify-between mb-6"
+        className="flex items-center justify-between mb-6"
       >
         <Link
           to="/"
