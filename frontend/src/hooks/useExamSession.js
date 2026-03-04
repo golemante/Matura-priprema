@@ -1,39 +1,19 @@
 // hooks/useExamSession.js
-// Composite hook koji enkapsulira svu logiku aktivnog ispita.
-// ExamTaking.jsx postaje čisti UI — nema više business logike u stranici.
+// Migrirano s mock generatora na pravi Supabase API.
+// Sve ostale logike (timer, keyboard, draft, flagging) su nepromijenjene.
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useExamStore } from "@/store/examStore";
 import { useTimer } from "@/hooks/useTimer";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
-
-// Mock generator — zamijeniti s pravim API pozivom kad backend bude spreman
-// useExam(examId) hook iz hooks/useExam.js treba preuzeti ovu ulogu
-function generateQuestions(examId) {
-  const isVisa = examId?.includes("visa");
-  const count = isVisa ? 40 : 30;
-  return Array.from({ length: count }, (_, i) => ({
-    id: i + 1,
-    text: `Pitanje ${i + 1}: Ovo je primjer pitanja koje bi se nalazilo na stvarnom ispitu. Odaberite točan odgovor.`,
-    options: [
-      { id: "a", text: "Ovo je opcija A – mogući točan odgovor" },
-      { id: "b", text: "Ovo je opcija B – alternativni odgovor" },
-      { id: "c", text: "Ovo je opcija C – još jedna mogućnost" },
-      { id: "d", text: "Ovo je opcija D – posljednja opcija" },
-    ],
-    correct: ["a", "b", "c", "d"][Math.floor(Math.random() * 4)],
-    points: isVisa ? 2 : 1,
-  }));
-}
-
-// Trajanje ispita u minutama iz examId konvencije
-// TODO: zamijeniti s exam.duration iz API-ja
-function getDuration(examId) {
-  return examId?.includes("visa") ? 90 : 70;
-}
+import { examApi } from "@/api/examApi";
+import { attemptApi } from "@/api/attemptApi";
+import { calculateScore } from "@/utils/helpers";
+import { supabase } from "@/lib/supabase";
 
 export function useExamSession(examId) {
   const navigate = useNavigate();
@@ -53,29 +33,39 @@ export function useExamSession(examId) {
 
   const [direction, setDirection] = useState(1);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-
-  // Draft restore modal state
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [pendingDraft, setPendingDraft] = useState(null);
 
-  // ── Inicijalizacija ispita ─────────────────────────────────────
-  useEffect(() => {
-    if (!examId) return;
+  // ── Dohvati ispit + pitanja iz Supabase ───────────────────────────────────
+  // enabled: false ako su pitanja već u storeu (korisnik se vratio nazad)
+  const alreadyLoaded = store.examId === examId && questions.length > 0;
 
-    // Ako je isti ispit već u storeu (npr. korisnik se vratio nazad), ne resetiraj
-    if (store.examId === examId && questions.length > 0) return;
+  const {
+    data: examData,
+    isLoading,
+    error: fetchError,
+  } = useQuery({
+    queryKey: ["exam-with-questions", examId],
+    queryFn: () => examApi.getWithQuestions(examId),
+    enabled: !!examId && !alreadyLoaded,
+    staleTime: 1000 * 60 * 30, // 30 min — pitanja se ne mijenjaju
+    retry: 2,
+  });
+
+  // ── Inicijalizacija ispita kad podaci stignu ───────────────────────────────
+  useEffect(() => {
+    if (!examData || alreadyLoaded) return;
 
     const draft = draftStorage.load(examId);
-    const freshQuestions = generateQuestions(examId);
-    startExam(examId, freshQuestions);
+    startExam(examId, examData.questions);
 
-    // FIX: draft se sada nudi za obnavljanje, a ne samo prikazuje toast
     if (draft?.answers && Object.keys(draft.answers).length > 0) {
       setPendingDraft(draft);
       setShowDraftModal(true);
     }
+    // examData i alreadyLoaded su stabilni — exhaustive-deps je ok ignorirati
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examId]);
+  }, [examData]);
 
   const confirmRestoreDraft = useCallback(() => {
     if (pendingDraft?.answers) {
@@ -92,14 +82,47 @@ export function useExamSession(examId) {
     setPendingDraft(null);
   }, [examId]);
 
-  // ── Predaja ispita ─────────────────────────────────────────────
+  // ── Predaja ispita ────────────────────────────────────────────────────────
   const handleSubmit = useCallback(() => {
-    submitExam(); // sprema lastResult u store
+    // 1. Spremi u lokalni store (potrebno za ExamResults koji čita lastResult)
+    submitExam();
     draftStorage.clear(examId);
+
+    // 2. Fire-and-forget spremi u Supabase — ne blokiramo navigaciju
+    // Samo ako je korisnik prijavljen (anonimni korisnici ne mogu pisati)
+    const currentAnswers = useExamStore.getState().answers;
+    const currentQuestions = useExamStore.getState().questions;
+    const startedAt = useExamStore.getState().startedAt;
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return; // Neprijavljen korisnik — lokalni rezultat je dovoljan
+
+      const score = calculateScore(currentAnswers, currentQuestions);
+      const elapsedSeconds = Math.round(
+        (Date.now() - (startedAt ?? Date.now())) / 1000,
+      );
+
+      attemptApi
+        .submit({
+          examId,
+          questions: currentQuestions,
+          answers: currentAnswers,
+          elapsedSeconds,
+          scorePct: score.percentage,
+          correctCount: score.correct,
+          totalCount: currentQuestions.length,
+        })
+        .catch((err) => {
+          // Tiho logiraj — rezultat je već lokalno dostupan
+          console.error("[attemptApi.submit] greška:", err);
+        });
+    });
+
+    // 3. Navigiraj odmah na rezultate
     navigate(`/rezultati/${examId}`);
   }, [submitExam, examId, navigate]);
 
-  // ── Auto-save drafta svakih 30s ────────────────────────────────
+  // ── Auto-save drafta svakih 30s ───────────────────────────────────────────
   useEffect(() => {
     const answeredCount = Object.keys(answers).length;
     if (!examId || answeredCount === 0) return;
@@ -111,7 +134,7 @@ export function useExamSession(examId) {
     return () => clearInterval(id);
   }, [examId, answers]);
 
-  // ── Navigacija ─────────────────────────────────────────────────
+  // ── Navigacija ────────────────────────────────────────────────────────────
   const totalQ = questions.length;
   const answeredCount = Object.keys(answers).length;
 
@@ -138,7 +161,7 @@ export function useExamSession(examId) {
     toggleFlag(current.id);
   }, [questions, currentIndex, toggleFlag]);
 
-  // ── Keyboard shortcuts ─────────────────────────────────────────
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useKeyPress({
     ArrowRight: () => currentIndex < totalQ - 1 && handleGoTo(currentIndex + 1),
     ArrowLeft: () => currentIndex > 0 && handleGoTo(currentIndex - 1),
@@ -153,24 +176,27 @@ export function useExamSession(examId) {
       ),
   });
 
-  // ── Timer ──────────────────────────────────────────────────────
-  const durationSeconds = getDuration(examId) * 60;
-  const timer = useTimer(durationSeconds, {
+  // ── Timer ─────────────────────────────────────────────────────────────────
+  // Trajanje iz baze (examData.exam.duration_minutes) ili fallback iz examId
+  const durationMinutes =
+    examData?.exam?.duration_minutes ?? (examId?.includes("visa") ? 90 : 70);
+
+  const timer = useTimer(durationMinutes * 60, {
     onExpire: handleSubmit,
     onWarning: () => toast.warning("Ostaje manje od 10 minuta!"),
     warningAt: 600,
   });
 
-  // ── Prevent accidental navigation ─────────────────────────────
+  // ── Prevent accidental navigation ─────────────────────────────────────────
   useBeforeUnload(questions.length > 0 && !store.submittedAt);
 
-  // ── Derived values ─────────────────────────────────────────────
+  // ── Derived values ────────────────────────────────────────────────────────
   const current = questions[currentIndex] ?? null;
   const isCurrentFlagged = current ? flagged.has(current.id) : false;
   const progress = totalQ > 0 ? (answeredCount / totalQ) * 100 : 0;
 
   return {
-    // State
+    // Data
     questions,
     answers,
     flagged,
@@ -181,6 +207,9 @@ export function useExamSession(examId) {
     progress,
     isCurrentFlagged,
     direction,
+    // Loading / error (novi — ExamTaking može pokazati error state)
+    isLoading,
+    fetchError,
     // Modals
     showSubmitModal,
     setShowSubmitModal,
