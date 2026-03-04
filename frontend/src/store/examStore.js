@@ -1,5 +1,9 @@
+// store/examStore.js
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist } from "zustand/middleware";
+
+// ── Custom Set serialization ──────────────────────────────────────────────────
+// JSON ne podržava Set nativno, pa ga serijaliziramo kao { __type: "Set", values: [...] }
 
 const setReplacer = (_key, value) =>
   value instanceof Set ? { __type: "Set", values: [...value] } : value;
@@ -7,14 +11,28 @@ const setReplacer = (_key, value) =>
 const setReviver = (_key, value) =>
   value?.__type === "Set" ? new Set(value.values) : value;
 
+// FIX: Ne koristimo createJSONStorage jer ono interno radi dodatni JSON.parse
+// koji ne koristi naš setReviver → flagged dolazi kao {} umjesto Set → .has() puca.
+// Zustand persist prima storage direktno ako storage sam radi ser/deser.
 const sessionStorageWithSet = {
   getItem: (name) => {
-    const str = sessionStorage.getItem(name);
-    if (!str) return null;
-    return JSON.parse(str, setReviver);
+    try {
+      const str = sessionStorage.getItem(name);
+      if (!str) return null;
+      // Vraćamo parsed objekt — Zustand ga direktno koristi, bez dodatnog parsiranja
+      return JSON.parse(str, setReviver);
+    } catch {
+      return null;
+    }
   },
-  setItem: (name, value) =>
-    sessionStorage.setItem(name, JSON.stringify(value, setReplacer)),
+  setItem: (name, value) => {
+    try {
+      // value je već objekt — serijaliziramo ga s Set replacer-om
+      sessionStorage.setItem(name, JSON.stringify(value, setReplacer));
+    } catch {
+      // sessionStorage full (npr. Safari private mode) — tiho ignoriraj
+    }
+  },
   removeItem: (name) => sessionStorage.removeItem(name),
 };
 
@@ -25,7 +43,7 @@ export const useExamStore = create(
       examId: null,
       questions: [],
       answers: {}, // { questionId: selectedOptionId }
-      flagged: new Set(), // FIX: Set umjesto Array
+      flagged: new Set(),
       currentIndex: 0,
       startedAt: null,
       submittedAt: null,
@@ -45,7 +63,6 @@ export const useExamStore = create(
           submittedAt: null,
         }),
 
-      // Restoriraj odgovore iz draftStorage (kad korisnik potvrdi nastavak)
       restoreDraft: (savedAnswers) =>
         set((state) => ({
           answers: { ...state.answers, ...savedAnswers },
@@ -56,17 +73,20 @@ export const useExamStore = create(
           answers: { ...state.answers, [questionId]: optionId },
         })),
 
-      // FIX: Set operacije umjesto filter/includes
       toggleFlag: (questionId) =>
         set((state) => {
-          const next = new Set(state.flagged);
+          // Defensive guard: osiguraj da je flagged uvijek Set
+          const current =
+            state.flagged instanceof Set
+              ? state.flagged
+              : new Set(state.flagged?.values ?? []);
+          const next = new Set(current);
           next.has(questionId) ? next.delete(questionId) : next.add(questionId);
           return { flagged: next };
         }),
 
       goToQuestion: (index) => set({ currentIndex: index }),
 
-      // FIX: submitExam sprema lastResult → nema više location.state problema
       submitExam: () => {
         const { examId, answers, questions, startedAt } = get();
         const submittedAt = Date.now();
@@ -95,7 +115,6 @@ export const useExamStore = create(
           currentIndex: 0,
           startedAt: null,
           submittedAt: null,
-          // lastResult se namjerno ne resetira — dostupan je u ExamResults
         }),
 
       // ─── Derived selectors ──────────────────────────────────
@@ -113,8 +132,8 @@ export const useExamStore = create(
     }),
     {
       name: "exam-session",
-      storage: createJSONStorage(() => sessionStorageWithSet),
-      // Persist samo što je potrebno — ne persisti derived state
+      // FIX: storage direktno (bez createJSONStorage wrappera)
+      storage: sessionStorageWithSet,
       partialize: (s) => ({
         examId: s.examId,
         questions: s.questions,
