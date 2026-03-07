@@ -1,25 +1,30 @@
 // store/examStore.js
+// ─────────────────────────────────────────────────────────────────────────────
+// PROMJENE u odnosu na staru verziju:
+//   • DODANO: passages — mapa { passageId: passageObject } za O(1) lookup
+//   • DODANO: attemptId — UUID kreiran pri startu ispita (potreban za RPC)
+//   • DODANO: isPaused, pausedAt — stanje pauze za UI blokadu
+//   • DODANO: pauseExam / resumeExam akcije
+//   • DODANO: setAttemptId akcija
+//   • answers format ostaje { questionId: letter } — slova 'a'|'b'|'c'|'d'
+//   • questions VIŠE NEMAJU 'correct' polje (vidi examApi.js)
+//   • lastResult.rpcResult — čuva odgovor iz finish_attempt RPC-a
+// ─────────────────────────────────────────────────────────────────────────────
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-// ── Custom Set serialization ──────────────────────────────────────────────────
-// JSON ne podržava Set nativno, pa ga serijaliziramo kao { __type: "Set", values: [...] }
-
+// ── Custom Set serijalizacija (nepromijenjeno) ────────────────────────────────
 const setReplacer = (_key, value) =>
   value instanceof Set ? { __type: "Set", values: [...value] } : value;
 
 const setReviver = (_key, value) =>
   value?.__type === "Set" ? new Set(value.values) : value;
 
-// FIX: Ne koristimo createJSONStorage jer ono interno radi dodatni JSON.parse
-// koji ne koristi naš setReviver → flagged dolazi kao {} umjesto Set → .has() puca.
-// Zustand persist prima storage direktno ako storage sam radi ser/deser.
 const sessionStorageWithSet = {
   getItem: (name) => {
     try {
       const str = sessionStorage.getItem(name);
       if (!str) return null;
-      // Vraćamo parsed objekt — Zustand ga direktno koristi, bez dodatnog parsiranja
       return JSON.parse(str, setReviver);
     } catch {
       return null;
@@ -27,10 +32,9 @@ const sessionStorageWithSet = {
   },
   setItem: (name, value) => {
     try {
-      // value je već objekt — serijaliziramo ga s Set replacer-om
       sessionStorage.setItem(name, JSON.stringify(value, setReplacer));
     } catch {
-      // sessionStorage full (npr. Safari private mode) — tiho ignoriraj
+      // sessionStorage full — tiho ignoriraj
     }
   },
   removeItem: (name) => sessionStorage.removeItem(name),
@@ -39,43 +43,69 @@ const sessionStorageWithSet = {
 export const useExamStore = create(
   persist(
     (set, get) => ({
-      // ─── Aktivna sesija ─────────────────────────────────────
+      // ─── Aktivna sesija ──────────────────────────────────────────────────
       examId: null,
-      questions: [],
-      answers: {}, // { questionId: selectedOptionId }
+      attemptId: null, // UUID iz Supabase attempts tablice
+      questions: [], // bez correct_option
+      passages: {}, // { passageId: { id, title, content, footnotes, ... } }
+      answers: {}, // { questionId: letter } — 'a'|'b'|'c'|'d'
       flagged: new Set(),
       currentIndex: 0,
       startedAt: null,
       submittedAt: null,
+      isPaused: false,
+      pausedAt: null,
 
-      // ─── Posljednji rezultat (čita ExamResults) ─────────────
-      lastResult: null, // { examId, answers, questions, submittedAt, elapsedSeconds }
+      // ─── Posljednji rezultat ─────────────────────────────────────────────
+      lastResult: null,
+      // Struktura lastResult:
+      // {
+      //   examId,
+      //   attemptId,
+      //   answers,             ← kopija answers pri predaji
+      //   questions,           ← kopija questions (za prikaz u Results)
+      //   passages,            ← kopija passages
+      //   submittedAt,
+      //   elapsedSeconds,
+      //   rpcResult: {         ← direktan odgovor finish_attempt RPC-a
+      //     correct_count,
+      //     total_count,
+      //     score_pct,
+      //     elapsed_seconds,
+      //   }
+      // }
 
-      // ─── Actions ────────────────────────────────────────────
-      startExam: (examId, questions) =>
+      // ─── Actions ─────────────────────────────────────────────────────────
+
+      startExam: (examId, questions, passages = {}) =>
         set({
           examId,
+          attemptId: null, // setAttemptId() se zove async nakon create()
           questions,
+          passages,
           answers: {},
           flagged: new Set(),
           currentIndex: 0,
           startedAt: Date.now(),
           submittedAt: null,
+          isPaused: false,
+          pausedAt: null,
         }),
+
+      setAttemptId: (attemptId) => set({ attemptId }),
 
       restoreDraft: (savedAnswers) =>
         set((state) => ({
           answers: { ...state.answers, ...savedAnswers },
         })),
 
-      setAnswer: (questionId, optionId) =>
+      setAnswer: (questionId, letter) =>
         set((state) => ({
-          answers: { ...state.answers, [questionId]: optionId },
+          answers: { ...state.answers, [questionId]: letter },
         })),
 
       toggleFlag: (questionId) =>
         set((state) => {
-          // Defensive guard: osiguraj da je flagged uvijek Set
           const current =
             state.flagged instanceof Set
               ? state.flagged
@@ -87,8 +117,21 @@ export const useExamStore = create(
 
       goToQuestion: (index) => set({ currentIndex: index }),
 
-      submitExam: () => {
-        const { examId, answers, questions, startedAt } = get();
+      pauseExam: () =>
+        set({
+          isPaused: true,
+          pausedAt: Date.now(),
+        }),
+
+      resumeExam: () =>
+        set({
+          isPaused: false,
+          pausedAt: null,
+        }),
+
+      submitExam: (rpcResult = null) => {
+        const { examId, attemptId, answers, questions, passages, startedAt } =
+          get();
         const submittedAt = Date.now();
         const elapsedSeconds = Math.round(
           (submittedAt - (startedAt ?? submittedAt)) / 1000,
@@ -98,10 +141,13 @@ export const useExamStore = create(
           submittedAt,
           lastResult: {
             examId,
+            attemptId,
             answers,
             questions,
+            passages,
             submittedAt,
             elapsedSeconds,
+            rpcResult, // null ako je predaja offline (fallback)
           },
         });
       },
@@ -109,38 +155,67 @@ export const useExamStore = create(
       resetExam: () =>
         set({
           examId: null,
+          attemptId: null,
           questions: [],
+          passages: {},
           answers: {},
           flagged: new Set(),
           currentIndex: 0,
           startedAt: null,
           submittedAt: null,
+          isPaused: false,
+          pausedAt: null,
         }),
 
-      // ─── Derived selectors ──────────────────────────────────
+      // ─── Derived selectors ─────────────────────────────────────────────
       getProgress: () => {
         const { answers, questions } = get();
-        return questions.length > 0
-          ? Math.round((Object.keys(answers).length / questions.length) * 100)
+        // fill_blank_mc parent se ne broji (nema answer)
+        const scoreable = questions.filter(
+          (q) => q.questionType !== "fill_blank_mc",
+        );
+        return scoreable.length > 0
+          ? Math.round(
+              (Object.keys(answers).filter((id) =>
+                scoreable.some((q) => q.id === id),
+              ).length /
+                scoreable.length) *
+                100,
+            )
           : 0;
       },
 
       getUnansweredCount: () => {
         const { answers, questions } = get();
-        return questions.filter((q) => !answers[q.id]).length;
+        return questions.filter(
+          (q) => q.questionType !== "fill_blank_mc" && !answers[q.id],
+        ).length;
+      },
+
+      // Grupiraj pitanja po sectionLabel za navigator
+      getQuestionsBySection: () => {
+        const { questions } = get();
+        return questions.reduce((acc, q) => {
+          const key = q.sectionLabel ?? "Ostalo";
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(q);
+          return acc;
+        }, {});
       },
     }),
     {
       name: "exam-session",
-      // FIX: storage direktno (bez createJSONStorage wrappera)
       storage: sessionStorageWithSet,
       partialize: (s) => ({
         examId: s.examId,
+        attemptId: s.attemptId,
         questions: s.questions,
+        passages: s.passages,
         answers: s.answers,
         flagged: s.flagged,
         currentIndex: s.currentIndex,
         startedAt: s.startedAt,
+        isPaused: s.isPaused,
         lastResult: s.lastResult,
       }),
     },

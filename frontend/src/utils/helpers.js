@@ -18,25 +18,24 @@ export const shuffleArray = (arr) => {
   return a;
 };
 
-export const calculateScore = (answers, questions) => {
-  const correct = questions.filter((q) => answers[q.id] === q.correct).length;
-  const totalPoints = questions.reduce(
-    (s, q) => s + (answers[q.id] === q.correct ? q.points : 0),
-    0,
-  );
-  const maxPoints = questions.reduce((s, q) => s + q.points, 0);
-  return {
-    correct,
-    incorrect: questions.filter(
-      (q) => answers[q.id] && answers[q.id] !== q.correct,
-    ).length,
-    skipped: questions.filter((q) => !answers[q.id]).length,
-    totalPoints,
-    maxPoints,
-    percentage:
-      questions.length > 0 ? Math.round((correct / questions.length) * 100) : 0,
-  };
-};
-
 export const truncate = (str, n) =>
   str.length > n ? `${str.slice(0, n)}...` : str;
+
+// ── Grupiraj pitanja po sekcijama ─────────────────────────────────────────────
+// Vraća { "I. Čitanje": [q, q, ...], "II. Književnost": [...], ... }
+export const groupQuestionsBySection = (questions) =>
+  questions.reduce((acc, q) => {
+    const key = q.sectionLabel ?? "Ostalo";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(q);
+    return acc;
+  }, {});
+
+// ── Broji odgovorena pitanja (ignoriraj fill_blank_mc parent) ─────────────────
+export const countAnswered = (answers, questions) =>
+  questions.filter((q) => q.questionType !== "fill_blank_mc" && answers[q.id])
+    .length;
+
+// ── Broji scoreabilna pitanja (bez fill_blank_mc parent) ─────────────────────
+export const countScoreable = (questions) =>
+  questions.filter((q) => q.questionType !== "fill_blank_mc").length;

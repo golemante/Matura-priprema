@@ -1,7 +1,17 @@
 // pages/ExamResults.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// PROMJENE u odnosu na staru verziju:
+//   • score_pct dolazi iz finish_attempt RPC (lastResult.rpcResult)
+//   • Točni odgovori se dohvaćaju iz attempt_details viewa NAKON završetka
+//   • calculateScore je uklonjen — score dolazi sa servera (jedino ispravno)
+//   • Svako pitanje u pregledu sada prikazuje: chosen, correct, explanation
+//   • Grupiranje po sekcijama (I. Čitanje, II. Književnost, III. Jezik)
+//   • Fallback za offline: ako rpcResult nije dostupan, prikazujemo samo odgovore
+// ─────────────────────────────────────────────────────────────────────────────
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2,
   XCircle,
@@ -13,16 +23,18 @@ import {
   ChevronDown,
   ChevronUp,
   BookOpen,
+  Lightbulb,
+  AlertCircle,
 } from "lucide-react";
 import { PageWrapper } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
 import { Button } from "@/components/common/Button";
 import { SUBJECTS } from "@/utils/constants";
-import { calculateScore } from "@/utils/helpers";
 import { useExamStore } from "@/store/examStore";
+import { examApi } from "@/api/examApi";
 import { cn } from "@/utils/utils";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Pomoćne funkcije ──────────────────────────────────────────────────────────
 
 function getScoreLabel(pct) {
   if (pct >= 90) return "Izvrsno! 🏆";
@@ -32,7 +44,7 @@ function getScoreLabel(pct) {
   return "Treba vježbati 💪";
 }
 
-function getScoreTailwind(pct) {
+function getScoreColors(pct) {
   if (pct >= 75)
     return {
       text: "text-success-600",
@@ -68,206 +80,208 @@ function formatElapsed(seconds) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// ── Confetti (već postoji canvas-confetti u projektu) ─────────────────────────
-
+// ── Confetti ──────────────────────────────────────────────────────────────────
 function Confetti({ active }) {
   useEffect(() => {
     if (!active) return;
-    import("canvas-confetti")
-      .then((mod) => {
-        mod.default({
-          particleCount: 120,
-          spread: 80,
-          origin: { y: 0.4 },
-          colors: ["#2D54E8", "#22C55E", "#F97316", "#8B5CF6"],
-        });
-      })
-      .catch(() => {});
+    import("canvas-confetti").then((mod) => {
+      mod.default({
+        particleCount: 120,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b"],
+      });
+    });
   }, [active]);
   return null;
 }
 
-// ── Animated SVG score ring ───────────────────────────────────────────────────
-
+// ── Score ring ────────────────────────────────────────────────────────────────
 function ScoreRing({ pct, colors }) {
-  const [animPct, setAnimPct] = useState(0);
-
-  useEffect(() => {
-    const t = setTimeout(() => setAnimPct(pct), 250);
-    return () => clearTimeout(t);
-  }, [pct]);
-
-  const SIZE = 164;
-  const STROKE = 13;
-  const r = (SIZE - STROKE) / 2;
+  const r = 44;
   const circ = 2 * Math.PI * r;
-  const offset = circ - (animPct / 100) * circ;
+  const dash = (pct / 100) * circ;
 
   return (
-    <div className="relative inline-flex items-center justify-center">
-      <svg
-        width={SIZE}
-        height={SIZE}
-        style={{ transform: "rotate(-90deg)" }}
-        aria-hidden="true"
-      >
-        {/* Track */}
-        <circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={r}
-          fill="none"
-          stroke={colors.ringBg}
-          strokeWidth={STROKE}
-        />
-        {/* Progress */}
-        <circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={r}
-          fill="none"
-          stroke={colors.ringFg}
-          strokeWidth={STROKE}
-          strokeLinecap="round"
-          strokeDasharray={circ}
-          strokeDashoffset={offset}
-          style={{
-            transition: "stroke-dashoffset 1.1s cubic-bezier(0.16,1,0.3,1)",
-          }}
-        />
-      </svg>
-      {/* Centre text */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span
-          className={cn(
-            "text-4xl font-bold tabular-nums leading-none",
-            colors.text,
-          )}
-        >
-          {animPct}%
-        </span>
-        <span className="text-xs text-warm-400 font-semibold mt-1">
-          rezultat
-        </span>
-      </div>
-    </div>
+    <svg
+      width={110}
+      height={110}
+      viewBox="0 0 110 110"
+      className="rotate-[-90deg]"
+    >
+      <circle
+        cx={55}
+        cy={55}
+        r={r}
+        fill="none"
+        stroke={colors.ringBg}
+        strokeWidth={10}
+      />
+      <circle
+        cx={55}
+        cy={55}
+        r={r}
+        fill="none"
+        stroke={colors.ringFg}
+        strokeWidth={10}
+        strokeDasharray={`${dash} ${circ - dash}`}
+        strokeLinecap="round"
+        style={{ transition: "stroke-dasharray 1s ease" }}
+      />
+    </svg>
   );
 }
 
-// ── Question review row (expandable) ─────────────────────────────────────────
+// ── Prikaz jednog pitanja s točnim odgovorom ──────────────────────────────────
+function QuestionReview({ question, chosenLetter, answerInfo, passage }) {
+  const [expanded, setExpanded] = useState(false);
 
-function QuestionRow({ question, userAnswer, index }) {
-  const [open, setOpen] = useState(false);
-
-  const isCorrect = userAnswer === question.correct;
-  const isSkipped = !userAnswer;
-
-  const leftBorder = isSkipped
-    ? "border-l-warm-300"
-    : isCorrect
-      ? "border-l-green-400"
-      : "border-l-red-400";
-
-  const StatusIcon = isSkipped ? Minus : isCorrect ? CheckCircle2 : XCircle;
-  const statusIconClass = isSkipped
-    ? "text-warm-400"
-    : isCorrect
-      ? "text-success-600"
-      : "text-error-500";
+  const isSkipped = !chosenLetter;
+  const isCorrect = answerInfo?.isCorrect ?? false;
+  const correctLetter = answerInfo?.correctOption ?? null;
+  const explanation = answerInfo?.explanation ?? null;
 
   return (
     <motion.div
       layout
       className={cn(
-        "rounded-xl border border-warm-200 border-l-4 overflow-hidden bg-white",
-        leftBorder,
+        "rounded-xl border-2 overflow-hidden transition-colors",
+        isSkipped
+          ? "border-warm-200 bg-white"
+          : isCorrect
+            ? "border-green-200 bg-success-50/30"
+            : "border-red-200 bg-error-50/30",
       )}
     >
       {/* Header */}
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-warm-50 transition-colors"
+        onClick={() => setExpanded((e) => !e)}
+        className="w-full flex items-center gap-3 p-3 text-left hover:bg-black/5 transition-colors"
       >
-        {/* Index bubble */}
-        <span className="w-6 h-6 rounded-full bg-warm-100 border border-warm-200 text-xs font-bold text-warm-600 flex items-center justify-center flex-shrink-0">
-          {index + 1}
-        </span>
+        {/* Status ikona */}
+        <div className="flex-shrink-0">
+          {isSkipped ? (
+            <Minus size={18} className="text-warm-400" />
+          ) : isCorrect ? (
+            <CheckCircle2 size={18} className="text-success-600" />
+          ) : (
+            <XCircle size={18} className="text-error-500" />
+          )}
+        </div>
 
-        <StatusIcon
-          size={15}
-          className={cn("flex-shrink-0", statusIconClass)}
-        />
+        {/* Broj + tekst pitanja */}
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-bold text-warm-400 mr-2">
+            {question.positionLabel ?? question.position}
+          </span>
+          <span className="text-sm text-warm-800 line-clamp-2">
+            {question.text.replace(/<[^>]+>/g, "")}
+          </span>
+        </div>
 
-        {/* Question text — pitanje koristi q.text (ne q.question) */}
-        <span className="flex-1 text-sm text-warm-800 font-medium truncate">
-          {question.text}
-        </span>
-
-        {open ? (
-          <ChevronUp size={14} className="text-warm-400 flex-shrink-0" />
-        ) : (
-          <ChevronDown size={14} className="text-warm-400 flex-shrink-0" />
-        )}
+        {/* Odabrani / točni odgovor badge */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {chosenLetter && (
+            <span
+              className={cn(
+                "text-xs font-bold px-1.5 py-0.5 rounded border",
+                isCorrect
+                  ? "bg-success-50 text-success-700 border-green-300"
+                  : "bg-error-50 text-error-700 border-red-300",
+              )}
+            >
+              {chosenLetter.toUpperCase()}
+            </span>
+          )}
+          {!isCorrect && correctLetter && (
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded border bg-green-50 text-success-700 border-green-300">
+              ✓ {correctLetter.toUpperCase()}
+            </span>
+          )}
+          {expanded ? (
+            <ChevronUp size={14} className="text-warm-400" />
+          ) : (
+            <ChevronDown size={14} className="text-warm-400" />
+          )}
+        </div>
       </button>
 
-      {/* Expanded options */}
+      {/* Expanded detalji */}
       <AnimatePresence>
-        {open && (
+        {expanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-warm-100 px-4 pb-3 pt-2 space-y-2">
-              {question.options?.map((opt) => {
-                const isUserPick = opt.id === userAnswer;
-                const isCorrectOpt = opt.id === question.correct;
+            <div className="px-4 pb-4 pt-1 space-y-3">
+              {/* Sve opcije */}
+              {question.options.length > 0 && (
+                <div className="space-y-2">
+                  {question.options.map((opt) => {
+                    const isCorrectOpt = opt.letter === correctLetter;
+                    const isUserPick = opt.letter === chosenLetter;
+                    return (
+                      <div
+                        key={opt.id}
+                        className={cn(
+                          "flex items-start gap-2.5 p-2.5 rounded-lg border text-sm",
+                          isCorrectOpt
+                            ? "bg-success-50 border-green-200 text-success-800"
+                            : isUserPick && !isCorrectOpt
+                              ? "bg-error-50 border-red-200 text-error-700 line-through opacity-80"
+                              : "bg-white border-warm-200 text-warm-600",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
+                            isCorrectOpt
+                              ? "bg-success-100 text-success-700"
+                              : isUserPick && !isCorrectOpt
+                                ? "bg-error-100 text-error-600"
+                                : "bg-warm-100 text-warm-500",
+                          )}
+                        >
+                          {opt.letter.toUpperCase()}
+                        </span>
+                        <span className="flex-1">{opt.text}</span>
+                        {isCorrectOpt && (
+                          <CheckCircle2
+                            size={14}
+                            className="text-success-600 flex-shrink-0 mt-0.5"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-                return (
-                  <div
-                    key={opt.id}
-                    className={cn(
-                      "flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm",
-                      isCorrectOpt
-                        ? "bg-success-50 border-green-200 text-success-700 font-semibold"
-                        : isUserPick && !isCorrectOpt
-                          ? "bg-error-50 border-red-200 text-error-600 font-semibold"
-                          : "bg-warm-50 border-warm-200 text-warm-600",
-                    )}
-                  >
-                    {/* Option letter */}
-                    <span
-                      className={cn(
-                        "w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
-                        isCorrectOpt
-                          ? "bg-success-100 text-success-700"
-                          : isUserPick && !isCorrectOpt
-                            ? "bg-error-100 text-error-600"
-                            : "bg-warm-200 text-warm-500",
-                      )}
-                    >
-                      {opt.id.toUpperCase()}
-                    </span>
+              {/* Objašnjenje */}
+              {explanation && (
+                <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Lightbulb
+                    size={14}
+                    className="text-blue-500 flex-shrink-0 mt-0.5"
+                  />
+                  <p className="text-xs text-blue-800 leading-relaxed">
+                    {explanation}
+                  </p>
+                </div>
+              )}
 
-                    <span className="flex-1">{opt.text}</span>
-
-                    {isCorrectOpt && (
-                      <CheckCircle2
-                        size={14}
-                        className="text-success-600 flex-shrink-0"
-                      />
-                    )}
-                    {isUserPick && !isCorrectOpt && (
-                      <XCircle
-                        size={14}
-                        className="text-error-500 flex-shrink-0"
-                      />
-                    )}
-                  </div>
-                );
-              })}
+              {/* Passage badge */}
+              {passage && (
+                <div className="flex items-center gap-1.5 text-xs text-amber-700">
+                  <BookOpen size={12} />
+                  <span>
+                    Polazni tekst: {passage.title ?? "Priloženi tekst"}
+                  </span>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -276,15 +290,78 @@ function QuestionRow({ question, userAnswer, index }) {
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// ── Sekcija pitanja ───────────────────────────────────────────────────────────
+function SectionReview({
+  sectionLabel,
+  questions,
+  answers,
+  answerKey,
+  passages,
+}) {
+  const [open, setOpen] = useState(true);
 
+  const sectionQuestions = questions.filter(
+    (q) =>
+      (q.sectionLabel ?? "Ostalo") === sectionLabel &&
+      q.questionType !== "fill_blank_mc",
+  );
+
+  const correct = sectionQuestions.filter(
+    (q) => answerKey?.[q.id]?.isCorrect,
+  ).length;
+
+  return (
+    <div className="mb-4">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between py-2 px-1 group"
+      >
+        <h3 className="text-sm font-bold text-warm-700 group-hover:text-warm-900 transition-colors">
+          {sectionLabel}
+        </h3>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-warm-500">
+            {correct}/{sectionQuestions.length} točno
+          </span>
+          {open ? (
+            <ChevronUp size={14} className="text-warm-400" />
+          ) : (
+            <ChevronDown size={14} className="text-warm-400" />
+          )}
+        </div>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden space-y-2 mt-2"
+          >
+            {sectionQuestions.map((q) => (
+              <QuestionReview
+                key={q.id}
+                question={q}
+                chosenLetter={answers[q.id] ?? null}
+                answerInfo={answerKey?.[q.id] ?? null}
+                passage={q.passageId ? (passages?.[q.passageId] ?? null) : null}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Stranica rezultata ────────────────────────────────────────────────────────
 export function ResultsPage() {
   const { examId } = useParams();
   const navigate = useNavigate();
 
   const lastResult = useExamStore((s) => s.lastResult);
 
-  // Redirect ako nema rezultata (direktan URL pristup)
   useEffect(() => {
     if (!lastResult || lastResult.examId !== examId) {
       navigate("/", { replace: true });
@@ -293,188 +370,151 @@ export function ResultsPage() {
 
   if (!lastResult || lastResult.examId !== examId) return null;
 
-  const { questions, answers, elapsedSeconds } = lastResult;
+  const { questions, answers, passages, elapsedSeconds, rpcResult, attemptId } =
+    lastResult;
+
+  // ── Dohvati točne odgovore iz attempt_details ─────────────────────────────
+  const {
+    data: answerKey,
+    isLoading: loadingKey,
+    error: keyError,
+  } = useQuery({
+    queryKey: ["answer-key", attemptId],
+    queryFn: () => examApi.getAnswerKey(attemptId),
+    enabled: !!attemptId,
+    staleTime: Infinity, // nikad ne istječe — rezultat je immutable
+    retry: 2,
+  });
+
+  // ── Score iz RPC-a ili fallback ───────────────────────────────────────────
+  const pct = rpcResult?.score_pct ?? null;
+  const correctCount = rpcResult?.correct_count ?? null;
+  const totalCount =
+    rpcResult?.total_count ??
+    questions.filter((q) => q.questionType !== "fill_blank_mc").length;
 
   const subjectId = examId?.split("-")[0];
   const subject = SUBJECTS.find((s) => s.id === subjectId);
+  const colors = pct !== null ? getScoreColors(pct) : getScoreColors(0);
+  const label = pct !== null ? getScoreLabel(pct) : "Rezultati se učitavaju...";
+  const elapsed = formatElapsed(rpcResult?.elapsed_seconds ?? elapsedSeconds);
 
-  const {
-    correct,
-    incorrect,
-    skipped,
-    totalPoints,
-    maxPoints,
-    percentage: pct,
-  } = calculateScore(answers, questions);
-
-  const colors = getScoreTailwind(pct);
-  const label = getScoreLabel(pct);
-  const elapsed = formatElapsed(elapsedSeconds);
+  // Grupiraj pitanja po sekcijama
+  const sections = [
+    ...new Set(questions.map((q) => q.sectionLabel ?? "Ostalo")),
+  ];
 
   return (
     <PageWrapper className="max-w-2xl mx-auto">
-      <Confetti active={pct >= 75} />
+      <Confetti active={pct !== null && pct >= 75} />
 
-      {/* Back link */}
+      {/* Natrag */}
       <Link
         to={subject ? `/predmeti/${subject.id}` : "/"}
-        className="inline-flex items-center gap-2 text-sm text-warm-500 hover:text-warm-800 transition-colors mb-6"
+        className="inline-flex items-center gap-2 text-sm text-warm-500 hover:text-warm-800 mb-6 transition-colors"
       >
-        <ArrowLeft size={15} />
-        Natrag na predmete
+        <ArrowLeft size={16} />
+        Natrag na ispite
       </Link>
 
-      {/* ── Hero card ──────────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-      >
-        <Card className="p-6 mb-4 text-center shadow-card-md">
-          {/* Subject pill */}
-          {subject && (
-            <div
-              className={cn(
-                "inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold mb-6",
-                subject.color.bg,
-                subject.color.text,
-                subject.color.border,
-              )}
-            >
-              <subject.icon size={12} />
-              {subject.name}
-              <span className="text-warm-400 font-normal">·</span>
-              {examId?.split("-")[1]}
-              <span className="text-warm-400 font-normal">·</span>
-              {examId?.includes("visa") ? "B razina" : "A razina"}
+      {/* ── Score kartica ──────────────────────────────────────────────── */}
+      <Card className={cn("p-6 mb-6 border-2", colors.border, colors.bg)}>
+        <div className="flex items-center gap-6">
+          {/* Ring */}
+          <div className="relative flex-shrink-0">
+            <ScoreRing pct={pct ?? 0} colors={colors} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className={cn("text-xl font-black", colors.text)}>
+                {pct !== null ? `${pct}%` : "..."}
+              </span>
             </div>
-          )}
-
-          {/* Score ring */}
-          <div className="flex justify-center mb-4">
-            <ScoreRing pct={pct} colors={colors} />
           </div>
 
-          {/* Verdict */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.55, duration: 0.35 }}
-          >
-            <p className="text-2xl font-bold text-warm-900 mb-1">{label}</p>
-            <p className="text-sm text-warm-500">
-              {totalPoints} / {maxPoints} bodova
-            </p>
-          </motion.div>
+          {/* Tekst */}
+          <div className="flex-1 min-w-0">
+            <p className="text-xl font-bold text-warm-900 mb-1">{label}</p>
 
-          {/* Stats strip */}
-          <div className="grid grid-cols-4 gap-0 mt-6 pt-5 border-t border-warm-100">
-            {[
-              {
-                icon: CheckCircle2,
-                value: correct,
-                label: "Točno",
-                iconClass: "text-success-600",
-              },
-              {
-                icon: XCircle,
-                value: incorrect,
-                label: "Netočno",
-                iconClass: "text-error-500",
-              },
-              {
-                icon: Minus,
-                value: skipped,
-                label: "Preskočeno",
-                iconClass: "text-warm-400",
-              },
-              {
-                icon: Clock,
-                value: elapsed ?? "–",
-                label: "Vrijeme",
-                iconClass: "text-primary-500",
-              },
-            ].map(({ icon: Icon, value, label: lbl, iconClass }, i) => (
-              <div
-                key={lbl}
-                className={cn(
-                  "flex flex-col items-center gap-1 py-1",
-                  i < 3 && "border-r border-warm-100",
-                )}
-              >
-                <Icon size={15} className={cn("mb-0.5", iconClass)} />
-                <span className="text-xl font-bold text-warm-900 tabular-nums">
-                  {value}
+            <div className="flex flex-wrap gap-4 text-sm text-warm-600">
+              {correctCount !== null && (
+                <span className="flex items-center gap-1.5">
+                  <Target size={14} className="text-success-500" />
+                  <span>
+                    <strong className="text-warm-900">{correctCount}</strong>/
+                    {totalCount} točnih
+                  </span>
                 </span>
-                <span className="text-xs text-warm-400 font-medium">{lbl}</span>
+              )}
+              {elapsed && (
+                <span className="flex items-center gap-1.5">
+                  <Clock size={14} className="text-warm-400" />
+                  <span>{elapsed}</span>
+                </span>
+              )}
+            </div>
+
+            {/* Upozorenje ako nema online rezultata */}
+            {!rpcResult && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-600">
+                <AlertCircle size={12} />
+                <span>Detaljna analiza nije dostupna (offline predaja)</span>
               </div>
-            ))}
-          </div>
-
-          {/* CTA buttons */}
-          <div className="flex gap-2.5 mt-5">
-            <Button
-              variant="secondary"
-              size="md"
-              leftIcon={RotateCcw}
-              className="flex-1"
-              onClick={() => navigate(`/ispit/${examId}`)}
-            >
-              Ponovi ispit
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              leftIcon={Target}
-              className="flex-1"
-              onClick={() =>
-                navigate(subject ? `/predmeti/${subject.id}` : "/")
-              }
-            >
-              Drugi ispit
-            </Button>
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* ── Question review ────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.18, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      >
-        {/* Legend + heading */}
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-bold text-warm-500 uppercase tracking-wider">
-            Pregled odgovora
-          </p>
-          <div className="flex items-center gap-3 text-xs text-warm-400">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-success-500 inline-block" />
-              Točno
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-error-500 inline-block" />
-              Netočno
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-warm-300 inline-block" />
-              Preskočeno
-            </span>
+            )}
           </div>
         </div>
+      </Card>
 
-        <div className="space-y-2">
-          {questions.map((q, idx) => (
-            <QuestionRow
-              key={q.id}
-              question={q}
-              userAnswer={answers[q.id]}
-              index={idx}
-            />
-          ))}
-        </div>
-      </motion.div>
+      {/* ── Akcije ─────────────────────────────────────────────────────── */}
+      <div className="flex gap-3 mb-8">
+        <Button
+          variant="secondary"
+          leftIcon={RotateCcw}
+          onClick={() => navigate(`/ispit/${examId}`)}
+          className="flex-1"
+        >
+          Ponovi ispit
+        </Button>
+        <Button
+          variant="primary"
+          onClick={() => navigate("/")}
+          className="flex-1"
+        >
+          Novi ispit
+        </Button>
+      </div>
+
+      {/* ── Pregled odgovora ─────────────────────────────────────────── */}
+      <div>
+        <h2 className="text-base font-bold text-warm-900 mb-4 flex items-center gap-2">
+          <BookOpen size={16} className="text-warm-400" />
+          Pregled odgovora
+          {loadingKey && (
+            <span className="text-xs text-warm-400 font-normal ml-1">
+              (učitavanje točnih odgovora...)
+            </span>
+          )}
+        </h2>
+
+        {keyError && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-xs text-amber-700">
+            <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+            <span>
+              Točni odgovori su dostupni samo prijavljenim korisnicima koji su
+              predali ispit. Prijavi se za prikaz rješenja.
+            </span>
+          </div>
+        )}
+
+        {sections.map((section) => (
+          <SectionReview
+            key={section}
+            sectionLabel={section}
+            questions={questions}
+            answers={answers}
+            answerKey={answerKey ?? null}
+            passages={passages}
+          />
+        ))}
+      </div>
     </PageWrapper>
   );
 }
