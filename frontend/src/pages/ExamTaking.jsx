@@ -1,25 +1,33 @@
-// pages/ExamTaking.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI v2:
+// pages/ExamTaking.jsx — FINALNI FIX v3
+// ═══════════════════════════════════════════════════════════════════════════
+// BUGOVI KOJI SU UZROKOVALI BESKONAČNI SKELETON:
 //
-//  BUG #4 — Beskonačni skeleton kad su pitanja prazna (RIJEŠENO)
-//  ─────────────────────────────────────────────────────────────────────────
-//  Stari kod: if (isLoading || (!current && !fetchError)) → ExamSkeleton
-//  Problem: ako pitanja su [], current je null, fetchError je null
-//           → uvjet je UVIJEK istinit → beskonačni skeleton
+//  BUG #1 (KRITIČNI) — Pogrešan redosljed provjera stanja
+//  ───────────────────────────────────────────────────────
+//  Stari kod:
+//    if (isLoading || !isInitialized) return <ExamSkeleton />  ← blokira
+//    if (fetchError) return <ExamErrorState />                 ← nedostižno
 //
-//  Ispravak: koristimo isInitialized iz useExamSession.
-//    - isLoading || !isInitialized → skeleton (fetching ILI useEffect još nije ran)
-//    - fetchError → error state (sa razlikovanjem PGRST116 vs ostale greške)
-//    - questions.length === 0 → "nema pitanja" state (novi!)
-//    - inače → render ispita
+//  Kada query faila (is_published=false → PGRST116):
+//    isLoading=false, fetchError=SET, isInitialized=false
+//    → (false || true) = true → skeleton zauvijek
+//    → fetchError provjera se NIKAD ne doseže
 //
-//  BUG #5 — Greška nije razlikovana (RIJEŠENO)
-//  ─────────────────────────────────────────────────────────────────────────
-//  PGRST116 = "exam not found" = exam nije is_published ili ne postoji u DB.
-//  Prikazujemo specifičnu poruku: "Ispit nije dostupan" umjesto generičke.
-// ─────────────────────────────────────────────────────────────────────────────
-import { useParams, Link, useNavigate } from "react-router-dom";
+//  FIX: fetchError provjeravamo PRVI — odmah, prije skeleton provjere.
+//
+//  BUG #2 (KRITIČNI) — Krivi props za ExamTimer
+//  ──────────────────────────────────────────────
+//  Staro: <ExamTimer timer={timer} />
+//  ExamTimer prima: { formatted, isWarning, isDanger }
+//  FIX: <ExamTimer {...timer} />  (spread)
+//
+//  BUG #3 (KRITIČNI) — Krivi props za ProgressBar
+//  ────────────────────────────────────────────────
+//  Staro: <ProgressBar answered={answeredCount} total={totalVisible} />
+//  ProgressBar prima: { value, max }
+//  FIX: <ProgressBar value={answeredCount} max={totalVisible} />
+// ═══════════════════════════════════════════════════════════════════════════
+import { useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -27,13 +35,9 @@ import {
   AlertCircle,
   Pause,
   Play,
-  Loader2,
-  Clock,
-  BookOpen,
   Construction,
 } from "lucide-react";
 import { Button } from "@/components/common/Button";
-import { cn } from "@/utils/utils";
 import { Modal, ModalBody, ModalFooter } from "@/components/common/Modal";
 import { QuestionDisplay } from "@/components/exam/QuestionDisplay";
 import { PassageDisplay } from "@/components/exam/PassageDisplay";
@@ -50,11 +54,10 @@ const slideVariants = {
   exit: (dir) => ({ x: dir > 0 ? -40 : 40, opacity: 0 }),
 };
 
-// ── Helper za exam title ──────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function buildExamTitle(examMeta) {
   if (!examMeta) return "Ispit";
   if (examMeta.title) return examMeta.title;
-
   const session =
     EXAM_SESSIONS.find((s) => s.id === examMeta.session)?.name ??
     examMeta.session;
@@ -64,56 +67,47 @@ function buildExamTitle(examMeta) {
   return `${examMeta.year}. – ${session} – ${level}`;
 }
 
-// ── Helper za error poruku iz Supabase greške ─────────────────────────────────
 function parseExamError(error) {
   if (!error) return null;
-
-  // PGRST116 = .single() nije pronašao redak = exam nije published ili ne postoji
-  if (error.code === "PGRST116" || error.message?.includes("PGRST116")) {
+  const msg = error.message ?? "";
+  if (
+    error.code === "PGRST116" ||
+    msg.includes("PGRST116") ||
+    msg.includes("multiple (or no) rows")
+  ) {
     return {
       title: "Ispit nije dostupan",
       message:
-        "Ovaj ispit trenutno nije objavljen ili ne postoji. Provjeri je li odabrani ispit dostupan za rješavanje.",
-      icon: "lock",
+        "Ovaj ispit nije objavljen ili ne postoji u bazi. Provjeri URL ili odaberi drugi ispit.",
     };
   }
-
-  // Mrežna greška
   if (
-    error.message?.includes("Failed to fetch") ||
-    error.message?.includes("NetworkError")
+    msg.includes("Failed to fetch") ||
+    msg.includes("NetworkError") ||
+    msg.includes("network")
   ) {
     return {
       title: "Greška pri spajanju",
       message: "Provjeri internetsku konekciju i pokušaj ponovo.",
-      icon: "network",
     };
   }
-
   return {
     title: "Greška pri učitavanju",
-    message: error.message ?? "Nepoznata greška. Pokušaj ponovo.",
-    icon: "error",
+    message: msg || "Nepoznata greška. Pokušaj ponovo.",
   };
 }
 
-// ── Exam Error State ──────────────────────────────────────────────────────────
+// ── State komponente ──────────────────────────────────────────────────────────
 function ExamErrorState({ error, backLink }) {
-  const parsed = parseExamError(error);
-
+  const p = parseExamError(error);
   return (
     <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-red-200 shadow-card p-8 max-w-md w-full text-center">
         <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <AlertCircle className="text-red-400" size={28} />
         </div>
-        <h2 className="text-lg font-bold text-warm-900 mb-2">
-          {parsed?.title ?? "Greška pri učitavanju"}
-        </h2>
-        <p className="text-sm text-warm-500 mb-6">
-          {parsed?.message ??
-            "Provjeri internetsku konekciju i pokušaj ponovo."}
-        </p>
+        <h2 className="text-lg font-bold text-warm-900 mb-2">{p?.title}</h2>
+        <p className="text-sm text-warm-500 mb-6">{p?.message}</p>
         <div className="flex flex-col sm:flex-row gap-2 justify-center">
           <Link to={backLink}>
             <Button variant="secondary" leftIcon={ArrowLeft}>
@@ -129,7 +123,6 @@ function ExamErrorState({ error, backLink }) {
   );
 }
 
-// ── Empty Exam State (ispit nema pitanja u DB) ────────────────────────────────
 function ExamEmptyState({ backLink, examMeta }) {
   return (
     <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
@@ -142,8 +135,8 @@ function ExamEmptyState({ backLink, examMeta }) {
         </h2>
         <p className="text-sm text-warm-500 mb-6">
           {examMeta
-            ? `"${buildExamTitle(examMeta)}" još nema učitana pitanja. Pokušaj ponovo za koji dan.`
-            : "Ovaj ispit trenutno nema dostupnih pitanja. Pokušaj ponovo uskoro."}
+            ? `"${buildExamTitle(examMeta)}" još nema učitana pitanja. Pokušaj uskoro.`
+            : "Ovaj ispit trenutno nema dostupnih pitanja."}
         </p>
         <Link to={backLink}>
           <Button variant="secondary" leftIcon={ArrowLeft}>
@@ -155,7 +148,7 @@ function ExamEmptyState({ backLink, examMeta }) {
   );
 }
 
-// ── Top bar ───────────────────────────────────────────────────────────────────
+// ── Top Bar ───────────────────────────────────────────────────────────────────
 function ExamTopBar({
   backLink,
   examTitle,
@@ -167,15 +160,14 @@ function ExamTopBar({
   totalVisible,
 }) {
   return (
-    <div className="sticky top-0 z-30 bg-white border-b border-warm-300 shadow-sm">
+    <div className="sticky top-0 z-30 bg-white border-b border-warm-200 shadow-sm">
       <div className="page-container">
         <div className="flex items-center justify-between h-14 gap-3">
-          {/* Left: back + title */}
+          {/* Back + title */}
           <div className="flex items-center gap-2 min-w-0">
             <Link
               to={backLink}
               className="flex-shrink-0 p-2 rounded-lg text-warm-500 hover:text-warm-800 hover:bg-warm-100 transition-colors"
-              title="Povratak"
             >
               <ArrowLeft size={18} />
             </Link>
@@ -184,17 +176,21 @@ function ExamTopBar({
             </span>
           </div>
 
-          {/* Center: progress bar */}
+          {/* Progress bar — desktop */}
           <div className="flex-1 max-w-xs hidden md:block">
-            <ProgressBar answered={answeredCount} total={totalVisible} />
+            {/* ✅ BUG #3 FIX: value/max */}
+            <ProgressBar
+              value={answeredCount}
+              max={totalVisible}
+              showLabel={false}
+            />
           </div>
 
-          {/* Right: timer + pause */}
+          {/* Timer + Pause */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="flex items-center gap-1.5 text-sm font-mono font-semibold text-warm-700 bg-warm-100 px-3 py-1.5 rounded-lg">
-              <Clock size={14} className="text-warm-500" />
-              <ExamTimer timer={timer} />
-            </div>
+            {/* ✅ BUG #2 FIX: spread timer objekt */}
+            <ExamTimer {...timer} />
+
             {isPaused ? (
               <Button
                 variant="primary"
@@ -217,11 +213,19 @@ function ExamTopBar({
           </div>
         </div>
       </div>
+      {/* Progress bar — mobile */}
+      <div className="md:hidden px-4 pb-2">
+        <ProgressBar
+          value={answeredCount}
+          max={totalVisible}
+          showLabel={false}
+        />
+      </div>
     </div>
   );
 }
 
-// ── Submit modal ──────────────────────────────────────────────────────────────
+// ── Modali ────────────────────────────────────────────────────────────────────
 function SubmitModal({
   show,
   onClose,
@@ -231,11 +235,10 @@ function SubmitModal({
   isSubmitting,
 }) {
   const unanswered = totalVisible - answeredCount;
-
   return (
     <Modal open={show} onClose={onClose} title="Predaj ispit?">
       <ModalBody>
-        <p className="text-warm-600 text-sm mb-4">
+        <p className="text-sm text-warm-600 mb-4">
           Jesi li siguran/a da želiš predati ispit?
         </p>
         <div className="bg-warm-50 rounded-xl p-4 text-sm space-y-1.5">
@@ -270,14 +273,12 @@ function SubmitModal({
   );
 }
 
-// ── Draft modal ───────────────────────────────────────────────────────────────
 function DraftModal({ show, onConfirm, onDiscard }) {
   return (
     <Modal open={show} onClose={onDiscard} title="Nastavi gdje si stao/la?">
       <ModalBody>
         <p className="text-sm text-warm-600">
-          Pronašli smo sačuvane odgovore za ovaj ispit. Želiš li nastaviti od
-          tamo?
+          Pronašli smo sačuvane odgovore za ovaj ispit. Želiš li nastaviti?
         </p>
       </ModalBody>
       <ModalFooter>
@@ -292,7 +293,6 @@ function DraftModal({ show, onConfirm, onDiscard }) {
   );
 }
 
-// ── Paused overlay ────────────────────────────────────────────────────────────
 function PausedOverlay({ onResume }) {
   return (
     <motion.div
@@ -318,7 +318,7 @@ function PausedOverlay({ onResume }) {
   );
 }
 
-// ── Glavni QuizPage ───────────────────────────────────────────────────────────
+// ── QuizPage ──────────────────────────────────────────────────────────────────
 export function QuizPage() {
   const { examId } = useParams();
 
@@ -336,7 +336,6 @@ export function QuizPage() {
     isPaused,
     isSubmitting,
     examMeta,
-    // NOVO: isInitialized umjesto (!current && !fetchError)
     isLoading,
     isInitialized,
     fetchError,
@@ -356,32 +355,40 @@ export function QuizPage() {
 
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
-  const examTitle = buildExamTitle(examMeta);
-  const hasPassage = !!currentPassage;
 
-  // ── Loading state ─────────────────────────────────────────────────────────
-  // isLoading = TanStack Query fetching
-  // !isInitialized = useEffect (startExam) još nije ran (jedan render delay)
-  if (isLoading || !isInitialized) {
-    return <ExamSkeleton showPassage={false} />;
-  }
+  // ═════════════════════════════════════════════════════════════════════════
+  // REDOSLJED PROVJERA — KRITIČAN ZA ISPRAVNO PONAŠANJE
+  //
+  // ✅ 1. fetchError MORA biti prva provjera
+  //    Ako je error set, isInitialized je false (useEffect nije ran)
+  //    Bez ove provjere: skeleton blokira error state zauvijek
+  //
+  // ✅ 2. isLoading || !isInitialized → skeleton
+  //    Samo ako NEMA greške, čekamo učitavanje
+  //
+  // ✅ 3. questions.length === 0 → ispit se priprema
+  //    Poseban state za prazne ispite (ne greška, ne loading)
+  //
+  // ✅ 4. Render ispita
+  // ═════════════════════════════════════════════════════════════════════════
 
-  // ── Error state ───────────────────────────────────────────────────────────
   if (fetchError) {
     return <ExamErrorState error={fetchError} backLink={backLink} />;
   }
 
-  // ── Empty state — ispit postoji ali nema pitanja u DB ─────────────────────
+  if (isLoading || !isInitialized) {
+    return <ExamSkeleton showPassage={false} />;
+  }
+
   if (questions.length === 0) {
     return <ExamEmptyState backLink={backLink} examMeta={examMeta} />;
   }
 
-  // ── Render ispita ─────────────────────────────────────────────────────────
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
       <ExamTopBar
         backLink={backLink}
-        examTitle={examTitle}
+        examTitle={buildExamTitle(examMeta)}
         timer={timer}
         isPaused={isPaused}
         onPause={handlePause}
@@ -390,7 +397,6 @@ export function QuizPage() {
         totalVisible={totalVisible}
       />
 
-      {/* Modals */}
       <SubmitModal
         show={showSubmitModal}
         onClose={() => setShowSubmitModal(false)}
@@ -405,7 +411,6 @@ export function QuizPage() {
         onDiscard={discardDraft}
       />
 
-      {/* Content */}
       <div className="flex-1 page-container py-5 flex flex-col lg:flex-row gap-5">
         <AnimatePresence mode="wait">
           {isPaused ? (
@@ -417,14 +422,14 @@ export function QuizPage() {
               animate={{ opacity: 1 }}
               className="flex-1 flex flex-col lg:flex-row gap-5"
             >
-              {/* Passage panel (ako postoji) */}
-              {hasPassage && (
+              {/* Passage panel */}
+              {currentPassage && (
                 <div className="lg:w-2/5 xl:w-[38%] flex-shrink-0">
                   <PassageDisplay passage={currentPassage} />
                 </div>
               )}
 
-              {/* Pitanje + opcije + navigacija */}
+              {/* Pitanje */}
               <div className="flex-1 min-w-0 flex flex-col gap-4">
                 <AnimatePresence custom={direction} mode="wait">
                   <motion.div
@@ -448,8 +453,8 @@ export function QuizPage() {
                   </motion.div>
                 </AnimatePresence>
 
-                {/* Prev / Next navigacija */}
-                <div className="flex items-center justify-between mt-auto">
+                {/* Prev / Next */}
+                <div className="flex items-center justify-between mt-auto pt-2">
                   <Button
                     variant="secondary"
                     leftIcon={ArrowLeft}
@@ -458,7 +463,6 @@ export function QuizPage() {
                   >
                     Prethodno
                   </Button>
-
                   {currentIndex === totalVisible - 1 ? (
                     <Button
                       variant="primary"
@@ -479,7 +483,7 @@ export function QuizPage() {
                 </div>
               </div>
 
-              {/* Question navigator sidebar */}
+              {/* Navigator */}
               <div className="lg:w-56 xl:w-64 flex-shrink-0">
                 <QuestionNav
                   questions={questions}
