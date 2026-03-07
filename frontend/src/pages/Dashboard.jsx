@@ -19,6 +19,7 @@ import {
   Target,
   Clock,
   Plus,
+  BarChart2,
 } from "lucide-react";
 import { PageWrapper } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
