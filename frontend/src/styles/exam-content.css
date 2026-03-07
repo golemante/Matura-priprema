@@ -1,0 +1,179 @@
+/* styles/exam-content.css
+ * ──────────────────────────────────────────────────────────────────────────
+ * Stilovi za HTML elemente koji se renderiraju iz baze podataka.
+ * Import u index.css: @import './exam-content.css';
+ * ──────────────────────────────────────────────────────────────────────────
+ */
+
+/* ── passage-content: stilovi za HTML polaznih tekstova ─────────────────── */
+/* Ova klasa se postavlja na PassageSafeHtml komponentu */
+.passage-content {
+  font-size: 0.875rem; /* text-sm */
+  line-height: 1.75;
+  color: #4a4540; /* warm-800 */
+}
+
+/* Paragrafi */
+.passage-content p {
+  margin-bottom: 0.875rem;
+}
+.passage-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* Naslovi */
+.passage-content h2,
+.passage-content h3,
+.passage-content h4 {
+  font-weight: 700;
+  color: #1a1916; /* warm-900 */
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+.passage-content h3 {
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #726e68; /* warm-600 */
+}
+
+/* Italic — književni naglasci, naslovi, strani izrazi */
+.passage-content em,
+.passage-content i {
+  font-style: italic;
+  color: inherit;
+}
+
+/* Bold */
+.passage-content strong,
+.passage-content b {
+  font-weight: 700;
+  color: #1a1916;
+}
+
+/* Podvučeno (u ispitima: "podcrtana rijec") */
+.passage-content u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Superscript — fusnote */
+.passage-content sup {
+  font-size: 0.7em;
+  vertical-align: super;
+  color: #92400e; /* amber-800 */
+  font-weight: 600;
+  cursor: default;
+}
+
+/* Subscript */
+.passage-content sub {
+  font-size: 0.7em;
+  vertical-align: sub;
+}
+
+/* Strikethrough */
+.passage-content s {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/* Liste */
+.passage-content ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+.passage-content ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+.passage-content li {
+  margin-bottom: 0.25rem;
+}
+
+/* Blockquote — citirani tekst */
+.passage-content blockquote {
+  border-left: 3px solid #d97706; /* amber-600 */
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  background-color: rgba(245, 158, 11, 0.06);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  color: #78350f; /* amber-900 */
+}
+
+/* Horizontalna linija — podjela između sekcija */
+.passage-content hr {
+  border: none;
+  border-top: 1px solid #d6d3cc;
+  margin: 1rem 0;
+}
+
+/* Dramski tekst: govornici su u <strong> */
+.passage-content strong:first-child {
+  display: inline;
+}
+
+/* ── safe-html: stilovi za inline HTML u pitanjima i opcijama ───────────── */
+.safe-html em,
+.safe-html i {
+  font-style: italic;
+}
+
+.safe-html strong,
+.safe-html b {
+  font-weight: 700;
+}
+
+.safe-html u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.safe-html sup {
+  font-size: 0.7em;
+  vertical-align: super;
+  font-weight: 600;
+}
+
+.safe-html sub {
+  font-size: 0.7em;
+  vertical-align: sub;
+}
+
+.safe-html s {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+.safe-html code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  background: #f3f2ef;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+/* ── fill-blank: highlight aktualnih praznina ────────────────────────────── */
+mark.fill-blank-active {
+  background: transparent;
+  color: #2563eb; /* blue-600 */
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+}
+
+/* fill-blank kontekst tekst */
+.fill-blank-context strong {
+  color: #1e40af; /* blue-800 */
+}
+
+/* ── KaTeX error fallback ────────────────────────────────────────────────── */
+.katex-error {
+  color: #dc2626; /* red-600 */
+  font-size: 0.8em;
+  font-family: ui-monospace, monospace;
+}

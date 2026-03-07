@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import "./exam-content.css";
+
 /* ─── CSS Design Tokens ─────────────────────────────────────────── */
 :root {
   --bg-app: #f7f6f2;

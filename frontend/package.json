@@ -16,6 +16,7 @@
     "axios": "^1.13.5",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
+    "dompurify": "^3.3.2",
     "framer-motion": "^12.34.3",
     "katex": "^0.16.28",
     "lucide-react": "^0.575.0",

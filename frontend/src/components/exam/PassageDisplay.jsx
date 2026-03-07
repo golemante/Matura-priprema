@@ -1,22 +1,23 @@
 // components/exam/PassageDisplay.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// Prikazuje polazni tekst (passage) uz pitanje.
-//   • Renderira HTML sadržaj (p, em, strong, sup, br, h3, span...)
-//   • Renderira fusnote iz JSONB niza [{ marker: "1", text: "..." }]
-//   • Na mobilnim uređajima: collapsible (expand/collapse)
-//   • Na desktopu: statičan, scroll unutar fiksne visine
-//   • SIGURNOST: content je iz baze kojom upravlja admin — DOMPurify nije
-//     obavezan ali preporučljiv ako content dolazi iz vanjskih izvora
+// ISPRAVCI (v2):
+//   • Koristi PassageSafeHtml (DOMPurify) umjesto raw dangerouslySetInnerHTML
+//   • FootnoteSafeHtml za fusnote
+//   • Ispravan pristup passage.contentType (camelCase iz examApi.js transformacije)
+//   • Bolje mobile UX — sticky header s expand/collapse
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, ChevronUp, BookOpen, FileText } from "lucide-react";
+import {
+  PassageSafeHtml,
+  FootnoteSafeHtml,
+} from "@/components/common/SafeHtml";
 import { cn } from "@/utils/utils";
 
-// Mapa labela za content_type
 const CONTENT_TYPE_LABELS = {
   poem: "Pjesma",
   prose: "Proza",
-  drama: "Drama",
+  drama: "Dramski tekst",
   article: "Članak",
   essay: "Esej",
   other: "Tekst",
@@ -25,22 +26,18 @@ const CONTENT_TYPE_LABELS = {
 // ── Fusnote ───────────────────────────────────────────────────────────────────
 function FootnoteList({ footnotes }) {
   if (!footnotes?.length) return null;
-
   return (
-    <div className="mt-4 pt-3 border-t border-warm-200">
-      <p className="text-xs font-semibold text-warm-400 uppercase tracking-wider mb-2">
+    <div className="mt-4 pt-3 border-t border-amber-200">
+      <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-2">
         Bilješke
       </p>
-      <ol className="space-y-1">
+      <ol className="space-y-1.5 list-none">
         {footnotes.map((fn) => (
-          <li key={fn.marker} className="flex gap-2 text-xs text-warm-600">
-            <sup className="font-bold text-warm-500 flex-shrink-0 mt-0.5">
+          <li key={fn.marker} className="flex gap-1.5 text-xs text-amber-800">
+            <sup className="font-bold text-amber-600 flex-shrink-0 mt-0.5 leading-none">
               {fn.marker}
             </sup>
-            <span
-              className="leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: fn.text }}
-            />
+            <FootnoteSafeHtml html={fn.text} className="leading-relaxed" />
           </li>
         ))}
       </ol>
@@ -48,22 +45,29 @@ function FootnoteList({ footnotes }) {
   );
 }
 
+// ── Izvor (source info) ───────────────────────────────────────────────────────
+function SourceLine({ author, source }) {
+  if (!author && !source) return null;
+  return (
+    <p className="mt-3 text-xs text-amber-600 italic leading-snug">
+      {author && <span className="font-semibold not-italic">{author}</span>}
+      {author && source && ", "}
+      {source && <PassageSafeHtml html={source} className="inline" />}
+    </p>
+  );
+}
+
 // ── Glavni PassageDisplay ─────────────────────────────────────────────────────
 export function PassageDisplay({ passage, className }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [isOverflowing, setIsOverflowing] = useState(false);
-  const contentRef = useRef(null);
 
-  // Na mobu: provjeri overflow za "prikaži više" dugme
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    setIsOverflowing(el.scrollHeight > el.clientHeight + 4);
-  }, [passage?.content]);
+  // NAPOMENA: passage.contentType dolazi camelCase iz examApi.js transformacije
+  // (passage_content_type → contentType)
+  const typeLabel =
+    CONTENT_TYPE_LABELS[passage?.contentType ?? passage?.content_type] ??
+    "Tekst";
 
   if (!passage) return null;
-
-  const typeLabel = CONTENT_TYPE_LABELS[passage.content_type] ?? "Tekst";
 
   return (
     <div
@@ -72,79 +76,67 @@ export function PassageDisplay({ passage, className }) {
         className,
       )}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200 bg-amber-100/60">
+      {/* ── Header ────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200 bg-amber-100/70 sticky top-0 z-10">
         <div className="flex items-center gap-2 min-w-0">
-          <BookOpen size={15} className="text-amber-700 flex-shrink-0" />
+          <BookOpen size={14} className="text-amber-700 flex-shrink-0" />
           <div className="min-w-0">
             {passage.title && (
-              <p className="text-sm font-bold text-amber-900 truncate">
+              <p className="text-sm font-bold text-amber-900 leading-tight truncate">
                 {passage.title}
               </p>
             )}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs text-amber-700 bg-amber-200 px-1.5 py-0.5 rounded font-medium">
+            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+              <span className="text-[10px] font-bold text-amber-700 bg-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wide">
                 {typeLabel}
               </span>
               {passage.author && (
-                <span className="text-xs text-amber-600 truncate">
+                <span className="text-xs text-amber-700 font-medium truncate">
                   {passage.author}
-                </span>
-              )}
-              {passage.source && (
-                <span className="text-xs text-amber-500 italic truncate hidden sm:block">
-                  {passage.source}
                 </span>
               )}
             </div>
           </div>
         </div>
 
-        {/* Collapse dugme — samo na mobilnim */}
+        {/* Collapse toggle — samo na mobilnom */}
         <button
           onClick={() => setCollapsed((c) => !c)}
           className="lg:hidden ml-2 p-1.5 rounded-lg text-amber-600 hover:bg-amber-200 transition-colors flex-shrink-0"
-          aria-label={collapsed ? "Prikaži tekst" : "Sakrij tekst"}
+          aria-label={
+            collapsed ? "Prikaži polazni tekst" : "Sakrij polazni tekst"
+          }
+          aria-expanded={!collapsed}
         >
           {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
         </button>
       </div>
 
-      {/* Content */}
+      {/* ── Sadržaj ───────────────────────────────────────────────────── */}
       <div
         className={cn(
-          "transition-all duration-300 overflow-hidden",
-          collapsed ? "max-h-0" : "max-h-none",
+          "transition-all duration-300",
+          collapsed ? "max-h-0 overflow-hidden" : "max-h-none",
         )}
       >
         <div className="px-4 pt-4 pb-1">
-          {/* Tekst — renderira HTML iz baze */}
-          <div
-            ref={contentRef}
+          {/* PassageSafeHtml koristi DOMPurify + renderira HTML elemente */}
+          <PassageSafeHtml
+            html={passage.content ?? passage.content_html ?? ""}
             className={cn(
-              "passage-content text-sm leading-relaxed text-warm-800",
-              // Desktop: scroll unutar zadane visine
-              "lg:max-h-[420px] lg:overflow-y-auto lg:pr-2",
-              // Custom scrollbar
-              "lg:scrollbar-thin lg:scrollbar-thumb-amber-300 lg:scrollbar-track-transparent",
+              // Desktop: scroll unutar fiksne visine
+              "lg:max-h-[480px] lg:overflow-y-auto lg:pr-1",
             )}
-            dangerouslySetInnerHTML={{ __html: passage.content }}
           />
-
-          {/* "Prikaži više" na mobilnim ako tekst prelazi */}
-          {isOverflowing && !collapsed && (
-            <button
-              onClick={() => setCollapsed(true)}
-              className="lg:hidden flex items-center gap-1 mt-2 text-xs text-amber-600 font-medium"
-            >
-              <ChevronUp size={12} />
-              Sakrij
-            </button>
-          )}
         </div>
 
-        {/* Fusnote */}
         <div className="px-4 pb-4">
+          {/* Izvor */}
+          <SourceLine
+            author={null} // author je već u headeru
+            source={passage.source}
+          />
+          {/* Fusnote */}
           <FootnoteList footnotes={passage.footnotes} />
         </div>
       </div>
@@ -152,18 +144,19 @@ export function PassageDisplay({ passage, className }) {
   );
 }
 
-// ── Inline preview (mini verzija za sidebar) ──────────────────────────────────
+// ── Mini badge za sidebar ─────────────────────────────────────────────────────
 export function PassagePreviewBadge({ passage, onClick }) {
   if (!passage) return null;
+  const typeLabel =
+    CONTENT_TYPE_LABELS[passage?.contentType ?? passage?.content_type] ??
+    "Tekst";
   return (
     <button
       onClick={onClick}
       className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-200 transition-colors"
     >
       <FileText size={11} />
-      <span className="font-medium">
-        {passage.title ?? CONTENT_TYPE_LABELS[passage.content_type] ?? "Tekst"}
-      </span>
+      <span className="font-medium">{passage.title ?? typeLabel}</span>
     </button>
   );
 }
