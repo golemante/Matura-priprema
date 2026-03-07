@@ -1,9 +1,20 @@
 // pages/Dashboard.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// KOMPLETNI REWRITE — mock podaci zamijenjeni pravim Supabase upitima:
-//   • attempts: attemptApi.getAll() → completed attempts za prikaz
-//   • subjectStats: user_subject_stats VIEW → aggregated po predmetu
-//   • streak: lokalno računamo iz finished_at datuma completed pokušaja
+// ISPRAVCI v2:
+//
+//  BUG #6 — Nedostajao error state za useAttempts / useSubjectStats
+//  ─────────────────────────────────────────────────────────────────────────
+//  Ako Supabase vrati grešku (npr. expired token, RLS problem), queries
+//  bi tiho failali s error=truthy ali data=undefined.
+//  Render bi dalje pokušao mapirati undefined → crash bez error boundary.
+//
+//  Ispravak: extractamo error iz oba querija i prikazujemo error state.
+//
+//  BUG #7 — Skeleton nije odgovarao stvarnoj strukturi dashboarda
+//  ─────────────────────────────────────────────────────────────────────────
+//  DashboardSkeleton je bio 3 gruba rectangla koji ne odgovaraju layoutu.
+//  Novo: skeleton s HeroBanner + 4 stat kartice + 2 kolumne sadržaja,
+//  s unutarnjim detaljima koji odgovaraju pravim komponentama.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -20,6 +31,9 @@ import {
   Clock,
   Plus,
   BarChart2,
+  CheckCircle2,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { PageWrapper } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
@@ -56,52 +70,10 @@ function useSubjectStats() {
   });
 }
 
-// ── Streak računanje ──────────────────────────────────────────────────────────
-// Broji koliko uzastopnih dana (do danas) korisnik je imao barem jedan completed attempt
-function computeStreak(completedAttempts) {
-  if (!completedAttempts.length) return 0;
-
-  const days = new Set(
-    completedAttempts.map(
-      (a) => new Date(a.finished_at).toISOString().split("T")[0],
-    ),
-  );
-
-  let streak = 0;
-  const today = new Date();
-
-  for (let i = 0; i < 365; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().split("T")[0];
-    if (days.has(key)) {
-      streak++;
-    } else if (i > 0) {
-      break; // Prekinut niz
-    }
-  }
-
-  return streak;
-}
-
-// Zadnjih 7 dana aktivnosti (true/false)
-function computeWeekActivity(completedAttempts) {
-  const days = new Set(
-    completedAttempts.map(
-      (a) => new Date(a.finished_at).toISOString().split("T")[0],
-    ),
-  );
-
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    return days.has(d.toISOString().split("T")[0]);
-  });
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getPctColor(pct) {
+  if (!pct && pct !== 0) return "text-warm-400";
   if (pct >= 75) return "text-success-600";
   if (pct >= 50) return "text-amber-600";
   return "text-error-600";
@@ -109,30 +81,60 @@ function getPctColor(pct) {
 
 function getPctBarColor(pct) {
   if (pct >= 75) return "bg-success-500";
-  if (pct >= 50) return "bg-amber-400";
+  if (pct >= 50) return "bg-amber-500";
   return "bg-error-500";
 }
 
-function formatElapsed(secs) {
-  if (!secs) return null;
-  const m = Math.floor(secs / 60);
-  return `${m} min`;
-}
-
-function daysAgoLabel(finishedAt) {
-  if (!finishedAt) return "";
-  const diff = Math.floor((Date.now() - new Date(finishedAt)) / 86400000);
-  if (diff === 0) return "Danas";
-  if (diff === 1) return "Jučer";
-  return `Prije ${diff} dana`;
-}
-
-function sessionName(session) {
-  return EXAM_SESSIONS.find((s) => s.id === session)?.name ?? session ?? "";
+function sessionName(s) {
+  if (s === "ljeto" || s === "ljetni") return "Ljetni";
+  if (s === "jesen" || s === "jesenski") return "Jesenski";
+  return s ?? "";
 }
 
 function levelName(level) {
   return DIFFICULTY_LEVELS.find((d) => d.id === level)?.short ?? level ?? "";
+}
+
+function daysAgoLabel(isoString) {
+  if (!isoString) return "";
+  const diff = Date.now() - new Date(isoString).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return "Danas";
+  if (days === 1) return "Jučer";
+  return `Prije ${days} dana`;
+}
+
+// ── Streak + week activity računanje ─────────────────────────────────────────
+
+function computeStreak(completed) {
+  if (!completed?.length) return 0;
+  const days = new Set(
+    completed
+      .filter((a) => a.finished_at)
+      .map((a) => new Date(a.finished_at).toDateString()),
+  );
+  let streak = 0;
+  const today = new Date();
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    if (days.has(d.toDateString())) streak++;
+    else if (i > 0) break;
+  }
+  return streak;
+}
+
+function computeWeekActivity(completed) {
+  const today = new Date();
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (6 - i));
+    const dateStr = d.toDateString();
+    return (completed ?? []).some(
+      (a) =>
+        a.finished_at && new Date(a.finished_at).toDateString() === dateStr,
+    );
+  });
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -145,31 +147,123 @@ function Bone({ className }) {
 function DashboardSkeleton() {
   return (
     <div className="space-y-5">
-      {/* Banner skeleton */}
-      <Bone className="h-24 rounded-2xl" />
-      {/* Stat kartice */}
+      {/* Hero banner skeleton — odgovara stvarnom HeroBanner dimenzijama */}
+      <div className="bg-warm-200 rounded-2xl p-5 animate-pulse">
+        <div className="flex items-center justify-between mb-4">
+          <div className="space-y-2">
+            <Bone className="h-3 w-20 bg-warm-300" />
+            <Bone className="h-6 w-32 bg-warm-300" />
+          </div>
+          <Bone className="h-8 w-20 rounded-xl bg-warm-300" />
+        </div>
+        {/* Tjedna aktivnost */}
+        <div className="flex items-center gap-1.5 mt-4">
+          {[...Array(7)].map((_, i) => (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <Bone className="w-7 h-7 rounded-lg bg-warm-300" />
+              <Bone className="h-2 w-4 bg-warm-300" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stat kartice — 4 kolumne */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[1, 2, 3, 4].map((i) => (
-          <Bone key={i} className="h-24 rounded-2xl" />
+        {[...Array(4)].map((i) => (
+          <div
+            key={i}
+            className="bg-white rounded-2xl border border-warm-200 p-4 space-y-3 animate-pulse"
+          >
+            <Bone className="h-9 w-9 rounded-xl" />
+            <div className="space-y-1.5">
+              <Bone className="h-7 w-12" />
+              <Bone className="h-3 w-20" />
+            </div>
+          </div>
         ))}
       </div>
-      {/* Content */}
+
+      {/* 2 kolumne sadržaja */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Bone className="lg:col-span-2 h-64 rounded-2xl" />
-        <Bone className="h-64 rounded-2xl" />
+        {/* Lijevo: nedavni ispiti (2 od 3 kolumni) */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-warm-200 p-5 animate-pulse">
+          <div className="flex items-center justify-between mb-4">
+            <Bone className="h-4 w-28" />
+            <Bone className="h-4 w-16" />
+          </div>
+          <div className="space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 py-2.5 border-b border-warm-100 last:border-0"
+              >
+                <Bone className="h-8 w-8 rounded-lg flex-shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <Bone className="h-3.5 w-36" />
+                  <Bone className="h-3 w-24" />
+                </div>
+                <Bone className="h-5 w-10 flex-shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Desno: napredak po predmetima */}
+        <div className="bg-white rounded-2xl border border-warm-200 p-5 animate-pulse">
+          <Bone className="h-4 w-24 mb-4" />
+          <div className="space-y-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bone className="h-7 w-7 rounded-lg flex-shrink-0" />
+                    <Bone className="h-3.5 w-20" />
+                  </div>
+                  <Bone className="h-3.5 w-8" />
+                </div>
+                <Bone className="h-1.5 w-full rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ── Error state ───────────────────────────────────────────────────────────────
+function DashboardError({ onRetry }) {
+  return (
+    <div className="py-16 text-center">
+      <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <AlertCircle size={24} className="text-red-400" />
+      </div>
+      <h2 className="text-warm-800 font-bold text-lg mb-2">
+        Greška pri učitavanju dashboarda
+      </h2>
+      <p className="text-warm-500 text-sm mb-6 max-w-sm mx-auto">
+        Podaci se nisu mogli učitati. Provjeri konekciju i pokušaj ponovo.
+      </p>
+      <Button variant="secondary" leftIcon={RefreshCw} onClick={onRetry}>
+        Pokušaj ponovo
+      </Button>
     </div>
   );
 }
 
 // ── Hero banner ───────────────────────────────────────────────────────────────
 function HeroBanner({ user, streak, weekActivity }) {
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting =
+    hour < 12 ? "Dobro jutro," : hour < 18 ? "Dobar dan," : "Dobra večer,";
+
   return (
-    <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl p-5 mb-5 text-white">
+    <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl p-5 text-white">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-primary-200 text-sm font-medium mb-0.5">
-            Dobro jutro,
+            {greeting}
           </p>
           <h1 className="text-xl font-bold">{user?.name ?? "Korisnik"} 👋</h1>
         </div>
@@ -193,8 +287,9 @@ function HeroBanner({ user, streak, weekActivity }) {
                   : "bg-white/10 text-primary-300",
               )}
             >
-              {weekActivity[i] ? "✓" : day[0]}
+              {weekActivity[i] ? <CheckCircle2 size={12} /> : day[0]}
             </div>
+            <span className="text-[9px] text-primary-300">{day}</span>
           </div>
         ))}
       </div>
@@ -222,16 +317,16 @@ function StatCard({ icon: Icon, value, label, iconClass, bgClass }) {
   );
 }
 
-// ── Redak pokušaja ────────────────────────────────────────────────────────────
+// ── Attempt item ──────────────────────────────────────────────────────────────
 function AttemptItem({ attempt }) {
   const navigate = useNavigate();
   const subject = SUBJECTS.find((s) => s.id === attempt.exam?.subject_id);
 
   return (
     <motion.div
-      whileHover={{ x: 2 }}
+      layout
       onClick={() => navigate(`/ispit/${attempt.exam_id}`)}
-      className="group flex items-center gap-3 py-3 border-b border-warm-100 last:border-0 cursor-pointer"
+      className="group flex items-center gap-3 py-2.5 border-b border-warm-100 last:border-0 cursor-pointer hover:bg-warm-50 -mx-2 px-2 rounded-xl transition-colors"
     >
       {subject && (
         <div
@@ -240,12 +335,13 @@ function AttemptItem({ attempt }) {
             subject.color.bg,
           )}
         >
-          <subject.icon size={15} className={subject.color.text} />
+          <subject.icon size={14} className={subject.color.text} />
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-warm-900 truncate">
-          {subject?.shortName} · {attempt.exam?.year}. ·{" "}
+        <p className="text-sm font-semibold text-warm-800 truncate">
+          {subject?.shortName ?? attempt.exam?.subject_id} ·{" "}
+          {attempt.exam?.year}. · {sessionName(attempt.exam?.session)} ·{" "}
           {levelName(attempt.exam?.level)}
         </p>
         <p className="text-xs text-warm-400">
@@ -276,61 +372,89 @@ function SubjectProgressItem({ stat }) {
   return (
     <div
       onClick={() => navigate(`/predmeti/${stat.subject_id}`)}
-      className="group flex items-center gap-3 py-3 border-b border-warm-100 last:border-0 cursor-pointer"
+      className="group cursor-pointer"
     >
-      <div
-        className={cn(
-          "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-          subject.color.bg,
-        )}
-      >
-        <subject.icon size={15} className={subject.color.text} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0",
+              subject.color.bg,
+            )}
+          >
+            <subject.icon size={13} className={subject.color.text} />
+          </div>
           <span className="text-sm font-semibold text-warm-800">
             {subject.shortName}
           </span>
-          <span
-            className={cn("text-xs font-bold", getPctColor(stat.avg_score_pct))}
-          >
-            ∅ {stat.avg_score_pct ?? "—"}%
-          </span>
         </div>
-        <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${stat.avg_score_pct ?? 0}%` }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className={cn(
-              "h-full rounded-full",
-              getPctBarColor(stat.avg_score_pct ?? 0),
-            )}
-          />
-        </div>
+        <span
+          className={cn("text-xs font-bold", getPctColor(stat.avg_score_pct))}
+        >
+          ∅ {stat.avg_score_pct ?? "—"}%
+        </span>
       </div>
-      <ChevronRight
-        size={14}
-        className="text-warm-300 group-hover:text-warm-500 flex-shrink-0"
-      />
+      <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${stat.avg_score_pct ?? 0}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className={cn(
+            "h-full rounded-full",
+            getPctBarColor(stat.avg_score_pct ?? 0),
+          )}
+        />
+      </div>
     </div>
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// ── Dashboard page ────────────────────────────────────────────────────────────
 export function Dashboard() {
   const user = useCurrentUser();
   const navigate = useNavigate();
 
-  const { data: attempts, isLoading: loadingAttempts } = useAttempts();
-  const { data: subjectStats, isLoading: loadingStats } = useSubjectStats();
+  const {
+    data: attempts,
+    isLoading: loadingAttempts,
+    error: attemptsError,
+    refetch: refetchAttempts,
+  } = useAttempts();
+
+  const {
+    data: subjectStats,
+    isLoading: loadingStats,
+    error: statsError,
+  } = useSubjectStats();
 
   const isLoading = loadingAttempts || loadingStats;
+  const hasError = !!(attemptsError || statsError);
 
-  // Filtriraj completed
+  // ── Loading state ─────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <PageWrapper>
+        <DashboardSkeleton />
+      </PageWrapper>
+    );
+  }
+
+  // ── Error state ───────────────────────────────────────────────────────────
+  if (hasError) {
+    return (
+      <PageWrapper>
+        <DashboardError
+          onRetry={() => {
+            refetchAttempts();
+            window.location.reload();
+          }}
+        />
+      </PageWrapper>
+    );
+  }
+
+  // ── Agregirane vrijednosti ────────────────────────────────────────────────
   const completed = (attempts ?? []).filter((a) => a.status === "completed");
-
-  // Agregirane statistike
   const totalExams = completed.length;
   const avgPct = totalExams
     ? Math.round(
@@ -340,72 +464,69 @@ export function Dashboard() {
   const bestPct = totalExams
     ? Math.max(...completed.map((a) => a.score_pct ?? 0))
     : 0;
+  const passedCount = completed.filter((a) => (a.score_pct ?? 0) >= 50).length;
+
   const streak = computeStreak(completed);
   const weekActivity = computeWeekActivity(completed);
 
-  // Zadnjih 5 pokušaja za prikaz
-  const recentAttempts = completed.slice(0, 5);
-
-  if (isLoading) {
-    return (
-      <PageWrapper>
-        <DashboardSkeleton />
-      </PageWrapper>
-    );
-  }
+  const recentAttempts = completed
+    .sort((a, b) => new Date(b.finished_at) - new Date(a.finished_at))
+    .slice(0, 5);
 
   return (
     <PageWrapper>
+      {/* Hero banner */}
       <HeroBanner user={user} streak={streak} weekActivity={weekActivity} />
 
       {/* Stat kartice */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
         <StatCard
-          icon={BookOpen}
+          icon={Trophy}
           value={totalExams}
           label="Riješenih ispita"
+          iconClass="text-amber-500"
+          bgClass="bg-amber-50"
+        />
+        <StatCard
+          icon={Target}
+          value={`${avgPct}%`}
+          label="Prosječni rezultat"
           iconClass="text-primary-600"
           bgClass="bg-primary-50"
         />
         <StatCard
           icon={TrendingUp}
-          value={`${avgPct}%`}
-          label="Prosječan rezultat"
+          value={`${bestPct}%`}
+          label="Najbolji rezultat"
           iconClass="text-success-600"
           bgClass="bg-success-50"
         />
         <StatCard
-          icon={Trophy}
-          value={`${bestPct}%`}
-          label="Najbolji rezultat"
-          iconClass="text-amber-600"
-          bgClass="bg-amber-50"
-        />
-        <StatCard
-          icon={Flame}
-          value={streak || "—"}
-          label="Streak dana"
-          iconClass="text-orange-500"
-          bgClass="bg-orange-50"
+          icon={Clock}
+          value={passedCount}
+          label="Položenih (≥50%)"
+          iconClass="text-violet-600"
+          bgClass="bg-violet-50"
         />
       </div>
 
-      {/* Content grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Nedavni pokušaji */}
+      {/* Sadržaj: 2 kolumne */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-5">
+        {/* Nedavni ispiti */}
         <Card className="lg:col-span-2 p-5">
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-bold text-warm-500 uppercase tracking-wider">
               Nedavni ispiti
             </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              rightIcon={ChevronRight}
-              onClick={() => navigate("/statistike")}
-            >
-              Svi rezultati
-            </Button>
+            {completed.length > 5 && (
+              <button
+                onClick={() => navigate("/rezultati")}
+                className="text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1"
+              >
+                Svi ispiti
+                <ArrowRight size={11} />
+              </button>
+            )}
           </div>
 
           {recentAttempts.length === 0 ? (
@@ -423,26 +544,15 @@ export function Dashboard() {
               </Button>
             </div>
           ) : (
-            <>
-              {recentAttempts.map((attempt) => (
-                <AttemptItem key={attempt.id} attempt={attempt} />
-              ))}
-              {completed.length > 5 && (
-                <button
-                  onClick={() => navigate("/statistike")}
-                  className="w-full mt-3 py-2 text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center justify-center gap-1"
-                >
-                  Prikaži svih {completed.length} ispita
-                  <ArrowRight size={12} />
-                </button>
-              )}
-            </>
+            recentAttempts.map((attempt) => (
+              <AttemptItem key={attempt.id} attempt={attempt} />
+            ))
           )}
         </Card>
 
         {/* Napredak po predmetima */}
         <Card className="p-5">
-          <p className="text-xs font-bold text-warm-500 uppercase tracking-wider mb-1">
+          <p className="text-xs font-bold text-warm-500 uppercase tracking-wider mb-4">
             Po predmetima
           </p>
 
@@ -454,26 +564,43 @@ export function Dashboard() {
               </p>
             </div>
           ) : (
-            subjectStats
-              .sort((a, b) => (b.attempts_count ?? 0) - (a.attempts_count ?? 0))
-              .slice(0, 6)
-              .map((stat) => (
-                <SubjectProgressItem key={stat.subject_id} stat={stat} />
-              ))
+            <div className="space-y-4">
+              {subjectStats
+                .sort(
+                  (a, b) => (b.attempts_count ?? 0) - (a.attempts_count ?? 0),
+                )
+                .slice(0, 6)
+                .map((stat) => (
+                  <SubjectProgressItem key={stat.subject_id} stat={stat} />
+                ))}
+            </div>
           )}
 
           {subjectStats && subjectStats.length > 0 && (
             <Button
               variant="ghost"
               size="sm"
-              className="w-full mt-3"
+              className="w-full mt-4"
               rightIcon={ArrowRight}
-              onClick={() => navigate("/statistike?tab=subjects")}
+              onClick={() => navigate("/rezultati?tab=subjects")}
             >
               Detaljna analiza
             </Button>
           )}
         </Card>
+      </div>
+
+      {/* Quick action */}
+      <div className="mt-5">
+        <Button
+          variant="primary"
+          size="lg"
+          leftIcon={Plus}
+          onClick={() => navigate("/")}
+          className="w-full sm:w-auto"
+        >
+          Odaberi novi ispit
+        </Button>
       </div>
     </PageWrapper>
   );

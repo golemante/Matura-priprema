@@ -1,21 +1,23 @@
 // pages/ExamTaking.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI:
+// ISPRAVCI v2:
 //
-//  BUG #1 — subjectId detekcija: examId?.split("-")[0]
-//           Ispravak: koristi examMeta.subject_id iz stora (pouzdano)
+//  BUG #4 — Beskonačni skeleton kad su pitanja prazna (RIJEŠENO)
+//  ─────────────────────────────────────────────────────────────────────────
+//  Stari kod: if (isLoading || (!current && !fetchError)) → ExamSkeleton
+//  Problem: ako pitanja su [], current je null, fetchError je null
+//           → uvjet je UVIJEK istinit → beskonačni skeleton
 //
-//  BUG #2 — showPassage skeleton detekcija: examId?.startsWith("hrv")
-//           Ispravak: `hasPassage` se bazira na stvarnim podacima iz pitanja
-//           Fallback za skeleton: provjeri examMeta ili defaultaj na false
+//  Ispravak: koristimo isInitialized iz useExamSession.
+//    - isLoading || !isInitialized → skeleton (fetching ILI useEffect još nije ran)
+//    - fetchError → error state (sa razlikovanjem PGRST116 vs ostale greške)
+//    - questions.length === 0 → "nema pitanja" state (novi!)
+//    - inače → render ispita
 //
-//  BUG #3 — Exam title u top baru bio je hardkodiran kao "Ispit"
-//           Ispravak: koristi examMeta.title (iz DB) ili generira iz meta
-//
-//  NOVO:
-//  • Top bar prikazuje naziv ispita iz DB (title, godina, rok, razina)
-//  • Timer prikazuje "—:—" dok se čeka inicijalizacija (ne 00:00)
-//  • Bolja error poruka sa specifičnijim textom
+//  BUG #5 — Greška nije razlikovana (RIJEŠENO)
+//  ─────────────────────────────────────────────────────────────────────────
+//  PGRST116 = "exam not found" = exam nije is_published ili ne postoji u DB.
+//  Prikazujemo specifičnu poruku: "Ispit nije dostupan" umjesto generičke.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,6 +29,8 @@ import {
   Play,
   Loader2,
   Clock,
+  BookOpen,
+  Construction,
 } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { cn } from "@/utils/utils";
@@ -57,50 +61,264 @@ function buildExamTitle(examMeta) {
   const level =
     DIFFICULTY_LEVELS.find((d) => d.id === examMeta.level)?.short ??
     examMeta.level;
-  return `${examMeta.year}. · ${session} · ${level}`;
+  return `${examMeta.year}. – ${session} – ${level}`;
 }
 
-// ── Pauza overlay ─────────────────────────────────────────────────────────────
-function PauseOverlay({ onResume, examTitle }) {
+// ── Helper za error poruku iz Supabase greške ─────────────────────────────────
+function parseExamError(error) {
+  if (!error) return null;
+
+  // PGRST116 = .single() nije pronašao redak = exam nije published ili ne postoji
+  if (error.code === "PGRST116" || error.message?.includes("PGRST116")) {
+    return {
+      title: "Ispit nije dostupan",
+      message:
+        "Ovaj ispit trenutno nije objavljen ili ne postoji. Provjeri je li odabrani ispit dostupan za rješavanje.",
+      icon: "lock",
+    };
+  }
+
+  // Mrežna greška
+  if (
+    error.message?.includes("Failed to fetch") ||
+    error.message?.includes("NetworkError")
+  ) {
+    return {
+      title: "Greška pri spajanju",
+      message: "Provjeri internetsku konekciju i pokušaj ponovo.",
+      icon: "network",
+    };
+  }
+
+  return {
+    title: "Greška pri učitavanju",
+    message: error.message ?? "Nepoznata greška. Pokušaj ponovo.",
+    icon: "error",
+  };
+}
+
+// ── Exam Error State ──────────────────────────────────────────────────────────
+function ExamErrorState({ error, backLink }) {
+  const parsed = parseExamError(error);
+
+  return (
+    <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-red-200 shadow-card p-8 max-w-md w-full text-center">
+        <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <AlertCircle className="text-red-400" size={28} />
+        </div>
+        <h2 className="text-lg font-bold text-warm-900 mb-2">
+          {parsed?.title ?? "Greška pri učitavanju"}
+        </h2>
+        <p className="text-sm text-warm-500 mb-6">
+          {parsed?.message ??
+            "Provjeri internetsku konekciju i pokušaj ponovo."}
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          <Link to={backLink}>
+            <Button variant="secondary" leftIcon={ArrowLeft}>
+              Povratak
+            </Button>
+          </Link>
+          <Button variant="primary" onClick={() => window.location.reload()}>
+            Pokušaj ponovo
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Empty Exam State (ispit nema pitanja u DB) ────────────────────────────────
+function ExamEmptyState({ backLink, examMeta }) {
+  return (
+    <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-warm-200 shadow-card p-8 max-w-md w-full text-center">
+        <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Construction className="text-amber-400" size={28} />
+        </div>
+        <h2 className="text-lg font-bold text-warm-900 mb-2">
+          Ispit se priprema
+        </h2>
+        <p className="text-sm text-warm-500 mb-6">
+          {examMeta
+            ? `"${buildExamTitle(examMeta)}" još nema učitana pitanja. Pokušaj ponovo za koji dan.`
+            : "Ovaj ispit trenutno nema dostupnih pitanja. Pokušaj ponovo uskoro."}
+        </p>
+        <Link to={backLink}>
+          <Button variant="secondary" leftIcon={ArrowLeft}>
+            Povratak na popis
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ── Top bar ───────────────────────────────────────────────────────────────────
+function ExamTopBar({
+  backLink,
+  examTitle,
+  timer,
+  isPaused,
+  onPause,
+  onResume,
+  answeredCount,
+  totalVisible,
+}) {
+  return (
+    <div className="sticky top-0 z-30 bg-white border-b border-warm-300 shadow-sm">
+      <div className="page-container">
+        <div className="flex items-center justify-between h-14 gap-3">
+          {/* Left: back + title */}
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              to={backLink}
+              className="flex-shrink-0 p-2 rounded-lg text-warm-500 hover:text-warm-800 hover:bg-warm-100 transition-colors"
+              title="Povratak"
+            >
+              <ArrowLeft size={18} />
+            </Link>
+            <span className="text-sm font-semibold text-warm-800 truncate hidden sm:block">
+              {examTitle}
+            </span>
+          </div>
+
+          {/* Center: progress bar */}
+          <div className="flex-1 max-w-xs hidden md:block">
+            <ProgressBar answered={answeredCount} total={totalVisible} />
+          </div>
+
+          {/* Right: timer + pause */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1.5 text-sm font-mono font-semibold text-warm-700 bg-warm-100 px-3 py-1.5 rounded-lg">
+              <Clock size={14} className="text-warm-500" />
+              <ExamTimer timer={timer} />
+            </div>
+            {isPaused ? (
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={Play}
+                onClick={onResume}
+              >
+                Nastavi
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={Pause}
+                onClick={onPause}
+              >
+                Pauza
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Submit modal ──────────────────────────────────────────────────────────────
+function SubmitModal({
+  show,
+  onClose,
+  onConfirm,
+  answeredCount,
+  totalVisible,
+  isSubmitting,
+}) {
+  const unanswered = totalVisible - answeredCount;
+
+  return (
+    <Modal open={show} onClose={onClose} title="Predaj ispit?">
+      <ModalBody>
+        <p className="text-warm-600 text-sm mb-4">
+          Jesi li siguran/a da želiš predati ispit?
+        </p>
+        <div className="bg-warm-50 rounded-xl p-4 text-sm space-y-1.5">
+          <div className="flex justify-between">
+            <span className="text-warm-500">Odgovoreno</span>
+            <span className="font-semibold text-warm-800">
+              {answeredCount} / {totalVisible}
+            </span>
+          </div>
+          {unanswered > 0 && (
+            <div className="flex justify-between">
+              <span className="text-amber-600">Preskočeno</span>
+              <span className="font-semibold text-amber-700">{unanswered}</span>
+            </div>
+          )}
+        </div>
+        {unanswered > 0 && (
+          <p className="text-xs text-amber-600 mt-3">
+            Preskočena pitanja računaju se kao netočna.
+          </p>
+        )}
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
+          Nastavi rješavati
+        </Button>
+        <Button variant="primary" onClick={onConfirm} loading={isSubmitting}>
+          Predaj ispit
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+// ── Draft modal ───────────────────────────────────────────────────────────────
+function DraftModal({ show, onConfirm, onDiscard }) {
+  return (
+    <Modal open={show} onClose={onDiscard} title="Nastavi gdje si stao/la?">
+      <ModalBody>
+        <p className="text-sm text-warm-600">
+          Pronašli smo sačuvane odgovore za ovaj ispit. Želiš li nastaviti od
+          tamo?
+        </p>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onDiscard}>
+          Počni ispočetka
+        </Button>
+        <Button variant="primary" onClick={onConfirm}>
+          Nastavi
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+// ── Paused overlay ────────────────────────────────────────────────────────────
+function PausedOverlay({ onResume }) {
   return (
     <motion.div
+      key="paused"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-warm-900/60 backdrop-blur-md flex items-center justify-center p-4"
+      className="flex-1 flex items-center justify-center min-h-[60vh]"
     >
-      <motion.div
-        initial={{ scale: 0.9, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.9, y: 20 }}
-        className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center"
-      >
-        <div className="w-16 h-16 bg-primary-50 border-2 border-primary-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <Pause size={28} className="text-primary-600" />
+      <div className="text-center">
+        <div className="w-16 h-16 bg-primary-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Pause size={28} className="text-primary-500" />
         </div>
-        <h2 className="text-xl font-bold text-warm-900 mb-1">
-          Ispit je pauziran
-        </h2>
-        {examTitle && (
-          <p className="text-xs text-warm-400 mb-2 truncate">{examTitle}</p>
-        )}
+        <h2 className="text-xl font-bold text-warm-900 mb-2">Ispit pauziran</h2>
         <p className="text-sm text-warm-500 mb-6">
-          Odgovori su automatski sačuvani. Timer je zaustavljen.
+          Odgovori su sačuvani. Nastavi kad budeš spreman/a.
         </p>
-        <Button
-          variant="primary"
-          className="w-full"
-          leftIcon={Play}
-          onClick={onResume}
-        >
+        <Button variant="primary" leftIcon={Play} size="lg" onClick={onResume}>
           Nastavi ispit
         </Button>
-      </motion.div>
+      </div>
     </motion.div>
   );
 }
 
-// ── Glavna stranica ───────────────────────────────────────────────────────────
+// ── Glavni QuizPage ───────────────────────────────────────────────────────────
 export function QuizPage() {
   const { examId } = useParams();
 
@@ -118,7 +336,9 @@ export function QuizPage() {
     isPaused,
     isSubmitting,
     examMeta,
+    // NOVO: isInitialized umjesto (!current && !fetchError)
     isLoading,
+    isInitialized,
     fetchError,
     showSubmitModal,
     setShowSubmitModal,
@@ -134,302 +354,147 @@ export function QuizPage() {
     timer,
   } = useExamSession(examId);
 
-  const { formatted, isWarning, isDanger, isReady } = timer;
-
-  // Subject ID pouzdano iz examMeta (ne split-anjem examId stringa)
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
   const examTitle = buildExamTitle(examMeta);
-
-  // showPassage se bazira na STVARNIM podacima (ima li currentPassage)
-  // Za skeleton: pretpostavljamo based on examMeta ili false
   const hasPassage = !!currentPassage;
 
   // ── Loading state ─────────────────────────────────────────────────────────
-  if (isLoading || (!current && !fetchError)) {
+  // isLoading = TanStack Query fetching
+  // !isInitialized = useEffect (startExam) još nije ran (jedan render delay)
+  if (isLoading || !isInitialized) {
     return <ExamSkeleton showPassage={false} />;
   }
 
   // ── Error state ───────────────────────────────────────────────────────────
   if (fetchError) {
-    return (
-      <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl border border-red-200 shadow-card p-8 max-w-md text-center">
-          <AlertCircle className="text-red-400 mx-auto mb-4" size={40} />
-          <h2 className="text-lg font-bold text-warm-900 mb-2">
-            Greška pri učitavanju
-          </h2>
-          <p className="text-sm text-warm-500 mb-6">
-            {fetchError.message ??
-              "Provjeri internetsku konekciju i pokušaj ponovo."}
-          </p>
-          <div className="flex gap-3 justify-center">
-            <Button variant="secondary" onClick={() => window.history.back()}>
-              Natrag
-            </Button>
-            <Button variant="primary" onClick={() => window.location.reload()}>
-              Pokušaj ponovo
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
+    return <ExamErrorState error={fetchError} backLink={backLink} />;
   }
 
+  // ── Empty state — ispit postoji ali nema pitanja u DB ─────────────────────
+  if (questions.length === 0) {
+    return <ExamEmptyState backLink={backLink} examMeta={examMeta} />;
+  }
+
+  // ── Render ispita ─────────────────────────────────────────────────────────
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
-      {/* Pauza overlay */}
-      <AnimatePresence>
-        {isPaused && (
-          <PauseOverlay onResume={handleResume} examTitle={examTitle} />
-        )}
-      </AnimatePresence>
+      <ExamTopBar
+        backLink={backLink}
+        examTitle={examTitle}
+        timer={timer}
+        isPaused={isPaused}
+        onPause={handlePause}
+        onResume={handleResume}
+        answeredCount={answeredCount}
+        totalVisible={totalVisible}
+      />
 
-      {/* ── Top bar ─────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 bg-white border-b border-warm-300 shadow-card">
-        <div className="page-container">
-          <div className="flex items-center justify-between h-14 gap-4">
-            {/* Natrag + naziv ispita */}
-            <div className="flex items-center gap-3 min-w-0">
-              <Link
-                to={backLink}
-                className="p-1.5 rounded-lg text-warm-500 hover:bg-warm-100 hover:text-warm-800 transition-colors flex-shrink-0"
-                title="Natrag na popis ispita"
-              >
-                <ArrowLeft size={18} />
-              </Link>
-              <div className="hidden sm:block min-w-0">
-                <p className="text-xs text-warm-400 leading-none mb-0.5 truncate">
-                  {examTitle}
-                </p>
-                <p className="text-sm font-semibold text-warm-900 leading-none tabular-nums">
-                  Pitanje{" "}
-                  <span className="text-warm-900">{currentIndex + 1}</span>
-                  <span className="text-warm-400">/{totalVisible}</span>
-                </p>
-              </div>
-            </div>
+      {/* Modals */}
+      <SubmitModal
+        show={showSubmitModal}
+        onClose={() => setShowSubmitModal(false)}
+        onConfirm={handleSubmit}
+        answeredCount={answeredCount}
+        totalVisible={totalVisible}
+        isSubmitting={isSubmitting}
+      />
+      <DraftModal
+        show={showDraftModal}
+        onConfirm={confirmRestoreDraft}
+        onDiscard={discardDraft}
+      />
 
-            {/* Progress bar */}
-            <div className="flex-1 max-w-xs hidden md:block">
-              <ProgressBar
-                value={answeredCount}
-                max={
-                  questions.filter((q) => q.questionType !== "fill_blank_mc")
-                    .length
-                }
-                showLabel
-                variant={
-                  answeredCount ===
-                  questions.filter((q) => q.questionType !== "fill_blank_mc")
-                    .length
-                    ? "success"
-                    : "default"
-                }
-              />
-            </div>
-
-            {/* Timer + Pauza + Predaj */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {/* Timer — prikazuje "—:—" dok nije inicijaliziran */}
-              {isReady ? (
-                <ExamTimer
-                  formatted={formatted}
-                  isWarning={isWarning}
-                  isDanger={isDanger}
-                />
-              ) : (
-                <div className="flex items-center gap-1.5 text-warm-400 text-sm font-mono">
-                  <Clock size={14} />
-                  <span>—:—</span>
+      {/* Content */}
+      <div className="flex-1 page-container py-5 flex flex-col lg:flex-row gap-5">
+        <AnimatePresence mode="wait">
+          {isPaused ? (
+            <PausedOverlay key="paused" onResume={handleResume} />
+          ) : (
+            <motion.div
+              key="exam-content"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex-1 flex flex-col lg:flex-row gap-5"
+            >
+              {/* Passage panel (ako postoji) */}
+              {hasPassage && (
+                <div className="lg:w-2/5 xl:w-[38%] flex-shrink-0">
+                  <PassageDisplay passage={currentPassage} />
                 </div>
               )}
 
-              {/* Pauza */}
-              <button
-                onClick={handlePause}
-                title="Pauziraj ispit (P)"
-                className="p-1.5 rounded-lg text-warm-500 hover:bg-warm-100 hover:text-warm-800 transition-colors hidden sm:flex items-center"
-              >
-                <Pause size={16} />
-              </button>
+              {/* Pitanje + opcije + navigacija */}
+              <div className="flex-1 min-w-0 flex flex-col gap-4">
+                <AnimatePresence custom={direction} mode="wait">
+                  <motion.div
+                    key={current?.id}
+                    custom={direction}
+                    variants={slideVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    transition={{ duration: 0.18, ease: "easeInOut" }}
+                  >
+                    <QuestionDisplay
+                      question={current}
+                      selectedOption={answers[current?.id] ?? null}
+                      isFlagged={isCurrentFlagged}
+                      onAnswer={handleAnswer}
+                      onToggleFlag={handleToggleFlag}
+                      questionNumber={currentIndex + 1}
+                      totalCount={totalVisible}
+                    />
+                  </motion.div>
+                </AnimatePresence>
 
-              <Button
-                size="sm"
-                onClick={() => setShowSubmitModal(true)}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  "Predaj"
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+                {/* Prev / Next navigacija */}
+                <div className="flex items-center justify-between mt-auto">
+                  <Button
+                    variant="secondary"
+                    leftIcon={ArrowLeft}
+                    disabled={currentIndex === 0}
+                    onClick={() => handleGoTo(currentIndex - 1)}
+                  >
+                    Prethodno
+                  </Button>
 
-      {/* ── Main content ─────────────────────────────────────────────────── */}
-      <div className="flex-1 page-container py-6 flex flex-col lg:flex-row gap-6">
-        {/* Passage panel — iznad na mobu, lijevo na desktopu */}
-        {hasPassage && (
-          <div className="w-full lg:w-2/5 xl:w-[38%] lg:flex-shrink-0">
-            <div className="lg:sticky lg:top-20">
-              <PassageDisplay passage={currentPassage} />
-            </div>
-          </div>
-        )}
+                  {currentIndex === totalVisible - 1 ? (
+                    <Button
+                      variant="primary"
+                      onClick={() => setShowSubmitModal(true)}
+                      loading={isSubmitting}
+                    >
+                      Predaj ispit
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      rightIcon={ArrowRight}
+                      onClick={() => handleGoTo(currentIndex + 1)}
+                    >
+                      Sljedeće
+                    </Button>
+                  )}
+                </div>
+              </div>
 
-        {/* Pitanje + opcije */}
-        <div className="flex-1 min-w-0">
-          <AnimatePresence mode="wait" custom={direction}>
-            <motion.div
-              key={currentIndex}
-              custom={direction}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <QuestionDisplay
-                question={current}
-                selectedAnswer={answers[current?.id] ?? null}
-                onAnswer={handleAnswer}
-                onFlag={handleToggleFlag}
-                isFlagged={isCurrentFlagged}
-                index={currentIndex}
-                isPaused={isPaused}
-              />
+              {/* Question navigator sidebar */}
+              <div className="lg:w-56 xl:w-64 flex-shrink-0">
+                <QuestionNav
+                  questions={questions}
+                  currentIndex={currentIndex}
+                  answers={answers}
+                  flagged={flagged}
+                  onGoTo={handleGoTo}
+                  onSubmit={() => setShowSubmitModal(true)}
+                  answeredCount={answeredCount}
+                />
+              </div>
             </motion.div>
-          </AnimatePresence>
-
-          {/* Prev / Next */}
-          <div className="flex justify-between mt-6">
-            <Button
-              variant="secondary"
-              leftIcon={ArrowLeft}
-              disabled={currentIndex === 0 || isPaused}
-              onClick={() => handleGoTo(currentIndex - 1)}
-            >
-              Prethodno
-            </Button>
-            {currentIndex < totalVisible - 1 ? (
-              <Button
-                variant="primary"
-                rightIcon={ArrowRight}
-                disabled={isPaused}
-                onClick={() => handleGoTo(currentIndex + 1)}
-              >
-                Sljedeće
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                disabled={isPaused}
-                onClick={() => setShowSubmitModal(true)}
-              >
-                Predaj ispit
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Navigator sidebar */}
-        <div className={cn(hasPassage ? "lg:w-48 xl:w-52" : "lg:w-56 xl:w-64")}>
-          <QuestionNav
-            questions={questions}
-            answers={answers}
-            flagged={flagged}
-            currentIndex={currentIndex}
-            onNavigate={isPaused ? undefined : handleGoTo}
-          />
-        </div>
-      </div>
-
-      {/* ── Submit modal ─────────────────────────────────────────────────── */}
-      <Modal
-        open={showSubmitModal}
-        onClose={() => !isSubmitting && setShowSubmitModal(false)}
-        title="Predaj ispit?"
-      >
-        <ModalBody>
-          <p className="text-sm text-warm-600">
-            Odgovorili ste na{" "}
-            <span className="font-bold text-warm-900">{answeredCount}</span> od{" "}
-            <span className="font-bold text-warm-900">
-              {
-                questions.filter((q) => q.questionType !== "fill_blank_mc")
-                  .length
-              }
-            </span>{" "}
-            pitanja.
-          </p>
-          {answeredCount <
-            questions.filter((q) => q.questionType !== "fill_blank_mc")
-              .length && (
-            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
-              <AlertCircle
-                size={16}
-                className="text-amber-600 flex-shrink-0 mt-0.5"
-              />
-              <p className="text-xs text-amber-700">
-                Neka pitanja su ostala bez odgovora. Možete se vratiti i
-                odgovoriti.
-              </p>
-            </div>
           )}
-        </ModalBody>
-        <ModalFooter>
-          <Button
-            variant="secondary"
-            onClick={() => setShowSubmitModal(false)}
-            disabled={isSubmitting}
-          >
-            Odustani
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => {
-              setShowSubmitModal(false);
-              handleSubmit();
-            }}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <span className="flex items-center gap-2">
-                <Loader2 size={14} className="animate-spin" />
-                Predaje se...
-              </span>
-            ) : (
-              "Predaj ispit"
-            )}
-          </Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* ── Draft restore modal ──────────────────────────────────────────── */}
-      <Modal
-        open={showDraftModal}
-        onClose={discardDraft}
-        title="Pronađeni su sačuvani odgovori"
-      >
-        <ModalBody>
-          <p className="text-sm text-warm-600">
-            Pronašli smo ranije sačuvane odgovore za ovaj ispit. Želite li ih
-            obnoviti?
-          </p>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="secondary" onClick={discardDraft}>
-            Zanemari
-          </Button>
-          <Button variant="primary" onClick={confirmRestoreDraft}>
-            Obnovi odgovore
-          </Button>
-        </ModalFooter>
-      </Modal>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
