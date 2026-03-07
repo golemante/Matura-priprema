@@ -133,6 +133,7 @@ export const useExamStore = create((set, get) => ({
         answers,
         questions,
         passages,
+        flagged: get().flagged,
         examMeta,
         submittedAt,
         elapsedSeconds,
