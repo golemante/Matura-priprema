@@ -1,40 +1,74 @@
-// components/exam/PassageDisplay.jsx
+// components/exam/PassageDisplay.jsx — v5 REDESIGN
 // ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI (v2):
-//   • Koristi PassageSafeHtml (DOMPurify) umjesto raw dangerouslySetInnerHTML
-//   • FootnoteSafeHtml za fusnote
-//   • Ispravan pristup passage.contentType (camelCase iz examApi.js transformacije)
-//   • Bolje mobile UX — sticky header s expand/collapse
+// POBOLJŠANJA:
+//   • Sticky header: title + autor + type badge + collapse toggle (mobile)
+//   • Sticky na lg: top-20, max-h-[calc(100vh-7rem)]
+//   • Overflow-y-auto: dugi tekstovi se mogu scrollati unutar panela
+//   • Bolje boje po tipu sadržaja (poem=purple, drama=blue, prose=amber...)
+//   • Fusnote: poboljšan prikaz
+//   • Kompaktniji header na mobilnom
+//   • Koristit PassageSafeHtml + FootnoteSafeHtml (DOMPurify)
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useRef, useEffect } from "react";
-import { ChevronDown, ChevronUp, BookOpen, FileText } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, BookOpen } from "lucide-react";
 import {
   PassageSafeHtml,
   FootnoteSafeHtml,
 } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/utils";
 
-const CONTENT_TYPE_LABELS = {
-  poem: "Pjesma",
-  prose: "Proza",
-  drama: "Dramski tekst",
-  article: "Članak",
-  essay: "Esej",
-  other: "Tekst",
+// Labele i boje po tipu sadržaja
+const CONTENT_TYPES = {
+  poem: {
+    label: "Pjesma",
+    bg: "bg-purple-50",
+    badge: "bg-purple-100 text-purple-700",
+    border: "border-purple-200",
+  },
+  prose: {
+    label: "Proza",
+    bg: "bg-amber-50",
+    badge: "bg-amber-100 text-amber-700",
+    border: "border-amber-200",
+  },
+  drama: {
+    label: "Dramski tekst",
+    bg: "bg-blue-50",
+    badge: "bg-blue-100 text-blue-700",
+    border: "border-blue-200",
+  },
+  article: {
+    label: "Članak",
+    bg: "bg-emerald-50",
+    badge: "bg-emerald-100 text-emerald-700",
+    border: "border-emerald-200",
+  },
+  essay: {
+    label: "Esej",
+    bg: "bg-orange-50",
+    badge: "bg-orange-100 text-orange-700",
+    border: "border-orange-200",
+  },
+  other: {
+    label: "Tekst",
+    bg: "bg-warm-50",
+    badge: "bg-warm-100 text-warm-600",
+    border: "border-warm-200",
+  },
 };
 
 // ── Fusnote ───────────────────────────────────────────────────────────────────
 function FootnoteList({ footnotes }) {
   if (!footnotes?.length) return null;
   return (
-    <div className="mt-4 pt-3 border-t border-amber-200">
-      <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-2">
+    <div className="mt-4 pt-4 border-t border-warm-200/70">
+      <p className="text-[10px] font-bold text-warm-500 uppercase tracking-widest mb-2.5">
         Bilješke
       </p>
-      <ol className="space-y-1.5 list-none">
-        {footnotes.map((fn) => (
-          <li key={fn.marker} className="flex gap-1.5 text-xs text-amber-800">
-            <sup className="font-bold text-amber-600 flex-shrink-0 mt-0.5 leading-none">
+      <ol className="space-y-2 list-none">
+        {footnotes.map((fn, i) => (
+          <li key={fn.marker ?? i} className="flex gap-2 text-xs text-warm-700">
+            <sup className="font-bold text-warm-500 flex-shrink-0 mt-0.5 leading-none text-[10px]">
               {fn.marker}
             </sup>
             <FootnoteSafeHtml html={fn.text} className="leading-relaxed" />
@@ -45,118 +79,113 @@ function FootnoteList({ footnotes }) {
   );
 }
 
-// ── Izvor (source info) ───────────────────────────────────────────────────────
-function SourceLine({ author, source }) {
-  if (!author && !source) return null;
-  return (
-    <p className="mt-3 text-xs text-amber-600 italic leading-snug">
-      {author && <span className="font-semibold not-italic">{author}</span>}
-      {author && source && ", "}
-      {source && <PassageSafeHtml html={source} className="inline" />}
-    </p>
-  );
-}
-
 // ── Glavni PassageDisplay ─────────────────────────────────────────────────────
 export function PassageDisplay({ passage, className }) {
   const [collapsed, setCollapsed] = useState(false);
 
-  // NAPOMENA: passage.contentType dolazi camelCase iz examApi.js transformacije
-  // (passage_content_type → contentType)
-  const typeLabel =
-    CONTENT_TYPE_LABELS[passage?.contentType ?? passage?.content_type] ??
-    "Tekst";
-
   if (!passage) return null;
+
+  // contentType dolazi camelCase iz examApi.js (passage_content_type → contentType)
+  const typeKey = passage?.contentType ?? passage?.content_type ?? "other";
+  const typeConfig = CONTENT_TYPES[typeKey] ?? CONTENT_TYPES.other;
 
   return (
     <div
       className={cn(
-        "bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden",
+        // Base
+        "bg-white rounded-2xl border border-warm-200 overflow-hidden",
+        "shadow-[0_1px_4px_rgba(0,0,0,0.06)]",
+        // Sticky scroll na desktopu
+        "lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:flex lg:flex-col",
         className,
       )}
     >
-      {/* ── Header ────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-amber-200 bg-amber-100/70 sticky top-0 z-10">
-        <div className="flex items-center gap-2 min-w-0">
-          <BookOpen size={14} className="text-amber-700 flex-shrink-0" />
-          <div className="min-w-0">
-            {passage.title && (
-              <p className="text-sm font-bold text-amber-900 leading-tight truncate">
-                {passage.title}
-              </p>
-            )}
-            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-              <span className="text-[10px] font-bold text-amber-700 bg-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                {typeLabel}
-              </span>
+      {/* ── Sticky header ───────────────────────────────────────────── */}
+      <div
+        className={cn(
+          "flex items-start justify-between gap-3 p-4 flex-shrink-0",
+          "border-b border-warm-100",
+          typeConfig.bg,
+        )}
+      >
+        <div className="flex-1 min-w-0">
+          {/* Type badge */}
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span
+              className={cn(
+                "inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-md",
+                typeConfig.badge,
+              )}
+            >
+              {typeConfig.label}
+            </span>
+          </div>
+
+          {/* Naslov */}
+          {passage.title && (
+            <p className="text-sm font-bold text-warm-900 leading-snug line-clamp-2">
+              {passage.title}
+            </p>
+          )}
+
+          {/* Autor + izvor */}
+          {(passage.author || passage.source) && (
+            <p className="text-xs text-warm-500 mt-0.5 line-clamp-1">
               {passage.author && (
-                <span className="text-xs text-amber-700 font-medium truncate">
+                <span className="font-semibold text-warm-700 not-italic">
                   {passage.author}
                 </span>
               )}
-            </div>
-          </div>
+              {passage.author && passage.source && (
+                <span className="mx-1 text-warm-300">·</span>
+              )}
+              {passage.source && (
+                <PassageSafeHtml
+                  html={passage.source}
+                  className="inline italic"
+                />
+              )}
+            </p>
+          )}
         </div>
 
-        {/* Collapse toggle — samo na mobilnom */}
+        {/* Mobile collapse toggle */}
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className="lg:hidden ml-2 p-1.5 rounded-lg text-amber-600 hover:bg-amber-200 transition-colors flex-shrink-0"
-          aria-label={
-            collapsed ? "Prikaži polazni tekst" : "Sakrij polazni tekst"
-          }
+          className={cn(
+            "lg:hidden flex-shrink-0 p-1.5 rounded-lg transition-colors",
+            "text-warm-400 hover:text-warm-700 hover:bg-warm-100",
+          )}
+          aria-label={collapsed ? "Prikaži tekst" : "Sakrij tekst"}
           aria-expanded={!collapsed}
         >
-          {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+          <ChevronDown
+            size={16}
+            className={cn(
+              "transition-transform duration-200",
+              collapsed ? "rotate-180" : "",
+            )}
+          />
         </button>
       </div>
 
-      {/* ── Sadržaj ───────────────────────────────────────────────────── */}
+      {/* ── Sadržaj (scrollable) ─────────────────────────────────────── */}
       <div
         className={cn(
-          "transition-all duration-300",
-          collapsed ? "max-h-0 overflow-hidden" : "max-h-none",
+          "overflow-y-auto flex-1 p-4 lg:p-5",
+          collapsed ? "hidden lg:block" : "block",
         )}
       >
-        <div className="px-4 pt-4 pb-1">
-          {/* PassageSafeHtml koristi DOMPurify + renderira HTML elemente */}
-          <PassageSafeHtml
-            html={passage.content ?? passage.content_html ?? ""}
-            className={cn(
-              // Desktop: scroll unutar fiksne visine
-              "lg:max-h-[480px] lg:overflow-y-auto lg:pr-1",
-            )}
-          />
-        </div>
-
-        <div className="px-4 pb-4">
-          {/* Izvor */}
-          <SourceLine
-            author={null} // author je već u headeru
-            source={passage.source}
-          />
-          {/* Fusnote */}
-          <FootnoteList footnotes={passage.footnotes} />
-        </div>
+        <PassageSafeHtml
+          html={passage.content}
+          className={cn(
+            "passage-content",
+            typeKey === "poem" && "passage-poem",
+            typeKey === "drama" && "passage-drama",
+          )}
+        />
+        <FootnoteList footnotes={passage.footnotes} />
       </div>
     </div>
-  );
-}
-
-// ── Mini badge za sidebar ─────────────────────────────────────────────────────
-export function PassagePreviewBadge({ passage, onClick }) {
-  if (!passage) return null;
-  const typeLabel =
-    CONTENT_TYPE_LABELS[passage?.contentType ?? passage?.content_type] ??
-    "Tekst";
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-200 transition-colors"
-    >
-      <FileText size={11} />
-      <span className="font-medium">{passage.title ?? typeLabel}</span>
-    </button>
   );
 }

@@ -1,19 +1,20 @@
-/* styles/exam-content.css
+/* styles/exam-content.css — v5 DOPUNE
  * ──────────────────────────────────────────────────────────────────────────
- * Stilovi za HTML elemente koji se renderiraju iz baze podataka.
- * Import u index.css: @import './exam-content.css';
+ * Dodaci na postojeći exam-content.css:
+ *   • passage-poem: stihovi zadržavaju whitespace, centrirani tekst
+ *   • passage-drama: govornici u bold, didaskalije italic
+ *   • Bolji spacing za passage-content paragrafe
+ *   • xs breakpoint za mobilni bottom bar
  * ──────────────────────────────────────────────────────────────────────────
  */
 
 /* ── passage-content: stilovi za HTML polaznih tekstova ─────────────────── */
-/* Ova klasa se postavlja na PassageSafeHtml komponentu */
 .passage-content {
-  font-size: 0.875rem; /* text-sm */
-  line-height: 1.75;
-  color: #4a4540; /* warm-800 */
+  font-size: 0.875rem;
+  line-height: 1.8;
+  color: #4a4540;
 }
 
-/* Paragrafi */
 .passage-content p {
   margin-bottom: 0.875rem;
 }
@@ -21,12 +22,11 @@
   margin-bottom: 0;
 }
 
-/* Naslovi */
 .passage-content h2,
 .passage-content h3,
 .passage-content h4 {
   font-weight: 700;
-  color: #1a1916; /* warm-900 */
+  color: #1a1916;
   margin-top: 1rem;
   margin-bottom: 0.5rem;
 }
@@ -34,51 +34,43 @@
   font-size: 0.875rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #726e68; /* warm-600 */
+  color: #726e68;
 }
 
-/* Italic — književni naglasci, naslovi, strani izrazi */
 .passage-content em,
 .passage-content i {
   font-style: italic;
-  color: inherit;
 }
 
-/* Bold */
 .passage-content strong,
 .passage-content b {
   font-weight: 700;
   color: #1a1916;
 }
 
-/* Podvučeno (u ispitima: "podcrtana rijec") */
 .passage-content u {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-/* Superscript — fusnote */
 .passage-content sup {
   font-size: 0.7em;
   vertical-align: super;
-  color: #92400e; /* amber-800 */
+  color: #92400e;
   font-weight: 600;
   cursor: default;
 }
 
-/* Subscript */
 .passage-content sub {
   font-size: 0.7em;
   vertical-align: sub;
 }
 
-/* Strikethrough */
 .passage-content s {
   text-decoration: line-through;
   opacity: 0.6;
 }
 
-/* Liste */
 .passage-content ol {
   list-style-type: decimal;
   padding-left: 1.5rem;
@@ -93,27 +85,70 @@
   margin-bottom: 0.25rem;
 }
 
-/* Blockquote — citirani tekst */
 .passage-content blockquote {
-  border-left: 3px solid #d97706; /* amber-600 */
+  border-left: 3px solid #d97706;
   margin: 0.75rem 0;
   padding: 0.5rem 0.75rem;
   background-color: rgba(245, 158, 11, 0.06);
   border-radius: 0 8px 8px 0;
   font-style: italic;
-  color: #78350f; /* amber-900 */
+  color: #78350f;
 }
 
-/* Horizontalna linija — podjela između sekcija */
 .passage-content hr {
   border: none;
   border-top: 1px solid #d6d3cc;
   margin: 1rem 0;
 }
 
-/* Dramski tekst: govornici su u <strong> */
-.passage-content strong:first-child {
+/* ── passage-poem: pjesnički tekst ──────────────────────────────────────── */
+/* Sačuva whitespace/newlines, centrira kratke stihove */
+.passage-poem {
+  font-style: italic;
+  text-align: center;
+}
+
+.passage-poem p {
+  margin-bottom: 0.5rem;
+  white-space: pre-wrap; /* čuva uvlačenja i lomove redaka */
+}
+
+/* Strofa je odvojena praznim retkom — veći razmak */
+.passage-poem p + p {
+  margin-top: 0.25rem;
+}
+
+/* Pjesnički naslovi — centrirani bold */
+.passage-poem strong,
+.passage-poem b {
+  display: block;
+  text-align: center;
+  font-style: normal;
+  margin-bottom: 0.75rem;
+}
+
+/* ── passage-drama: dramski tekst ───────────────────────────────────────── */
+/* Govornici su u <strong>, didaskalije u <em> ili <i> */
+.passage-drama p {
+  margin-bottom: 0.625rem;
+}
+
+/* Govornik (speaker name) */
+.passage-drama strong:first-child,
+.passage-drama b:first-child {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  color: #1a1916;
   display: inline;
+}
+
+/* Didaskalije (stage directions) */
+.passage-drama em,
+.passage-drama i {
+  color: #726e68;
+  font-style: italic;
 }
 
 /* ── safe-html: stilovi za inline HTML u pitanjima i opcijama ───────────── */
@@ -159,21 +194,27 @@
 /* ── fill-blank: highlight aktualnih praznina ────────────────────────────── */
 mark.fill-blank-active {
   background: transparent;
-  color: #2563eb; /* blue-600 */
+  color: #2563eb;
   font-weight: 700;
   text-decoration: underline;
   text-decoration-style: dashed;
   text-underline-offset: 3px;
 }
 
-/* fill-blank kontekst tekst */
 .fill-blank-context strong {
-  color: #1e40af; /* blue-800 */
+  color: #1e40af;
 }
 
 /* ── KaTeX error fallback ────────────────────────────────────────────────── */
 .katex-error {
-  color: #dc2626; /* red-600 */
+  color: #dc2626;
   font-size: 0.8em;
   font-family: ui-monospace, monospace;
+}
+
+/* ── xs breakpoint helper (za mobilni bottom bar) ────────────────────────── */
+@media (min-width: 475px) {
+  .xs\:inline {
+    display: inline;
+  }
 }

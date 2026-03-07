@@ -1,44 +1,33 @@
-// components/exam/QuestionDisplay.jsx
+// components/exam/QuestionDisplay.jsx — v5 PREMIUM REDESIGN
 // ─────────────────────────────────────────────────────────────────────────────
-// SAŽETAK ISPRAVAKA (v4):
-//
-//  BUG #1 — selectedAnswer prop (ne selectedOption)
-//    ExamTaking proslijedi selectedOption — QuestionDisplay prima selectedAnswer.
-//    Rezultat: odabrana opcija NIKAD nije bila označena.
-//    FIX: prop ostaje selectedAnswer, ExamTaking mora proslijediti pravilno.
-//
-//  BUG #2 — onFlag prop (ne onToggleFlag)
-//    ExamTaking proslijedi onToggleFlag — QuestionDisplay prima onFlag.
-//    Rezultat: flag gumb nikad nije radio.
-//    FIX: prop ostaje onFlag. ExamTaking mora proslijediti: onFlag={handleToggleFlag}
-//
-//  BUG #3 — index prop (ne questionNumber)
-//    ExamTaking proslijedi questionNumber={currentIndex+1} — QuestionDisplay prima index (0-based).
-//    Rezultat: label pitanja bio je +1 off.
-//    FIX: prop ostaje index (0-based), ExamTaking: index={currentIndex}
-//
-//  BUG #4 — HTML tagovi u tekstu pitanja i opcijama
-//    MathText renderira plain text — <em>, <strong>, <u>... prikazuju se doslovno.
-//    FIX: SafeHtml komponenta sanitizira i renderira HTML + opcijski LaTeX.
-//
-//  BUG #5 — fill_blank_mc parent prikaz
-//    Pitanje 58 je prikazano kao zasebno pitanje bez opcija (confusing).
-//    FIX: Kad je current = fill_blank_child, prikazuje se parent tekst iznad
-//    kao KONTEKST, i jasno se vizualizira koja praznina se popunjava.
-//
-//  BUG #6 — isPaused prop nije proslijeđen iz ExamTaking
-//    FIX: ExamTaking mora proslijediti isPaused={isPaused}
+// POBOLJŠANJA:
+//   • Option gumbi: veći, bolje vizualno stanje odabira (check ikona, plavo fill)
+//   • Hover animacija: blag lift (y: -1)
+//   • Selected state: plavo pozadinsko ispunjavanje + check ikona u slovu
+//   • Points: ispravan plural (bod/boda/bodova)
+//   • fill_blank context: poboljšan prikaz s bolim kontekstom
+//   • Question card: bez teškog bordera, samo shadow — čišći izgled
+//   • isPaused overlay: bolje (samo blur i lock ikona, bez tvrdog okvira)
 // ─────────────────────────────────────────────────────────────────────────────
+import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Flag, Lock } from "lucide-react";
+import { Flag, Lock, Check } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/utils";
 
-// ── InlineTextBlock — kratki citat/fragment iznad pitanja ─────────────────────
+// ── Pluralni oblik za bodove ──────────────────────────────────────────────────
+function pointsLabel(n) {
+  if (!n && n !== 0) return null;
+  if (n === 1) return "1 bod";
+  if (n < 5) return `${n} boda`;
+  return `${n} bodova`;
+}
+
+// ── InlineTextBlock — citat / fragment iznad pitanja ─────────────────────────
 function InlineTextBlock({ html }) {
   if (!html) return null;
   return (
-    <div className="mt-3 mb-1 px-4 py-3 bg-indigo-50 border-l-4 border-indigo-300 rounded-r-xl">
+    <div className="mt-4 mb-0.5 px-4 py-3.5 bg-indigo-50 border-l-[3px] border-indigo-400 rounded-r-xl">
       <SafeHtml
         html={html}
         className="text-sm text-indigo-900 leading-relaxed italic"
@@ -47,18 +36,14 @@ function InlineTextBlock({ html }) {
   );
 }
 
-// ── FillBlankParentContext — prikazuje parent tekst za child pitanja ───────────
-// Kada je pitanje fill_blank_child (npr. 58.2), prikazuje cijeli parent tekst
-// s istaknutom prazninom koju treba popuniti.
+// ── FillBlankParentContext ────────────────────────────────────────────────────
+// Prikazuje parent tekst za fill_blank_child pitanja s istaknutom prazninom
 function FillBlankParentContext({ parentText, childText, childLabel }) {
   if (!parentText) return null;
 
-  // Označi aktualnu prazninu u tekstu parenta
   const highlightedText = useMemo(() => {
-    // Tražimo pattern "(N.) ________" koji odgovara childLabel broju
     const labelNum = childLabel?.replace(/[^0-9]/g, "");
     if (!labelNum) return parentText;
-    // Highlight aktualne praznine
     return parentText.replace(
       new RegExp(
         `(\\(${labelNum}\\.\\)\\s*_{3,}|<strong>\\(${labelNum}\\.\\).*?<\\/strong>)`,
@@ -69,76 +54,86 @@ function FillBlankParentContext({ parentText, childText, childLabel }) {
   }, [parentText, childLabel]);
 
   return (
-    <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-      <div className="flex items-center gap-2 mb-2.5">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+    <div className="mb-4 p-4 bg-blue-50/80 border border-blue-200 rounded-xl">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
           Polazni tekst zadatka
         </span>
-        <span className="text-[10px] text-slate-400">
-          — popunite prazninu označenu bojom
+        <span className="text-[10px] text-blue-400">
+          · popunite označenu prazninu
         </span>
       </div>
       <SafeHtml
         html={highlightedText}
-        className="text-sm text-slate-700 leading-relaxed fill-blank-context"
+        className="text-sm text-blue-900 leading-relaxed fill-blank-context"
       />
     </div>
   );
 }
 
-// React import za useMemo
-import { useMemo } from "react";
-
-// ── Jedna opcija ──────────────────────────────────────────────────────────────
+// ── Option Button ─────────────────────────────────────────────────────────────
 function OptionButton({ option, selected, onSelect, disabled }) {
   return (
     <motion.button
       onClick={() => !disabled && onSelect(option.letter)}
-      whileTap={disabled ? undefined : { scale: 0.985 }}
+      whileHover={!disabled && !selected ? { y: -1 } : undefined}
+      whileTap={disabled ? undefined : { scale: 0.992 }}
       disabled={disabled}
       aria-pressed={selected}
       className={cn(
-        "w-full text-left px-4 py-3.5 rounded-xl border-2 transition-all duration-150",
-        "flex items-center gap-3 group select-none",
+        // Base
+        "w-full text-left rounded-xl border-2 transition-all duration-150",
+        "flex items-center gap-3 px-4 py-3.5 group select-none",
         disabled ? "cursor-default" : "cursor-pointer",
+        // States
         selected
-          ? "border-primary-500 bg-primary-50 shadow-sm"
+          ? [
+              "border-primary-500 bg-primary-50",
+              "shadow-[0_2px_10px_-2px_rgba(45,84,232,0.18)]",
+            ]
           : !disabled
-            ? "border-warm-200 bg-white hover:border-warm-400 hover:bg-warm-50"
+            ? [
+                "border-warm-200 bg-white",
+                "hover:border-primary-300 hover:bg-warm-50",
+                "hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)]",
+              ]
             : "border-warm-200 bg-warm-50 opacity-60",
       )}
     >
-      {/* Letter badge */}
+      {/* Letter/Check badge */}
       <div
         className={cn(
-          "w-7 h-7 rounded-full border-2 flex items-center justify-center",
-          "flex-shrink-0 text-xs font-bold transition-all duration-150",
+          "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+          "text-xs font-bold transition-all duration-150 border-2",
           selected
-            ? "border-primary-500 bg-primary-500 text-white"
-            : "border-warm-300 text-warm-500 group-hover:border-primary-400 group-hover:text-primary-600",
+            ? "bg-primary-600 border-primary-600 text-white"
+            : !disabled
+              ? [
+                  "border-warm-300 text-warm-600",
+                  "group-hover:border-primary-400 group-hover:text-primary-600",
+                ]
+              : "border-warm-200 text-warm-400",
         )}
         aria-hidden="true"
       >
-        {option.letter.toUpperCase()}
+        {selected ? (
+          <Check size={13} strokeWidth={3} />
+        ) : (
+          option.letter.toUpperCase()
+        )}
       </div>
 
-      {/* Option text — SafeHtml za HTML/LaTeX */}
+      {/* Option text — SafeHtml renderira HTML + LaTeX */}
       <SafeHtml
         html={option.text}
         inline
         className={cn(
-          "text-sm font-medium flex-1 text-left leading-snug",
-          selected ? "text-primary-900" : "text-warm-800",
+          "text-sm flex-1 text-left leading-snug",
+          selected
+            ? "font-semibold text-primary-900"
+            : "font-medium text-warm-800",
         )}
       />
-
-      {/* Selected indicator */}
-      {selected && (
-        <div
-          className="flex-shrink-0 w-4 h-4 rounded-full bg-primary-500 ml-auto"
-          aria-hidden="true"
-        />
-      )}
     </motion.button>
   );
 }
@@ -151,7 +146,7 @@ export function QuestionDisplay({
   onAnswer, // (letter: string) => void
   onFlag, // () => void
   isFlagged, // boolean
-  index, // 0-based index (za fallback label ako nema positionLabel)
+  index, // 0-based index
   isPaused, // boolean
 }) {
   if (!question) return null;
@@ -159,22 +154,25 @@ export function QuestionDisplay({
   const isParent = question.questionType === "fill_blank_mc";
   const isChild = question.questionType === "fill_blank_child";
 
-  // Label: positionLabel iz DB ("58.1") ili fallback na index+1
-  const displayLabel = question.positionLabel ?? String(index + 1);
+  // Label iz baze (npr. "58.1") ili fallback na index+1
+  const displayLabel = question.positionLabel ?? String((index ?? 0) + 1);
+  const points = pointsLabel(question.points);
 
   return (
     <div className="relative">
-      {/* ── Pauza overlay ───────────────────────────────────────────────── */}
+      {/* ── Pause overlay ─────────────────────────────────────────────── */}
       {isPaused && (
-        <div className="absolute inset-0 z-10 bg-white/85 backdrop-blur-sm rounded-2xl flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 z-10 bg-white/90 backdrop-blur-[3px] rounded-2xl flex items-center justify-center pointer-events-none">
           <div className="flex flex-col items-center gap-2 text-warm-400">
-            <Lock size={28} strokeWidth={1.5} />
-            <p className="text-sm font-semibold">Ispit je pauziran</p>
+            <Lock size={26} strokeWidth={1.5} />
+            <p className="text-xs font-semibold tracking-wide">
+              Ispit pauziran
+            </p>
           </div>
         </div>
       )}
 
-      {/* ── Kontekst parent pitanja (za fill_blank_child) ────────────────── */}
+      {/* ── Parent context za fill_blank_child ────────────────────────── */}
       {isChild && parentQuestion && (
         <FillBlankParentContext
           parentText={parentQuestion.text}
@@ -183,37 +181,37 @@ export function QuestionDisplay({
         />
       )}
 
-      {/* ── Question card ─────────────────────────────────────────────────── */}
+      {/* ── Question card ─────────────────────────────────────────────── */}
       <div
         className={cn(
-          "bg-white rounded-2xl border shadow-card p-5 mb-3",
+          "bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.06),0_4px_16px_-4px_rgba(0,0,0,0.08)] p-5 mb-3",
           isChild
-            ? "border-l-4 border-l-primary-400 border-warm-200"
+            ? "border-l-[3px] border-l-primary-400 border border-warm-200"
             : isParent
-              ? "border-warm-200 bg-warm-50"
-              : "border-warm-200",
+              ? "border border-warm-200 bg-warm-50/80"
+              : "border border-warm-200",
         )}
       >
-        {/* ── Header: broj + sekcija + bodovi + flag ───────────────────── */}
-        <div className="flex items-start justify-between gap-3 mb-3.5">
+        {/* Header: pitanje N · bodovi · flag */}
+        <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-2 flex-wrap min-w-0">
             {/* Broj pitanja */}
             <span
               className={cn(
-                "inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full border",
+                "inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap",
                 isParent
-                  ? "text-warm-500 bg-warm-100 border-warm-300"
+                  ? "text-warm-500 bg-warm-100"
                   : isChild
-                    ? "text-primary-700 bg-primary-50 border-primary-200"
-                    : "text-primary-700 bg-primary-50 border-primary-200",
+                    ? "text-primary-700 bg-primary-50 border border-primary-200"
+                    : "text-primary-700 bg-primary-50 border border-primary-200",
               )}
             >
               {isParent ? `Zadatak ${displayLabel}` : `Pitanje ${displayLabel}`}
             </span>
 
-            {/* Sekcija — samo na širim ekranima */}
+            {/* Sekcija — ako postoji */}
             {question.sectionLabel && (
-              <span className="hidden sm:inline text-xs text-warm-400 font-medium truncate">
+              <span className="hidden sm:inline text-xs text-warm-400 font-medium truncate max-w-[160px]">
                 {question.sectionLabel}
               </span>
             )}
@@ -221,9 +219,9 @@ export function QuestionDisplay({
 
           {/* Bodovi + flag */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {!isParent && (
+            {!isParent && points && (
               <span className="text-xs text-warm-400 font-medium tabular-nums">
-                {question.points}&nbsp;{question.points === 1 ? "bod" : "boda"}
+                {points}
               </span>
             )}
             {!isParent && (
@@ -234,33 +232,38 @@ export function QuestionDisplay({
                   isFlagged ? "Ukloni zastavicu" : "Označi pitanje zastavicom"
                 }
                 aria-pressed={isFlagged}
+                title={
+                  isFlagged ? "Ukloni zastavicu" : "Označi za kasniji pregled"
+                }
                 className={cn(
-                  "p-1.5 rounded-lg transition-colors",
+                  "p-1.5 rounded-lg transition-all duration-150",
                   isFlagged
                     ? "text-amber-600 bg-amber-100 hover:bg-amber-200"
                     : "text-warm-300 hover:text-amber-600 hover:bg-amber-50",
-                  isPaused && "opacity-40 cursor-default pointer-events-none",
+                  isPaused && "opacity-40 pointer-events-none",
                 )}
               >
-                <Flag size={15} />
+                <Flag size={14} />
               </button>
             )}
           </div>
         </div>
 
-        {/* ── Tekst pitanja — SafeHtml za HTML + LaTeX ──────────────────── */}
+        {/* Tekst pitanja */}
         <SafeHtml
           html={question.text}
           className={cn(
-            "text-warm-900 text-base leading-relaxed",
-            isParent ? "font-semibold text-warm-700 text-sm" : "font-medium",
+            "text-warm-900 leading-relaxed",
+            isParent
+              ? "text-sm font-semibold text-warm-700"
+              : "text-[15px] font-medium",
           )}
         />
 
-        {/* ── Inline tekst (citat, pjesma...) ───────────────────────────── */}
+        {/* Inline tekst blok (citat, pjesma fragment...) */}
         <InlineTextBlock html={question.inlineText} />
 
-        {/* ── Napomena za parent fill_blank_mc ──────────────────────────── */}
+        {/* Napomena za fill_blank_mc parent */}
         {isParent && (
           <p className="mt-3 text-xs text-warm-400 italic">
             Odaberite ispravan odgovor za svaku od sljedećih praznina:
@@ -268,7 +271,7 @@ export function QuestionDisplay({
         )}
       </div>
 
-      {/* ── Opcije — samo za pitanja s odgovorima ────────────────────────── */}
+      {/* ── Opcije ────────────────────────────────────────────────────── */}
       {!isParent && question.options?.length > 0 && (
         <div className="space-y-2">
           {question.options.map((opt) => (

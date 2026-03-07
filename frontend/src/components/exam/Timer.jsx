@@ -1,23 +1,52 @@
-// components/exam/Timer.jsx
-import { Timer as TimerIcon } from "lucide-react";
+// components/exam/Timer.jsx — v5 REDESIGN
+// ─────────────────────────────────────────────────────────────────────────────
+// POBOLJŠANJA:
+//   • Koristi Clock ikonu (lakša za čitanje od Timer ikone)
+//   • isDanger: pulsira + crvena boja s blagim shadow
+//   • isWarning: amber sa statičnom pulse ikonom
+//   • Minimalna širina za stabilan layout (tabular-nums)
+//   • min-w-[3.5rem] sprječava skakanje kad se broj mijenja
+//   • motion.div za smooth scale animaciju u danger modu
+// ─────────────────────────────────────────────────────────────────────────────
+import { Clock } from "lucide-react";
+import { motion } from "framer-motion";
 import { cn } from "@/utils/utils";
 
 export function ExamTimer({ formatted, isWarning, isDanger }) {
   return (
-    <div
+    <motion.div
+      animate={isDanger ? { scale: [1, 1.03, 1] } : {}}
+      transition={
+        isDanger ? { repeat: Infinity, duration: 1.1, ease: "easeInOut" } : {}
+      }
       className={cn(
-        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors",
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold tabular-nums",
+        "text-sm transition-all duration-500 flex-shrink-0",
         isDanger
-          ? "bg-red-100 text-red-700 border border-red-200 animate-pulse"
+          ? [
+              "bg-red-50 text-red-600",
+              "border border-red-200",
+              "shadow-[0_0_0_2px_rgba(239,68,68,0.12)]",
+            ]
           : isWarning
             ? "bg-amber-50 text-amber-700 border border-amber-200"
             : "bg-warm-100 text-warm-700",
       )}
     >
-      <TimerIcon size={14} className={isWarning ? "animate-pulse" : ""} />
-      <span aria-live="polite" aria-label={`Preostalo vrijeme: ${formatted}`}>
-        {formatted}
+      <Clock
+        size={13}
+        className={cn(
+          "flex-shrink-0 transition-colors",
+          isDanger && "animate-pulse",
+        )}
+      />
+      <span
+        aria-live="polite"
+        aria-label={`Preostalo vrijeme: ${formatted}`}
+        className="min-w-[3rem] text-center leading-none"
+      >
+        {formatted ?? "--:--"}
       </span>
-    </div>
+    </motion.div>
   );
 }
