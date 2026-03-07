@@ -397,7 +397,7 @@ function MobileBottomBar({
 
 // ── Submit Modal ──────────────────────────────────────────────────────────────
 function SubmitModal({
-  show,
+  open,
   onClose,
   onConfirm,
   answeredCount,
@@ -408,7 +408,7 @@ function SubmitModal({
   const allAnswered = unanswered === 0;
 
   return (
-    <Modal show={show} onClose={onClose} title="Predaj ispit">
+    <Modal open={open} onClose={onClose} title="Predaj ispit">
       <ModalBody>
         {allAnswered ? (
           <div className="text-center py-3">
@@ -480,9 +480,9 @@ function SubmitModal({
 }
 
 // ── Draft Modal ───────────────────────────────────────────────────────────────
-function DraftModal({ show, onConfirm, onDiscard }) {
+function DraftModal({ open, onConfirm, onDiscard }) {
   return (
-    <Modal show={show} title="Nastaviti gdje ste stali?">
+    <Modal open={open} title="Nastaviti gdje ste stali?">
       <ModalBody>
         <p className="text-sm text-warm-700 leading-relaxed">
           Pronašli smo sačuvane odgovore za ovaj ispit. Želite li nastaviti od
@@ -666,7 +666,7 @@ export function QuizPage() {
 
       {/* ── Modals ──────────────────────────────────────────────────────── */}
       <SubmitModal
-        show={showSubmitModal}
+        open={showSubmitModal}
         onClose={() => setShowSubmitModal(false)}
         onConfirm={handleSubmit}
         answeredCount={answeredCount}
@@ -674,7 +674,7 @@ export function QuizPage() {
         isSubmitting={isSubmitting}
       />
       <DraftModal
-        show={showDraftModal}
+        open={showDraftModal}
         onConfirm={confirmRestoreDraft}
         onDiscard={discardDraft}
       />
