@@ -1,10 +1,39 @@
 // components/exam/ExamCard.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// PROMJENE:
+//   • questionCount sada dolazi iz DB (exam.questionCount) — ne hardkodirano
+//   • Prikazuje totalPoints ako postoji (npr. 62 za HRV)
+//   • Prikazuje communityScore (% prosječan rezultat zajednice)
+//   • component badge: prikazuje 'K1', 'K2'... za višekomponentne predmete (HRV)
+//   • title iz DB ako postoji, inače se generira iz meta
+//   • communityAttempts badge: "X rješavanja" — social proof
+// ─────────────────────────────────────────────────────────────────────────────
 import { motion } from "framer-motion";
-import { Clock, HelpCircle, ChevronRight, Layers } from "lucide-react";
+import {
+  Clock,
+  HelpCircle,
+  ChevronRight,
+  Layers,
+  Users,
+  Target,
+} from "lucide-react";
 import { cn } from "@/utils/utils";
+
+// ── Community score boja ──────────────────────────────────────────────────────
+function communityScoreColor(pct) {
+  if (pct === null || pct === undefined) return "text-warm-400";
+  if (pct >= 75) return "text-success-600";
+  if (pct >= 50) return "text-amber-600";
+  return "text-error-500";
+}
 
 export function ExamCard({ exam, subject, onClick }) {
   const isVisa = exam.difficulty.id === "visa";
+
+  // Generira title ako ga DB nije dao
+  const displayTitle =
+    exam.title ??
+    `${exam.session.name} ${exam.year}. — ${exam.difficulty.short}`;
 
   return (
     <motion.div
@@ -34,8 +63,8 @@ export function ExamCard({ exam, subject, onClick }) {
       <div className="pl-5 pr-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            {/* Session + Level badges */}
-            <div className="flex items-center gap-2 flex-wrap mb-2.5">
+            {/* Badges row: rok + razina + komponenta */}
+            <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
               <span
                 className={cn(
                   "inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-md",
@@ -44,6 +73,7 @@ export function ExamCard({ exam, subject, onClick }) {
               >
                 {exam.session.name}
               </span>
+
               <span
                 className={cn(
                   "inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border",
@@ -55,38 +85,76 @@ export function ExamCard({ exam, subject, onClick }) {
                 <Layers size={9} />
                 {exam.difficulty.short}
               </span>
+
+              {exam.component && (
+                <span className="inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                  {exam.component}
+                </span>
+              )}
             </div>
 
-            {/* Meta info row */}
-            <div className="flex items-center gap-3 text-xs text-warm-500">
-              <span className="flex items-center gap-1 font-semibold text-warm-700">
-                {exam.year}.
-              </span>
-              <span className="w-px h-3 bg-warm-200" />
+            {/* Godina + title */}
+            <p className="text-sm font-bold text-warm-900 leading-snug mb-1.5 truncate">
+              {exam.year}. — {exam.session.name}
+            </p>
+
+            {/* Meta row: pitanja + bodovi + trajanje */}
+            <div className="flex items-center gap-3 text-xs text-warm-500 flex-wrap">
+              {exam.questionCount != null && (
+                <span className="flex items-center gap-1">
+                  <HelpCircle size={10} className="flex-shrink-0" />
+                  {exam.questionCount} pitanja
+                </span>
+              )}
+              {exam.totalPoints != null && (
+                <span className="flex items-center gap-1">
+                  <Target size={10} className="flex-shrink-0" />
+                  {exam.totalPoints} bodova
+                </span>
+              )}
               <span className="flex items-center gap-1">
-                <HelpCircle size={10} />
-                {exam.questionCount} pitanja
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock size={10} />
+                <Clock size={10} className="flex-shrink-0" />
                 {exam.duration} min
               </span>
             </div>
           </div>
 
-          {/* Arrow */}
-          <div
-            className={cn(
-              "w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5",
-              "bg-warm-50 group-hover:bg-primary-50 transition-colors duration-200",
-            )}
-          >
+          {/* Right: community score + arrow */}
+          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
             <ChevronRight
-              size={15}
-              className="text-warm-400 group-hover:text-primary-600 transition-all duration-200 group-hover:translate-x-0.5"
+              size={16}
+              className="text-warm-300 group-hover:text-warm-600 group-hover:translate-x-0.5 transition-all"
             />
+
+            {/* Community score */}
+            {exam.communityScore != null && (
+              <div className="flex flex-col items-end">
+                <span
+                  className={cn(
+                    "text-base font-black tabular-nums",
+                    communityScoreColor(exam.communityScore),
+                  )}
+                >
+                  {exam.communityScore}%
+                </span>
+                <span className="text-[10px] text-warm-400 leading-none">
+                  prosjek
+                </span>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Community attempts — social proof */}
+        {exam.communityAttempts > 0 && (
+          <div className="flex items-center gap-1 mt-3 pt-3 border-t border-warm-100">
+            <Users size={10} className="text-warm-300 flex-shrink-0" />
+            <span className="text-[11px] text-warm-400">
+              {exam.communityAttempts.toLocaleString("hr-HR")}{" "}
+              {exam.communityAttempts === 1 ? "rješavanje" : "rješavanja"}
+            </span>
+          </div>
+        )}
       </div>
     </motion.div>
   );

@@ -1,14 +1,23 @@
 // pages/ExamTaking.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// PROMJENE u odnosu na staru verziju:
-//   • Koristi QuestionDisplay umjesto QuestionView (options.letter)
-//   • Prikazuje PassageDisplay uz pitanje (side-by-side na desktopu, iznad na mobu)
-//   • Dugme Pauza s isPaused stanjem i overlay-em
-//   • ExamSkeleton za skeleton loading
-//   • Error state s retry opcijom
-//   • handlePause / handleResume iz useExamSession
+// ISPRAVCI:
+//
+//  BUG #1 — subjectId detekcija: examId?.split("-")[0]
+//           Ispravak: koristi examMeta.subject_id iz stora (pouzdano)
+//
+//  BUG #2 — showPassage skeleton detekcija: examId?.startsWith("hrv")
+//           Ispravak: `hasPassage` se bazira na stvarnim podacima iz pitanja
+//           Fallback za skeleton: provjeri examMeta ili defaultaj na false
+//
+//  BUG #3 — Exam title u top baru bio je hardkodiran kao "Ispit"
+//           Ispravak: koristi examMeta.title (iz DB) ili generira iz meta
+//
+//  NOVO:
+//  • Top bar prikazuje naziv ispita iz DB (title, godina, rok, razina)
+//  • Timer prikazuje "—:—" dok se čeka inicijalizacija (ne 00:00)
+//  • Bolja error poruka sa specifičnijim textom
 // ─────────────────────────────────────────────────────────────────────────────
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -17,6 +26,7 @@ import {
   Pause,
   Play,
   Loader2,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { cn } from "@/utils/utils";
@@ -28,6 +38,7 @@ import { QuestionNav } from "@/components/exam/QuestionNav";
 import { ProgressBar } from "@/components/exam/ProgressBar";
 import { ExamTimer } from "@/components/exam/Timer";
 import { useExamSession } from "@/hooks/useExamSession";
+import { EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 
 const slideVariants = {
   enter: (dir) => ({ x: dir > 0 ? 40 : -40, opacity: 0 }),
@@ -35,17 +46,44 @@ const slideVariants = {
   exit: (dir) => ({ x: dir > 0 ? -40 : 40, opacity: 0 }),
 };
 
+// ── Helper za exam title ──────────────────────────────────────────────────────
+function buildExamTitle(examMeta) {
+  if (!examMeta) return "Ispit";
+  if (examMeta.title) return examMeta.title;
+
+  const session =
+    EXAM_SESSIONS.find((s) => s.id === examMeta.session)?.name ??
+    examMeta.session;
+  const level =
+    DIFFICULTY_LEVELS.find((d) => d.id === examMeta.level)?.short ??
+    examMeta.level;
+  return `${examMeta.year}. · ${session} · ${level}`;
+}
+
 // ── Pauza overlay ─────────────────────────────────────────────────────────────
-function PauseOverlay({ onResume }) {
+function PauseOverlay({ onResume, examTitle }) {
   return (
-    <div className="fixed inset-0 z-50 bg-warm-900/60 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-warm-900/60 backdrop-blur-md flex items-center justify-center p-4"
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9, y: 20 }}
+        className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center"
+      >
         <div className="w-16 h-16 bg-primary-50 border-2 border-primary-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Pause size={28} className="text-primary-600" />
         </div>
-        <h2 className="text-xl font-bold text-warm-900 mb-2">
+        <h2 className="text-xl font-bold text-warm-900 mb-1">
           Ispit je pauziran
         </h2>
+        {examTitle && (
+          <p className="text-xs text-warm-400 mb-2 truncate">{examTitle}</p>
+        )}
         <p className="text-sm text-warm-500 mb-6">
           Odgovori su automatski sačuvani. Timer je zaustavljen.
         </p>
@@ -57,8 +95,8 @@ function PauseOverlay({ onResume }) {
         >
           Nastavi ispit
         </Button>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -79,6 +117,7 @@ export function QuizPage() {
     direction,
     isPaused,
     isSubmitting,
+    examMeta,
     isLoading,
     fetchError,
     showSubmitModal,
@@ -95,14 +134,20 @@ export function QuizPage() {
     timer,
   } = useExamSession(examId);
 
-  const { formatted, isWarning, isDanger } = timer;
+  const { formatted, isWarning, isDanger, isReady } = timer;
+
+  // Subject ID pouzdano iz examMeta (ne split-anjem examId stringa)
+  const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
+  const backLink = `/predmeti/${subjectId}`;
+  const examTitle = buildExamTitle(examMeta);
+
+  // showPassage se bazira na STVARNIM podacima (ima li currentPassage)
+  // Za skeleton: pretpostavljamo based on examMeta ili false
+  const hasPassage = !!currentPassage;
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (isLoading || (!current && !fetchError)) {
-    // Provjeri ima li ovaj ispit passages (npr. Hrvatski)
-    const mightHavePassage =
-      examId?.startsWith("hrv") || examId?.startsWith("lij");
-    return <ExamSkeleton showPassage={mightHavePassage} />;
+    return <ExamSkeleton showPassage={false} />;
   }
 
   // ── Error state ───────────────────────────────────────────────────────────
@@ -116,7 +161,7 @@ export function QuizPage() {
           </h2>
           <p className="text-sm text-warm-500 mb-6">
             {fetchError.message ??
-              "Provjerite internet konekciju i pokušaj ponovo."}
+              "Provjeri internetsku konekciju i pokušaj ponovo."}
           </p>
           <div className="flex gap-3 justify-center">
             <Button variant="secondary" onClick={() => window.history.back()}>
@@ -131,32 +176,38 @@ export function QuizPage() {
     );
   }
 
-  const hasPassage = !!currentPassage;
-
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
       {/* Pauza overlay */}
       <AnimatePresence>
-        {isPaused && <PauseOverlay onResume={handleResume} />}
+        {isPaused && (
+          <PauseOverlay onResume={handleResume} examTitle={examTitle} />
+        )}
       </AnimatePresence>
 
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-30 bg-white border-b border-warm-300 shadow-card">
         <div className="page-container">
           <div className="flex items-center justify-between h-14 gap-4">
-            {/* Natrag + broj pitanja */}
-            <div className="flex items-center gap-3">
+            {/* Natrag + naziv ispita */}
+            <div className="flex items-center gap-3 min-w-0">
               <Link
-                to={`/predmeti/${examId?.split("-")[0]}`}
-                className="p-1.5 rounded-lg text-warm-500 hover:bg-warm-100 hover:text-warm-800 transition-colors"
+                to={backLink}
+                className="p-1.5 rounded-lg text-warm-500 hover:bg-warm-100 hover:text-warm-800 transition-colors flex-shrink-0"
+                title="Natrag na popis ispita"
               >
                 <ArrowLeft size={18} />
               </Link>
-              <span className="text-sm font-semibold text-warm-700 hidden sm:block">
-                Pitanje{" "}
-                <span className="text-warm-900">{currentIndex + 1}</span>
-                <span className="text-warm-400">/{totalVisible}</span>
-              </span>
+              <div className="hidden sm:block min-w-0">
+                <p className="text-xs text-warm-400 leading-none mb-0.5 truncate">
+                  {examTitle}
+                </p>
+                <p className="text-sm font-semibold text-warm-900 leading-none tabular-nums">
+                  Pitanje{" "}
+                  <span className="text-warm-900">{currentIndex + 1}</span>
+                  <span className="text-warm-400">/{totalVisible}</span>
+                </p>
+              </div>
             </div>
 
             {/* Progress bar */}
@@ -169,20 +220,32 @@ export function QuizPage() {
                 }
                 showLabel
                 variant={
-                  answeredCount === questions.length ? "success" : "default"
+                  answeredCount ===
+                  questions.filter((q) => q.questionType !== "fill_blank_mc")
+                    .length
+                    ? "success"
+                    : "default"
                 }
               />
             </div>
 
             {/* Timer + Pauza + Predaj */}
-            <div className="flex items-center gap-2">
-              <ExamTimer
-                formatted={formatted}
-                isWarning={isWarning}
-                isDanger={isDanger}
-              />
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Timer — prikazuje "—:—" dok nije inicijaliziran */}
+              {isReady ? (
+                <ExamTimer
+                  formatted={formatted}
+                  isWarning={isWarning}
+                  isDanger={isDanger}
+                />
+              ) : (
+                <div className="flex items-center gap-1.5 text-warm-400 text-sm font-mono">
+                  <Clock size={14} />
+                  <span>—:—</span>
+                </div>
+              )}
 
-              {/* Pauza dugme */}
+              {/* Pauza */}
               <button
                 onClick={handlePause}
                 title="Pauziraj ispit (P)"
@@ -208,14 +271,8 @@ export function QuizPage() {
       </div>
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
-      <div
-        className={cn(
-          "flex-1 page-container py-6 flex flex-col gap-6",
-          // S passageom: passage lijevo, pitanje desno
-          hasPassage ? "lg:flex-row" : "lg:flex-row",
-        )}
-      >
-        {/* Passage panel — prikazan IZNAD na mobu, LIJEVO na desktopu */}
+      <div className="flex-1 page-container py-6 flex flex-col lg:flex-row gap-6">
+        {/* Passage panel — iznad na mobu, lijevo na desktopu */}
         {hasPassage && (
           <div className="w-full lg:w-2/5 xl:w-[38%] lg:flex-shrink-0">
             <div className="lg:sticky lg:top-20">
@@ -366,7 +423,7 @@ export function QuizPage() {
         </ModalBody>
         <ModalFooter>
           <Button variant="secondary" onClick={discardDraft}>
-            Započni ispočetka
+            Zanemari
           </Button>
           <Button variant="primary" onClick={confirmRestoreDraft}>
             Obnovi odgovore

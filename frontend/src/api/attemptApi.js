@@ -1,26 +1,32 @@
 // api/attemptApi.js
 // ─────────────────────────────────────────────────────────────────────────────
-// PROMJENE u odnosu na staru verziju:
-//   • submit() je UKLONJEN — zamijenjen s create() + finish()
-//   • finish() poziva RPC finish_attempt — server računa score iz Youtubes tablice
-//   • pause() poziva RPC pause_attempt — server bilježi paused_at + akumulira pauze
-//   • resume() poziva RPC resume_attempt — server briše paused_at, zbraja pauze
-//   • is_correct se više ne računa na frontendu (nema correct_option na pitanjima)
+// KRITIČNI ISPRAVCI:
+//
+//  BUG #1 — finish() i pause() slali su ARRAY umjesto JSONB OBJECT
+//  ─────────────────────────────────────────────────────────────────
+//  DB RPC finish_attempt ČITA odgovore ovako:
+//    v_chosen := p_answers ->> v_question.id::TEXT;
+//  Operator ->> radi NA OBJECTU: { "uuid": "a" }
+//  Stari kod slao je: [{ question_id, chosen_option }] → ARRAY
+//  Rezultat: v_chosen je uvijek NULL → score uvijek 0 / ukupan broj
+//
+//  ISPRAVAK: p_answers se šalje direktno kao objekt { [questionId]: letter }
+//  što je upravo format koji examStore.answers već koristi.
+//
+//  BUG #2 — getAll() nije imao filter za authenticated korisnika
+//  (RLS rješava ovo automatski, ali explicit ORDER je bio kriv)
 // ─────────────────────────────────────────────────────────────────────────────
 import { supabase } from "@/lib/supabase";
 
 export const attemptApi = {
   // ── 1. Kreiraj attempt na POČETKU ispita ──────────────────────────────────
-  //
-  // Važno: attempt se kreira odmah pri učitavanju, ne pri predaji.
-  // Razlog: finish_attempt RPC treba postojeći attempt_id.
-  // Status je 'in_progress' dok se ne pozove finish().
-  //
+  // Vraća null ako korisnik nije prijavljen (anon korisnici mogu čitati ispit,
+  // ali rezultati se ne bilježe u bazi).
   create: async (examId) => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return null; // Neprijavljen korisnik — vraćamo null (bez DB snimanja)
+    if (!user) return null;
 
     const { data, error } = await supabase
       .from("attempts")
@@ -33,83 +39,75 @@ export const attemptApi = {
       .single();
 
     if (error) throw error;
-    return data; // { id: UUID, started_at: timestamp }
+    return data; // { id: UUID, started_at: TIMESTAMPTZ }
   },
 
-  // ── 2. Završi ispit — RPC koji atomarno sve sprema ────────────────────────
+  // ── 2. Završi ispit — RPC finish_attempt ──────────────────────────────────
   //
-  // RPC finish_attempt(p_attempt_id, p_answers JSONB, p_elapsed_secs INT):
-  //   1. Validira da je attempt.user_id = auth.uid()
-  //   2. Batch INSERT attempt_answers
-  //   3. Čita correct_option iz Youtubes tablice
-  //   4. Računa score
-  //   5. UPDATE attempts SET status='completed', score_pct=..., itd.
-  //   6. Vraća: { correct_count, total_count, score_pct, elapsed_seconds }
+  // ISPRAVAK: p_answers mora biti JSONB OBJECT { "uuid": "a"|null }
+  //           NE array [{ question_id, chosen_option }]
   //
-  // p_answers format: [{ question_id: "uuid", chosen_option: "a" }, ...]
-  // null chosen_option = preskočeno pitanje
+  // DB RPC logika:
+  //   FOR v_question IN SELECT q.id, y.correct_option FROM questions JOIN Youtubes ...
+  //     v_chosen := p_answers ->> v_question.id::TEXT  ← KEY lookup na objectu
+  //     INSERT attempt_answers ...
+  //   END LOOP
+  //
+  // Returna: { correct_count, total_count, score_pct, elapsed_seconds }
   //
   finish: async (attemptId, answers, elapsedSeconds) => {
-    // Pretvori answers objekt { questionId: letter } u niz za RPC
-    const answersArray = Object.entries(answers).map(
-      ([question_id, chosen_option]) => ({
-        question_id,
-        chosen_option: chosen_option ?? null,
-      }),
+    // answers je već { [questionId]: letter } iz examStore — savršen format za RPC
+    // Null vrijednosti (preskočena pitanja) trebaju eksplicitno biti null u JSON-u
+    const answersObj = Object.fromEntries(
+      Object.entries(answers).map(([qId, letter]) => [qId, letter ?? null]),
     );
 
     const { data, error } = await supabase.rpc("finish_attempt", {
       p_attempt_id: attemptId,
-      p_answers: answersArray,
+      p_answers: answersObj, // ← OBJECT, ne array
       p_elapsed_secs: elapsedSeconds,
     });
 
     if (error) throw error;
-    // data: { correct_count, total_count, score_pct, elapsed_seconds }
-    return data;
+    return data; // { correct_count, total_count, score_pct, elapsed_seconds }
   },
 
-  // ── 3. Pauziraj ispit ─────────────────────────────────────────────────────
+  // ── 3. Pauziraj ispit — RPC pause_attempt ─────────────────────────────────
   //
-  // RPC pause_attempt(p_attempt_id, p_elapsed_secs, p_answers JSONB):
-  //   - Sprema trenutno stanje odgovora (opcionalno)
-  //   - Postavlja status='paused', paused_at=NOW()
-  //   - Pohranjuje elapsed do ovog trenutka
+  // ISPRAVAK: p_answers mora biti JSONB OBJECT (isti razlog kao gore)
+  // pause_attempt iterira pitanja i radi: p_answers ->> question_id
   //
   pause: async (attemptId, elapsedSeconds, answers = null) => {
-    const answersArray = answers
-      ? Object.entries(answers).map(([question_id, chosen_option]) => ({
-          question_id,
-          chosen_option: chosen_option ?? null,
-        }))
+    // Ako nema odgovora, šaljemo null (RPC ima DEFAULT NULL za p_answers)
+    const answersObj = answers
+      ? Object.fromEntries(
+          Object.entries(answers).map(([qId, letter]) => [qId, letter ?? null]),
+        )
       : null;
 
     const { error } = await supabase.rpc("pause_attempt", {
       p_attempt_id: attemptId,
       p_elapsed_secs: elapsedSeconds,
-      p_answers: answersArray,
+      p_answers: answersObj, // ← OBJECT ili null
     });
 
     if (error) throw error;
   },
 
-  // ── 4. Nastavi pauziran ispit ─────────────────────────────────────────────
-  //
-  // RPC resume_attempt(p_attempt_id):
-  //   - Računa total_paused_seconds += (NOW() - paused_at)
-  //   - Briše paused_at, postavlja status='in_progress'
-  //   - Vraća: { total_paused_seconds }
-  //
+  // ── 4. Nastavi pauziran ispit — RPC resume_attempt ────────────────────────
+  // Vraća: { elapsed_seconds, total_paused_seconds }
   resume: async (attemptId) => {
     const { data, error } = await supabase.rpc("resume_attempt", {
       p_attempt_id: attemptId,
     });
 
     if (error) throw error;
-    return data; // { total_paused_seconds }
+    return data;
   },
 
-  // ── Dohvati sve pokušaje korisnika ────────────────────────────────────────
+  // ── 5. Dohvati sve pokušaje korisnika (RLS automatski filtrira) ────────────
+  // JOIN na exams za prikaz metapodataka (predmet, godina, rok, razina).
+  // Sortira: completed koji su završeni nedavno su prvi.
   getAll: async () => {
     const { data, error } = await supabase
       .from("attempts")
@@ -124,16 +122,25 @@ export const attemptApi = {
         score_pct,
         correct_count,
         total_count,
-        exam:exams ( id, subject_id, year, session, level, title, total_points )
+        exam:exams (
+          id,
+          subject_id,
+          year,
+          session,
+          level,
+          title,
+          total_points,
+          duration_minutes
+        )
       `,
       )
-      .order("finished_at", { ascending: false, nullsFirst: false });
+      .order("created_at", { ascending: false });
 
     if (error) throw error;
-    return data;
+    return data ?? [];
   },
 
-  // ── Dohvati jedan pokušaj s detalijma ─────────────────────────────────────
+  // ── 6. Jedan pokušaj s detaljima ───────────────────────────────────────────
   getById: async (id) => {
     const { data, error } = await supabase
       .from("attempts")
@@ -149,5 +156,19 @@ export const attemptApi = {
 
     if (error) throw error;
     return data;
+  },
+
+  // ── 7. Postavi abandoned status (korisnik napustio ispit bez predaje) ───────
+  abandon: async (attemptId, elapsedSeconds) => {
+    const { error } = await supabase
+      .from("attempts")
+      .update({
+        status: "abandoned",
+        finished_at: new Date().toISOString(),
+        elapsed_seconds: elapsedSeconds,
+      })
+      .eq("id", attemptId);
+
+    if (error) console.warn("[attemptApi.abandon]", error);
   },
 };

@@ -1,31 +1,39 @@
 // pages/SubjectSelect.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// PROMJENE:
+//   • transformExam koristi dbExam.question_count (iz DB trigger-a, ne hardkodirano)
+//   • transformExam koristi EXAM_SESSIONS koji sada pokriva 'ljeto'/'ljetni'/'jesen'/'jesenski'
+//   • transformExam uključuje title, total_points, component, community stats
+//   • ExamCard prima prošireni exam objekt s community statistikama
+//   • Filtriranje normalizira session za usporedbu (ljeto === ljetni)
+// ─────────────────────────────────────────────────────────────────────────────
 import { useState, useMemo, useRef } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  ArrowLeft,
-  Clock,
-  HelpCircle,
-  Filter,
-  X,
-  ChevronDown,
-  BookOpen,
-  Layers,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowLeft, HelpCircle, X, Layers, RefreshCw } from "lucide-react";
 import { ExamCard } from "@/components/exam/ExamCard";
-import { SUBJECTS, EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
+import {
+  SUBJECTS,
+  EXAM_SESSIONS,
+  DIFFICULTY_LEVELS,
+  normalizeSession,
+} from "@/utils/constants";
 import { useExams } from "@/hooks/useExam";
 import { cn } from "@/utils/utils";
 
-// ── Transformacija DB formata u format koji ExamCard očekuje ──────────────────
-// DB:    { id, subject_id, year, session: 'ljetni', level: 'visa', duration_minutes: 90 }
-// Card:  { id, subjectId, year, session: {id,name}, difficulty: {id,name,short},
-//          questionCount, duration }
+// ── Transformacija DB → ExamCard format ──────────────────────────────────────
+//
+// Ključne popravke:
+//  1. session: pretražuje EXAM_SESSIONS koji ima SVE aliase ('ljeto', 'ljetni', itd.)
+//  2. questionCount: dolazi iz DB question_count (trigger ga ažurira automatski)
+//  3. totalPoints: iz DB total_points
+//  4. community stats: avg_community_score_pct, community_attempts_count
+//
 function transformExam(dbExam) {
   const session = EXAM_SESSIONS.find((s) => s.id === dbExam.session) ?? {
     id: dbExam.session,
     name: dbExam.session,
+    order: 99,
   };
 
   const difficulty = DIFFICULTY_LEVELS.find((d) => d.id === dbExam.level) ?? {
@@ -40,9 +48,15 @@ function transformExam(dbExam) {
     year: dbExam.year,
     session,
     difficulty,
-    // questionCount nije u exams tablici — računamo iz razine (konzistentno s NCE)
-    questionCount: dbExam.level === "visa" ? 40 : 30,
+    component: dbExam.component ?? null,
+    title: dbExam.title ?? null,
+    questionCount: dbExam.question_count ?? null, // iz DB trigger-a
+    totalPoints: dbExam.total_points ?? null,
     duration: dbExam.duration_minutes,
+    communityScore: dbExam.avg_community_score_pct ?? null,
+    communityAttempts: dbExam.community_attempts_count ?? 0,
+    // Normalized session za filtriranje i sortiranje
+    _sessionNorm: normalizeSession(dbExam.session),
   };
 }
 
@@ -96,86 +110,6 @@ function ActiveFiltersBadge({ count, filterYear, filterLevel, onReset }) {
       )}
       <button
         onClick={onReset}
-        className="text-warm-400 hover:text-warm-700 transition-colors ml-1"
-        title="Ukloni sve filtre"
-      >
-        <X size={13} />
-      </button>
-    </motion.div>
-  );
-}
-
-// ── Year group ────────────────────────────────────────────────────────────────
-function YearGroup({ year, exams, subject }) {
-  const navigate = useNavigate();
-  return (
-    <motion.section
-      layout
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-    >
-      <div className="flex items-center gap-3 mb-3">
-        <span className="text-sm font-bold text-warm-700 tabular-nums">
-          {year}.
-        </span>
-        <div className="h-px flex-1 bg-warm-200" />
-        <span className="text-xs text-warm-400 font-medium tabular-nums">
-          {exams.length} {exams.length === 1 ? "ispit" : "ispita"}
-        </span>
-      </div>
-
-      <motion.div
-        layout
-        variants={{ show: { transition: { staggerChildren: 0.04 } } }}
-        initial="hidden"
-        animate="show"
-        className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
-      >
-        {exams.map((exam) => (
-          <motion.div
-            key={exam.id}
-            variants={{
-              hidden: { opacity: 0, y: 10 },
-              show: {
-                opacity: 1,
-                y: 0,
-                transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
-              },
-            }}
-          >
-            <ExamCard
-              exam={exam}
-              subject={subject}
-              onClick={() => navigate(`/ispit/${exam.id}`)}
-            />
-          </motion.div>
-        ))}
-      </motion.div>
-    </motion.section>
-  );
-}
-
-// ── Empty state ───────────────────────────────────────────────────────────────
-function EmptyState({ onReset }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.25 }}
-      className="text-center py-16 px-4"
-    >
-      <div className="w-14 h-14 bg-warm-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-        <Filter size={22} className="text-warm-400" />
-      </div>
-      <p className="text-warm-700 font-semibold mb-1">Nema rezultata</p>
-      <p className="text-warm-400 text-sm mb-5">
-        Nema ispita za odabrane filtre.
-      </p>
-      <button
-        onClick={onReset}
         className="inline-flex items-center gap-1.5 text-xs font-bold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-3.5 py-2 rounded-xl transition-colors"
       >
         <X size={12} />
@@ -185,7 +119,7 @@ function EmptyState({ onReset }) {
   );
 }
 
-// ── Skeleton loader ───────────────────────────────────────────────────────────
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 function ExamCardSkeleton() {
   return (
     <div className="bg-white rounded-2xl border border-warm-200 p-4 animate-pulse">
@@ -193,7 +127,8 @@ function ExamCardSkeleton() {
         <div className="h-5 w-16 bg-warm-200 rounded-md" />
         <div className="h-5 w-14 bg-warm-100 rounded-md" />
       </div>
-      <div className="h-4 w-32 bg-warm-100 rounded" />
+      <div className="h-4 w-32 bg-warm-100 rounded mb-1" />
+      <div className="h-3 w-20 bg-warm-100 rounded" />
     </div>
   );
 }
@@ -201,7 +136,7 @@ function ExamCardSkeleton() {
 function LoadingSkeleton() {
   return (
     <div className="space-y-8">
-      {[2024, 2023].map((year) => (
+      {[2025, 2024].map((year) => (
         <div key={year}>
           <div className="flex items-center gap-3 mb-3">
             <div className="h-4 w-10 bg-warm-200 rounded animate-pulse" />
@@ -218,7 +153,6 @@ function LoadingSkeleton() {
   );
 }
 
-// ── Error state ───────────────────────────────────────────────────────────────
 function ErrorState({ onRetry }) {
   return (
     <div className="text-center py-16">
@@ -242,30 +176,97 @@ function ErrorState({ onRetry }) {
   );
 }
 
+function EmptyState({ onReset }) {
+  return (
+    <motion.div
+      key="empty"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="text-center py-16"
+    >
+      <p className="text-warm-600 font-semibold mb-3">
+        Nema ispita s ovim filterima
+      </p>
+      <button
+        onClick={onReset}
+        className="text-xs font-bold text-primary-600 bg-primary-50 hover:bg-primary-100 px-3.5 py-2 rounded-xl transition-colors"
+      >
+        Ukloni filtre
+      </button>
+    </motion.div>
+  );
+}
+
+// ── Grupa ispita po godini ────────────────────────────────────────────────────
+function YearGroup({ year, exams, subject }) {
+  const navigate = useNavigate();
+
+  // Unutar iste godine sortiraj: ljeto (1) pa jesen (2), unutar roka: osnovna pa viša
+  const sorted = [...exams].sort((a, b) => {
+    const sOrd = (a.session.order ?? 1) - (b.session.order ?? 1);
+    if (sOrd !== 0) return sOrd;
+    // Osnovna (A) prije više (B)
+    return a.difficulty.id === "visa" ? 1 : -1;
+  });
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.25 }}
+    >
+      {/* Year header */}
+      <div className="flex items-center gap-3 mb-3">
+        <span className="text-xs font-bold text-warm-500 tabular-nums">
+          {year}.
+        </span>
+        <div className="h-px flex-1 bg-warm-200" />
+        <span className="text-xs text-warm-400">
+          {sorted.length} {sorted.length === 1 ? "ispit" : "ispita"}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {sorted.map((exam) => (
+          <ExamCard
+            key={exam.id}
+            exam={exam}
+            subject={subject}
+            onClick={() => navigate(`/ispit/${exam.id}`)}
+          />
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 // ── SubjectsPage ──────────────────────────────────────────────────────────────
 export function SubjectsPage() {
   const { subjectId } = useParams();
   const [filterYear, setFilterYear] = useState(null);
   const [filterLevel, setFilterLevel] = useState(null);
-  const filterRef = useRef(null);
 
   const subject = SUBJECTS.find((s) => s.id === subjectId);
 
-  // ── Dohvati ispite iz Supabase ────────────────────────────────────────────
+  // Dohvati ispite s community statistikama
   const { data: rawExams, isLoading, error, refetch } = useExams(subjectId);
 
-  // ── Transformiraj u format koji ExamCard očekuje ──────────────────────────
+  // Transformiraj u enriched format
   const allExams = useMemo(
     () => (rawExams ?? []).map(transformExam),
     [rawExams],
   );
 
-  // ── Filtriranje i grupiranje ──────────────────────────────────────────────
+  // Dostupne godine za filter (bez duplikata, silazno)
   const availableYears = useMemo(
     () => [...new Set(allExams.map((e) => e.year))].sort((a, b) => b - a),
     [allExams],
   );
 
+  // Filtriraj
   const filtered = useMemo(() => {
     return allExams.filter((e) => {
       if (filterYear && e.year !== filterYear) return false;
@@ -274,6 +275,7 @@ export function SubjectsPage() {
     });
   }, [allExams, filterYear, filterLevel]);
 
+  // Grupiraj po godini
   const grouped = useMemo(
     () =>
       filtered.reduce((acc, exam) => {
@@ -288,7 +290,6 @@ export function SubjectsPage() {
   const sortedYears = Object.keys(grouped)
     .map(Number)
     .sort((a, b) => b - a);
-
   const hasFilters = filterYear !== null || filterLevel !== null;
   const activeFilterCount = (filterYear ? 1 : 0) + (filterLevel ? 1 : 0);
 
@@ -297,7 +298,7 @@ export function SubjectsPage() {
     setFilterLevel(null);
   }
 
-  // ── 404 predmet ───────────────────────────────────────────────────────────
+  // 404
   if (!subject) {
     return (
       <div className="page-container py-20 text-center">
@@ -323,7 +324,7 @@ export function SubjectsPage() {
 
   return (
     <div className="page-container py-8 md:py-10 max-w-3xl mx-auto">
-      {/* ── Back + header ───────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="mb-6">
         <Link
           to="/"
@@ -346,20 +347,22 @@ export function SubjectsPage() {
             <h1 className="text-xl font-bold text-warm-900 tracking-tight">
               {subject.name}
             </h1>
-            <p className="text-sm text-warm-500">{subject.description}</p>
+            <p className="text-sm text-warm-500">
+              {isLoading
+                ? "Učitavanje ispita..."
+                : `${allExams.length} dostupnih ispita`}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* ── Filter bar ──────────────────────────────────────────────────── */}
+      {/* Filter bar */}
       {!isLoading && !error && allExams.length > 0 && (
         <motion.div
-          ref={filterRef}
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           className="sticky top-14 z-20 bg-warm-100/90 backdrop-blur-sm -mx-4 px-4 py-2.5 mb-6 flex items-center gap-2 flex-wrap border-b border-warm-200"
         >
-          {/* Year chips */}
           {availableYears.map((year) => (
             <FilterChip
               key={year}
@@ -371,10 +374,8 @@ export function SubjectsPage() {
             </FilterChip>
           ))}
 
-          {/* Divider */}
           <div className="w-px h-4 bg-warm-300" />
 
-          {/* Level chips */}
           {DIFFICULTY_LEVELS.map((lvl) => (
             <FilterChip
               key={lvl.id}
@@ -404,7 +405,6 @@ export function SubjectsPage() {
             )}
           </AnimatePresence>
 
-          {/* Result count */}
           <div className="ml-auto flex items-center gap-1.5 text-xs text-warm-400 font-medium tabular-nums">
             <span
               className={cn(
@@ -419,7 +419,7 @@ export function SubjectsPage() {
         </motion.div>
       )}
 
-      {/* ── Content ─────────────────────────────────────────────────────── */}
+      {/* Content */}
       {isLoading ? (
         <LoadingSkeleton />
       ) : error ? (

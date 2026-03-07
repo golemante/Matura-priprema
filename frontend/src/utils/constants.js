@@ -150,10 +150,23 @@ export const SUBJECTS = [
 
 export const EXAM_YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018];
 
+// ── Rokovi ispita ─────────────────────────────────────────────────────────────
+// DB CHECK constraint dozvoljava: 'ljeto' | 'ljetni' | 'jesen' | 'jesenski'
+// Sva četiri aliasa mapiraju na isti display label.
+// transformExam koristi ovaj niz za lookup → ako DB vrati 'ljeto', pronalazi ga.
 export const EXAM_SESSIONS = [
-  { id: "ljetni", name: "Ljetni rok" },
-  { id: "jesenski", name: "Jesenski rok" },
+  { id: "ljeto", name: "Ljetni rok", order: 1 },
+  { id: "ljetni", name: "Ljetni rok", order: 1 },
+  { id: "jesen", name: "Jesenski rok", order: 2 },
+  { id: "jesenski", name: "Jesenski rok", order: 2 },
 ];
+
+// Helper: normalizira session string na kanonski oblik za sortiranje
+export function normalizeSession(session) {
+  if (session === "ljeto" || session === "ljetni") return "ljeto";
+  if (session === "jesen" || session === "jesenski") return "jesen";
+  return session;
+}
 
 export const DIFFICULTY_LEVELS = [
   { id: "osnovna", name: "Osnovna razina", short: "A razina" },

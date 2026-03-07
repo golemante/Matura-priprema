@@ -1,9 +1,13 @@
 // pages/Dashboard.jsx
-// Personalizirana početna stranica za prijavljene korisnike.
-// TODO: Streak, RecentAttempts i SubjectProgress trebaju prave API pozive.
+// ─────────────────────────────────────────────────────────────────────────────
+// KOMPLETNI REWRITE — mock podaci zamijenjeni pravim Supabase upitima:
+//   • attempts: attemptApi.getAll() → completed attempts za prikaz
+//   • subjectStats: user_subject_stats VIEW → aggregated po predmetu
+//   • streak: lokalno računamo iz finished_at datuma completed pokušaja
+// ─────────────────────────────────────────────────────────────────────────────
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Flame,
   BookOpen,
@@ -12,65 +16,87 @@ import {
   RotateCcw,
   Trophy,
   TrendingUp,
-  BarChart2,
   Target,
+  Clock,
+  Plus,
 } from "lucide-react";
 import { PageWrapper } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
 import { Button } from "@/components/common/Button";
-import { Badge } from "@/components/common/Badge";
-import { SUBJECTS } from "@/utils/constants";
+import { SUBJECTS, EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 import { useCurrentUser } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
+import { attemptApi } from "@/api/attemptApi";
 import { cn } from "@/utils/utils";
 
-// ── Mock data (zamijeniti s API pozivima) ─────────────────────────────────────
+// ── API hooks ─────────────────────────────────────────────────────────────────
 
-const STREAK_DAYS = 5;
+function useAttempts() {
+  return useQuery({
+    queryKey: ["user-attempts"],
+    queryFn: () => attemptApi.getAll(),
+    staleTime: 1000 * 60 * 3,
+  });
+}
 
-// Zadnjih 7 dana aktivnosti (true = bio aktivan)
-const WEEK_ACTIVITY = [true, false, true, true, true, false, true];
+function useSubjectStats() {
+  return useQuery({
+    queryKey: ["user-subject-stats"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_subject_stats")
+        .select(
+          "subject_id, attempts_count, avg_score_pct, best_score_pct, last_attempt_at",
+        );
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+}
 
-const RECENT_ATTEMPTS = [
-  {
-    examId: "matematika-2024-ljetni-visa",
-    subjectId: "matematika",
-    year: 2024,
-    level: "B razina",
-    pct: 82,
-    daysAgo: 0,
-  },
-  {
-    examId: "engleski-2023-ljetni-osnovna",
-    subjectId: "engleski",
-    year: 2023,
-    level: "A razina",
-    pct: 93,
-    daysAgo: 2,
-  },
-  {
-    examId: "hrvatski-2024-ljetni-osnovna",
-    subjectId: "hrvatski",
-    year: 2024,
-    level: "A razina",
-    pct: 77,
-    daysAgo: 4,
-  },
-  {
-    examId: "fizika-2022-jesenski-osnovna",
-    subjectId: "fizika",
-    year: 2022,
-    level: "A razina",
-    pct: 50,
-    daysAgo: 7,
-  },
-];
+// ── Streak računanje ──────────────────────────────────────────────────────────
+// Broji koliko uzastopnih dana (do danas) korisnik je imao barem jedan completed attempt
+function computeStreak(completedAttempts) {
+  if (!completedAttempts.length) return 0;
 
-const SUBJECT_PROGRESS = [
-  { subjectId: "matematika", attempts: 8, avg: 74, trend: +6 },
-  { subjectId: "engleski", attempts: 5, avg: 90, trend: +3 },
-  { subjectId: "hrvatski", attempts: 3, avg: 77, trend: -2 },
-  { subjectId: "fizika", attempts: 2, avg: 50, trend: 0 },
-];
+  const days = new Set(
+    completedAttempts.map(
+      (a) => new Date(a.finished_at).toISOString().split("T")[0],
+    ),
+  );
+
+  let streak = 0;
+  const today = new Date();
+
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().split("T")[0];
+    if (days.has(key)) {
+      streak++;
+    } else if (i > 0) {
+      break; // Prekinut niz
+    }
+  }
+
+  return streak;
+}
+
+// Zadnjih 7 dana aktivnosti (true/false)
+function computeWeekActivity(completedAttempts) {
+  const days = new Set(
+    completedAttempts.map(
+      (a) => new Date(a.finished_at).toISOString().split("T")[0],
+    ),
+  );
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    return days.has(d.toISOString().split("T")[0]);
+  });
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -86,205 +112,96 @@ function getPctBarColor(pct) {
   return "bg-error-500";
 }
 
-function daysAgoLabel(n) {
-  if (n === 0) return "Danas";
-  if (n === 1) return "Jučer";
-  return `Prije ${n} dana`;
+function formatElapsed(secs) {
+  if (!secs) return null;
+  const m = Math.floor(secs / 60);
+  return `${m} min`;
 }
 
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Dobro jutro";
-  if (h < 18) return "Dobar dan";
-  return "Dobra večer";
+function daysAgoLabel(finishedAt) {
+  if (!finishedAt) return "";
+  const diff = Math.floor((Date.now() - new Date(finishedAt)) / 86400000);
+  if (diff === 0) return "Danas";
+  if (diff === 1) return "Jučer";
+  return `Prije ${diff} dana`;
 }
 
-// ── Animation variants ────────────────────────────────────────────────────────
+function sessionName(session) {
+  return EXAM_SESSIONS.find((s) => s.id === session)?.name ?? session ?? "";
+}
 
-const containerVariants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.07 } },
-};
+function levelName(level) {
+  return DIFFICULTY_LEVELS.find((d) => d.id === level)?.short ?? level ?? "";
+}
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
-  },
-};
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-// Tjedni calendar dots (aktivnost)
-function WeekActivity({ days }) {
-  const labels = ["P", "U", "S", "Č", "P", "S", "N"];
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+function Bone({ className }) {
   return (
-    <div className="flex items-center gap-1.5">
-      {days.map((active, i) => (
-        <div key={i} className="flex flex-col items-center gap-1">
-          <div
-            className={cn(
-              "w-7 h-7 rounded-lg border flex items-center justify-center transition-colors",
-              active
-                ? "bg-primary-100 border-primary-300"
-                : "bg-warm-100 border-warm-200",
-            )}
-          >
-            {active && <div className="w-2 h-2 rounded-full bg-primary-500" />}
-          </div>
-          <span className="text-[10px] text-warm-400 font-semibold">
-            {labels[i]}
-          </span>
-        </div>
-      ))}
+    <div className={cn("bg-warm-200 rounded-lg animate-pulse", className)} />
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-5">
+      {/* Banner skeleton */}
+      <Bone className="h-24 rounded-2xl" />
+      {/* Stat kartice */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[1, 2, 3, 4].map((i) => (
+          <Bone key={i} className="h-24 rounded-2xl" />
+        ))}
+      </div>
+      {/* Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <Bone className="lg:col-span-2 h-64 rounded-2xl" />
+        <Bone className="h-64 rounded-2xl" />
+      </div>
     </div>
   );
 }
 
-// Hero greeting banner s gradientom
-function HeroBanner({ user, streak }) {
-  const firstName = user?.name?.split(" ")[0] ?? "učeniče";
-  const greeting = getGreeting();
-
+// ── Hero banner ───────────────────────────────────────────────────────────────
+function HeroBanner({ user, streak, weekActivity }) {
   return (
-    <Card className="p-6 mb-5 bg-gradient-to-br from-primary-50 to-indigo-50 border-primary-100 overflow-hidden relative">
-      {/* Dekorativni krug */}
-      <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-primary-100 opacity-50 pointer-events-none" />
-
-      <div className="relative">
-        <p className="text-sm font-semibold text-primary-600 mb-0.5">
-          {greeting}, {firstName}! 👋
-        </p>
-        <h1 className="text-xl font-bold text-warm-900 mb-4">
-          Nastavi s pripremom za maturu
-        </h1>
-
-        <div className="flex items-center gap-4 flex-wrap">
-          {/* Streak pill */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-50 border border-orange-200">
-            <Flame size={14} className="text-accent-500" />
-            <span className="text-sm font-bold text-orange-700">
-              {streak} dana zaredom
-            </span>
+    <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl p-5 mb-5 text-white">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-primary-200 text-sm font-medium mb-0.5">
+            Dobro jutro,
+          </p>
+          <h1 className="text-xl font-bold">{user?.name ?? "Korisnik"} 👋</h1>
+        </div>
+        {streak > 0 && (
+          <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl">
+            <Flame size={16} className="text-orange-300" />
+            <span className="text-sm font-bold">{streak} dana</span>
           </div>
-
-          {/* Week dots */}
-          <WeekActivity days={WEEK_ACTIVITY} />
-        </div>
+        )}
       </div>
-    </Card>
-  );
-}
 
-// Animated progress bar za subject
-function SubjectProgressBar({ subjectId, avg, attempts, trend }) {
-  const [animWidth, setAnimWidth] = useState(0);
-  const subject = SUBJECTS.find((s) => s.id === subjectId);
-  if (!subject) return null;
-
-  useEffect(() => {
-    const t = setTimeout(() => setAnimWidth(avg), 300);
-    return () => clearTimeout(t);
-  }, [avg]);
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-2">
-          <subject.icon size={13} className={subject.color.text} />
-          <span className="text-xs font-semibold text-warm-700">
-            {subject.shortName}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {trend !== 0 && (
-            <Badge
-              variant="outline"
-              size="sm"
+      {/* Tjedna aktivnost */}
+      <div className="flex items-center gap-1.5 mt-4">
+        {["Po", "Ut", "Sr", "Čet", "Pet", "Sub", "Ned"].map((day, i) => (
+          <div key={i} className="flex flex-col items-center gap-1">
+            <div
               className={cn(
-                "px-1.5 py-0 text-xs",
-                trend > 0
-                  ? "text-success-600 border-green-200 bg-success-50"
-                  : "text-error-600 border-red-200 bg-error-50",
+                "w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold",
+                weekActivity[i]
+                  ? "bg-white text-primary-700"
+                  : "bg-white/10 text-primary-300",
               )}
             >
-              {trend > 0 ? "+" : ""}
-              {trend}%
-            </Badge>
-          )}
-          <span className={cn("text-xs font-bold", getPctColor(avg))}>
-            {avg}%
-          </span>
-        </div>
+              {weekActivity[i] ? "✓" : day[0]}
+            </div>
+          </div>
+        ))}
       </div>
-      <div className="h-1.5 bg-warm-200 rounded-full overflow-hidden">
-        <motion.div
-          className={cn("h-full rounded-full", getPctBarColor(avg))}
-          initial={{ width: 0 }}
-          animate={{ width: `${animWidth}%` }}
-          transition={{ duration: 0.9, ease: "easeOut" }}
-        />
-      </div>
-      <p className="text-xs text-warm-400 mt-0.5">{attempts} pokušaja</p>
     </div>
   );
 }
 
-// Recent attempt red
-function AttemptRow({ attempt }) {
-  const navigate = useNavigate();
-  const subject = SUBJECTS.find((s) => s.id === attempt.subjectId);
-
-  return (
-    <motion.div
-      variants={itemVariants}
-      onClick={() => navigate(`/ispit/${attempt.examId}`)}
-      className="flex items-center gap-3 py-2.5 border-b border-warm-100 last:border-0 group cursor-pointer"
-    >
-      {/* Subject icon */}
-      {subject && (
-        <div
-          className={cn(
-            "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
-            subject.color.bg,
-          )}
-        >
-          <subject.icon size={16} className={subject.color.text} />
-        </div>
-      )}
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-warm-900 truncate">
-          {subject?.name ?? attempt.subjectId} {attempt.year} · {attempt.level}
-        </p>
-        <p className="text-xs text-warm-400 mt-0.5">
-          {daysAgoLabel(attempt.daysAgo)}
-        </p>
-      </div>
-
-      {/* Score + action */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <span
-          className={cn(
-            "text-sm font-bold tabular-nums",
-            getPctColor(attempt.pct),
-          )}
-        >
-          {attempt.pct}%
-        </span>
-        <ChevronRight
-          size={15}
-          className="text-warm-300 group-hover:text-warm-500 transition-colors"
-        />
-      </div>
-    </motion.div>
-  );
-}
-
-// Stat kartica (gore u griду)
+// ── Stat kartica ──────────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, value, label, iconClass, bgClass }) {
   return (
     <Card className="p-4">
@@ -304,27 +221,143 @@ function StatCard({ icon: Icon, value, label, iconClass, bgClass }) {
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// ── Redak pokušaja ────────────────────────────────────────────────────────────
+function AttemptItem({ attempt }) {
+  const navigate = useNavigate();
+  const subject = SUBJECTS.find((s) => s.id === attempt.exam?.subject_id);
 
+  return (
+    <motion.div
+      whileHover={{ x: 2 }}
+      onClick={() => navigate(`/ispit/${attempt.exam_id}`)}
+      className="group flex items-center gap-3 py-3 border-b border-warm-100 last:border-0 cursor-pointer"
+    >
+      {subject && (
+        <div
+          className={cn(
+            "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+            subject.color.bg,
+          )}
+        >
+          <subject.icon size={15} className={subject.color.text} />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-warm-900 truncate">
+          {subject?.shortName} · {attempt.exam?.year}. ·{" "}
+          {levelName(attempt.exam?.level)}
+        </p>
+        <p className="text-xs text-warm-400">
+          {daysAgoLabel(attempt.finished_at)}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <span
+          className={cn("text-sm font-bold", getPctColor(attempt.score_pct))}
+        >
+          {attempt.score_pct ?? "—"}%
+        </span>
+        <ChevronRight
+          size={15}
+          className="text-warm-300 group-hover:text-warm-500 transition-colors"
+        />
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Napredak po predmetu ──────────────────────────────────────────────────────
+function SubjectProgressItem({ stat }) {
+  const navigate = useNavigate();
+  const subject = SUBJECTS.find((s) => s.id === stat.subject_id);
+  if (!subject) return null;
+
+  return (
+    <div
+      onClick={() => navigate(`/predmeti/${stat.subject_id}`)}
+      className="group flex items-center gap-3 py-3 border-b border-warm-100 last:border-0 cursor-pointer"
+    >
+      <div
+        className={cn(
+          "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+          subject.color.bg,
+        )}
+      >
+        <subject.icon size={15} className={subject.color.text} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm font-semibold text-warm-800">
+            {subject.shortName}
+          </span>
+          <span
+            className={cn("text-xs font-bold", getPctColor(stat.avg_score_pct))}
+          >
+            ∅ {stat.avg_score_pct ?? "—"}%
+          </span>
+        </div>
+        <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${stat.avg_score_pct ?? 0}%` }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className={cn(
+              "h-full rounded-full",
+              getPctBarColor(stat.avg_score_pct ?? 0),
+            )}
+          />
+        </div>
+      </div>
+      <ChevronRight
+        size={14}
+        className="text-warm-300 group-hover:text-warm-500 flex-shrink-0"
+      />
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 export function Dashboard() {
   const user = useCurrentUser();
   const navigate = useNavigate();
 
-  // Aggregate stats iz mock podataka
-  const totalExams = RECENT_ATTEMPTS.length;
+  const { data: attempts, isLoading: loadingAttempts } = useAttempts();
+  const { data: subjectStats, isLoading: loadingStats } = useSubjectStats();
+
+  const isLoading = loadingAttempts || loadingStats;
+
+  // Filtriraj completed
+  const completed = (attempts ?? []).filter((a) => a.status === "completed");
+
+  // Agregirane statistike
+  const totalExams = completed.length;
   const avgPct = totalExams
-    ? Math.round(RECENT_ATTEMPTS.reduce((s, a) => s + a.pct, 0) / totalExams)
+    ? Math.round(
+        completed.reduce((s, a) => s + (a.score_pct ?? 0), 0) / totalExams,
+      )
     : 0;
   const bestPct = totalExams
-    ? Math.max(...RECENT_ATTEMPTS.map((a) => a.pct))
+    ? Math.max(...completed.map((a) => a.score_pct ?? 0))
     : 0;
+  const streak = computeStreak(completed);
+  const weekActivity = computeWeekActivity(completed);
+
+  // Zadnjih 5 pokušaja za prikaz
+  const recentAttempts = completed.slice(0, 5);
+
+  if (isLoading) {
+    return (
+      <PageWrapper>
+        <DashboardSkeleton />
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper>
-      {/* Hero banner */}
-      <HeroBanner user={user} streak={STREAK_DAYS} />
+      <HeroBanner user={user} streak={streak} weekActivity={weekActivity} />
 
-      {/* ── Stat kartice ──────────────────────────────────────────── */}
+      {/* Stat kartice */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <StatCard
           icon={BookOpen}
@@ -349,130 +382,97 @@ export function Dashboard() {
         />
         <StatCard
           icon={Flame}
-          value={STREAK_DAYS}
+          value={streak || "—"}
           label="Streak dana"
-          iconClass="text-accent-500"
+          iconClass="text-orange-500"
           bgClass="bg-orange-50"
         />
       </div>
 
-      {/* ── Content grid ──────────────────────────────────────────── */}
+      {/* Content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* ── Left column (2/3) ──────────────────────────── */}
-        <div className="lg:col-span-2 space-y-5">
-          {/* Recent attempts */}
-          <Card className="p-5">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-xs font-bold text-warm-500 uppercase tracking-wider">
-                Nedavni ispiti
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                rightIcon={ChevronRight}
-                onClick={() => navigate("/rezultati")}
-              >
-                Svi rezultati
-              </Button>
-            </div>
-
-            {RECENT_ATTEMPTS.length === 0 ? (
-              <div className="text-center py-8">
-                <BookOpen size={28} className="text-warm-300 mx-auto mb-2" />
-                <p className="text-sm text-warm-400">
-                  Još nema riješenih ispita.
-                </p>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => navigate("/")}
-                >
-                  Počni s prvim ispitom
-                </Button>
-              </div>
-            ) : (
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="show"
-              >
-                {RECENT_ATTEMPTS.map((attempt) => (
-                  <AttemptRow key={attempt.examId} attempt={attempt} />
-                ))}
-              </motion.div>
-            )}
-          </Card>
-
-          {/* Quick start */}
-          <Card className="p-5">
-            <p className="text-xs font-bold text-warm-500 uppercase tracking-wider mb-3">
-              Brzi start
+        {/* Nedavni pokušaji */}
+        <Card className="lg:col-span-2 p-5">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-bold text-warm-500 uppercase tracking-wider">
+              Nedavni ispiti
             </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {SUBJECTS.filter((s) => s.isPopular).map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => navigate(`/predmeti/${s.id}`)}
-                  className={cn(
-                    "flex items-center gap-2 p-3 rounded-xl border transition-all hover:shadow-card-md",
-                    s.color.bg,
-                    s.color.border,
-                  )}
-                >
-                  <s.icon size={14} className={s.color.text} />
-                  <span className={cn("text-xs font-semibold", s.color.text)}>
-                    {s.shortName}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              rightIcon={ArrowRight}
-              className="w-full mt-3"
-              onClick={() => navigate("/")}
-            >
-              Svi predmeti
-            </Button>
-          </Card>
-        </div>
-
-        {/* ── Right column (1/3) ─────────────────────────── */}
-        <div className="space-y-5">
-          {/* Subject progress */}
-          <Card className="p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart2 size={14} className="text-amber-500" />
-              <p className="text-xs font-bold text-warm-500 uppercase tracking-wider">
-                Napredak
-              </p>
-            </div>
-
-            {SUBJECT_PROGRESS.length === 0 ? (
-              <p className="text-xs text-warm-400 text-center py-4">
-                Nema podataka. Riješi barem jedan ispit.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {SUBJECT_PROGRESS.map((sp) => (
-                  <SubjectProgressBar key={sp.subjectId} {...sp} />
-                ))}
-              </div>
-            )}
-
             <Button
               variant="ghost"
               size="sm"
               rightIcon={ChevronRight}
-              className="w-full mt-4 text-warm-500"
-              onClick={() => navigate("/rezultati")}
+              onClick={() => navigate("/statistike")}
             >
-              Detaljna statistika
+              Svi rezultati
             </Button>
-          </Card>
-        </div>
+          </div>
+
+          {recentAttempts.length === 0 ? (
+            <div className="text-center py-10">
+              <BookOpen size={28} className="text-warm-300 mx-auto mb-2" />
+              <p className="text-sm text-warm-400 mb-4">
+                Još nema riješenih ispita.
+              </p>
+              <Button
+                variant="primary"
+                leftIcon={Plus}
+                onClick={() => navigate("/")}
+              >
+                Odaberi ispit
+              </Button>
+            </div>
+          ) : (
+            <>
+              {recentAttempts.map((attempt) => (
+                <AttemptItem key={attempt.id} attempt={attempt} />
+              ))}
+              {completed.length > 5 && (
+                <button
+                  onClick={() => navigate("/statistike")}
+                  className="w-full mt-3 py-2 text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center justify-center gap-1"
+                >
+                  Prikaži svih {completed.length} ispita
+                  <ArrowRight size={12} />
+                </button>
+              )}
+            </>
+          )}
+        </Card>
+
+        {/* Napredak po predmetima */}
+        <Card className="p-5">
+          <p className="text-xs font-bold text-warm-500 uppercase tracking-wider mb-1">
+            Po predmetima
+          </p>
+
+          {!subjectStats || subjectStats.length === 0 ? (
+            <div className="text-center py-10">
+              <BarChart2 size={24} className="text-warm-300 mx-auto mb-2" />
+              <p className="text-sm text-warm-400">
+                Statistike će se pojaviti nakon prvog riješenog ispita.
+              </p>
+            </div>
+          ) : (
+            subjectStats
+              .sort((a, b) => (b.attempts_count ?? 0) - (a.attempts_count ?? 0))
+              .slice(0, 6)
+              .map((stat) => (
+                <SubjectProgressItem key={stat.subject_id} stat={stat} />
+              ))
+          )}
+
+          {subjectStats && subjectStats.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full mt-3"
+              rightIcon={ArrowRight}
+              onClick={() => navigate("/statistike?tab=subjects")}
+            >
+              Detaljna analiza
+            </Button>
+          )}
+        </Card>
       </div>
     </PageWrapper>
   );
