@@ -1,10 +1,17 @@
 // api/examApi.js
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX P2-2: Svi `throw error` zamijenjeni s `throwNormalized(error)`
+//
+// ZAŠTO: Raw Supabase PostgrestError sadrži poruke poput:
+//   "JWT expired", "violates row-level security policy", "PGRST116"
+// koje su besmislene krajnjem korisniku.
+// throwNormalized() prevodi na: "Sesija je istekla", "Nemate dozvolu", itd.
+// ─────────────────────────────────────────────────────────────────────────────
 import { supabase } from "@/lib/supabase";
+import { throwNormalized } from "@/lib/normalizeError";
 
 export const examApi = {
   // ── Ispiti s community statistikama (SubjectSelect stranica) ──────────────
-  // Koristi exams_with_stats VIEW: exams + subjects + community stats
-  // question_count dolazi iz DB (trigger ga ažurira automatski)
   getBySubjectWithStats: async (subjectId) => {
     const { data, error } = await supabase
       .from("exams_with_stats")
@@ -17,7 +24,7 @@ export const examApi = {
       .order("year", { ascending: false })
       .order("session");
 
-    if (error) throw error;
+    if (error) throwNormalized(error);
     return data ?? [];
   },
 
@@ -31,13 +38,11 @@ export const examApi = {
       .eq("id", examId)
       .single();
 
-    if (error) throw error;
+    if (error) throwNormalized(error);
     return data;
   },
 
   // ── Ispit + pitanja + passages (ExamTaking) ───────────────────────────────
-  // Paralelni upiti: exams + questions_full VIEW
-  // questions_full: pitanja + passages inline + options JSONB (BEZ correct_option)
   getWithQuestions: async (examId) => {
     const [examRes, questionsRes] = await Promise.all([
       supabase
@@ -55,8 +60,8 @@ export const examApi = {
         .order("position", { ascending: true }),
     ]);
 
-    if (examRes.error) throw examRes.error;
-    if (questionsRes.error) throw questionsRes.error;
+    if (examRes.error) throwNormalized(examRes.error);
+    if (questionsRes.error) throwNormalized(questionsRes.error);
 
     // Dedupliciraj passages u mapu
     const passagesMap = {};
@@ -88,31 +93,27 @@ export const examApi = {
       inlineText: row.inline_text ?? null,
       points: row.points ?? 1,
       passageId: row.passage_id ?? null,
-      options: Array.isArray(row.options)
-        ? [...row.options].sort((a, b) => a.letter.localeCompare(b.letter))
-        : [],
+      imageUrl: row.image_url ?? null,
+      options: Array.isArray(row.options) ? row.options : [],
     }));
 
     return { exam: examRes.data, questions, passages: passagesMap };
   },
 
-  // ── Točni odgovori NAKON završetka (attempt_details VIEW + Youtubes RLS) ──
+  // ── Answer Key (točni odgovori — samo za completed attempts) ─────────────
   getAnswerKey: async (attemptId) => {
     const { data, error } = await supabase
       .from("attempt_details")
-      .select(
-        "question_id, chosen_option, correct_option, explanation, is_correct",
-      )
+      .select("question_id, correct_option, explanation, explanation_source")
       .eq("attempt_id", attemptId);
 
-    if (error) throw error;
+    if (error) throwNormalized(error);
 
     return (data ?? []).reduce((acc, row) => {
       acc[row.question_id] = {
         correctOption: row.correct_option,
         explanation: row.explanation ?? null,
-        isCorrect: row.is_correct,
-        chosenOption: row.chosen_option,
+        explanationSource: row.explanation_source ?? null,
       };
       return acc;
     }, {});

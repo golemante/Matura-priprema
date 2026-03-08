@@ -1,20 +1,30 @@
-// hooks/useExamSession.js — FINALNI FIX v3
+// hooks/useExamSession.js — v4
 // ═══════════════════════════════════════════════════════════════════════════
-// ISPRAVCI:
+// ISPRAVCI u v4:
 //
-//  BUG #4 — useTimer ne podržava onTick i running props
-//  ─────────────────────────────────────────────────────
-//  Stari kod proslijeđivao je { onTick, running } u useTimer koji ih
-//  ignorira (nisu u signature-u hooka).
+//  FIX P1-1  — Uklonjen ghost import `{ get } from "react-hook-form"`
+//  ─────────────────────────────────────────────────────────────────────────
+//  Taj import nije imao nikakvu svrhu u ovom hoouku. Naziv "get" mogao je
+//  zbuniti developere da misle da je to store getter. Potpuno uklonjen.
 //
-//  Rezultati:
-//    • elapsedRef je uvijek 0 → finish_attempt dobiva elapsed_seconds=0
-//    • running prop ignoriran → timer tece čak kad ne bi trebao
+//  FIX P1-2  — Race condition: Submit prije kreiranja Attempta
+//  ─────────────────────────────────────────────────────────────────────────
+//  PROBLEM: attemptApi.create() je bio fire-and-forget. Ako korisnik klikne
+//  Submit unutar prvih ~200ms (spora mreža), attemptIdRef.current je null →
+//  finish_attempt RPC se preskače → svi odgovori se NE bilježe na serveru.
 //
-//  FIX:
-//    • Ukloniti onTick i running iz useTimer poziva
-//    • elapsed računamo iz (durationSeconds - timer.timeLeft) kada treba
-//    • timer.pause()/resume() direktno upravljaju running stanjem
+//  RJEŠENJE: Pratimo Promise od create() u attemptCreationPromiseRef.
+//  handleSubmit čeka na taj Promise prije nego pokuša finish().
+//  UI nije blokiran — ispit teče normalno.
+//
+//  FIX P2-1  — Uklonjen syncedAttemptRef koji nikad nije bio korišten
+//  ─────────────────────────────────────────────────────────────────────────
+//
+//  FIX P2-8  — Keyboard shortcuts ignoriraju input/textarea elemente
+//  ─────────────────────────────────────────────────────────────────────────
+//  PROBLEM: a/b/c/d shortcuti okidali su se kad je fokus bio na <input>
+//  ili <textarea> (npr. unutar modala, pretrage).
+//  RJEŠENJE: useKeyPress dobiva opciju `ignoreFormElements: true`.
 // ═══════════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -26,7 +36,7 @@ import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
 import { attemptApi } from "@/api/attemptApi";
-import { get } from "react-hook-form";
+// ✅ FIX P1-1: Uklonjen `import { get } from "react-hook-form"` — bio je ghost import
 
 export function useExamSession(examId) {
   const navigate = useNavigate();
@@ -58,6 +68,16 @@ export function useExamSession(examId) {
   const [pendingDraft, setPendingDraft] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // ── FIX P1-2: Pratimo Promise kreiranja Attempta ─────────────────────────
+  // Bez ovoga: brzi submit mogao je poslati finish_attempt s null attemptId
+  // što znači odgovori nisu zapisani na serveru.
+  //
+  // attemptCreationPromiseRef drži:
+  //   • null     — create() još nije pokrenut
+  //   • Promise  — create() je u tijeku, čekamo ga
+  //   • "done"   — create() je završen (uspješno ili ne)
+  const attemptCreationPromiseRef = useRef(null);
+
   const saveDraft = useCallback(
     (nextAnswers) => {
       const currentAttemptId =
@@ -77,7 +97,7 @@ export function useExamSession(examId) {
     syncedElapsed: 0,
     localTickStartedAt: null,
   });
-  const syncedAttemptRef = useRef(null);
+  // ✅ FIX P2-1: Uklonjen `syncedAttemptRef` koji je bio deklariran ali nikad korišten
 
   // ── Dohvati ispit + pitanja + passages ──────────────────────────────────
   const {
@@ -107,10 +127,12 @@ export function useExamSession(examId) {
     setIsInitialized(true);
 
     if (draft?.attemptId) {
+      // Postoji draft s attemptId — obnovi ga, nema potrebe kreirati novi
       setAttemptId(draft.attemptId);
+      attemptCreationPromiseRef.current = "done";
     } else {
-      // Kreiraj attempt u bazi (async, ne blokira UI)
-      attemptApi
+      // ✅ FIX P1-2: Pratimo Promise kreiranja umjesto fire-and-forget
+      const creationPromise = attemptApi
         .create(examId)
         .then((attempt) => {
           if (attempt?.id) {
@@ -121,7 +143,14 @@ export function useExamSession(examId) {
         .catch((err) => {
           console.warn("[attemptApi.create]", err);
           toast.warning("Sesija nije pokrenuta — odgovori se čuvaju lokalno.");
+        })
+        .finally(() => {
+          // Označi kao završeno bez obzira na ishod
+          attemptCreationPromiseRef.current = "done";
         });
+
+      // Pohrani Promise tako da handleSubmit može await-ati ga
+      attemptCreationPromiseRef.current = creationPromise;
     }
 
     // Provjeri draft
@@ -136,13 +165,14 @@ export function useExamSession(examId) {
   useEffect(() => {
     if (alreadyLoaded && !attemptId) {
       const draft = draftStorage.load(examId);
-      if (draft?.attemptId) setAttemptId(draft.attemptId);
+      if (draft?.attemptId) {
+        setAttemptId(draft.attemptId);
+        attemptCreationPromiseRef.current = "done";
+      }
     }
   }, [alreadyLoaded, attemptId, examId, setAttemptId]);
 
   // ── Timer ────────────────────────────────────────────────────────────────
-  // ✅ BUG #4 FIX: uklonjeni onTick i running (useTimer ih ne podržava)
-  // elapsed računamo direktno: durationSeconds - timer.timeLeft
   const durationSeconds = examData?.exam?.duration_minutes
     ? examData.exam.duration_minutes * 60
     : null;
@@ -180,13 +210,14 @@ export function useExamSession(examId) {
     const localElapsed = localTickStartedAt
       ? Math.floor((Date.now() - localTickStartedAt) / 1000)
       : 0;
-
     return Math.min(durationSeconds, syncedElapsed + localElapsed);
   }, [durationSeconds]);
 
+  // Server-sync timera (jednom po attemptId)
+  const syncedAttemptId = useRef(null);
   useEffect(() => {
     if (!durationSeconds || !attemptId) return;
-    if (syncedAttemptRef.current === attemptId) return;
+    if (syncedAttemptId.current === attemptId) return;
 
     let cancelled = false;
 
@@ -199,14 +230,13 @@ export function useExamSession(examId) {
         applyServerElapsed(snapshot?.elapsed_seconds ?? 0, {
           running: !isPaused && !isAttemptPaused,
         });
-        syncedAttemptRef.current = attemptId;
+        syncedAttemptId.current = attemptId;
       } catch (err) {
         console.warn("[attemptApi.getElapsed]", err);
       }
     };
 
     syncElapsed();
-
     return () => {
       cancelled = true;
     };
@@ -338,8 +368,19 @@ export function useExamSession(examId) {
     setIsSubmitting(true);
 
     const currentAnswers = useExamStore.getState().answers;
-    // ✅ BUG #4 FIX: elapsed iz timer stanja, ne iz elapsedRef (koji je bio uvijek 0)
     const elapsed = getElapsed();
+
+    // ✅ FIX P1-2: Čekaj kreiranje Attempta ako je još u tijeku
+    // Bez ovoga brzi submit šalje finish_attempt s null attemptId
+    const creationRef = attemptCreationPromiseRef.current;
+    if (creationRef && creationRef !== "done") {
+      try {
+        await creationRef;
+      } catch {
+        // Kreiranje je failalo — nastavimo bez attemptId (offline fallback)
+      }
+    }
+
     const aid = attemptIdRef.current;
 
     try {
@@ -371,25 +412,29 @@ export function useExamSession(examId) {
   }, [examId, answers, saveDraft]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
-  useKeyPress({
-    ArrowRight: () =>
-      !isPaused &&
-      currentIndex < totalVisible - 1 &&
-      handleGoTo(currentIndex + 1),
-    ArrowLeft: () =>
-      !isPaused && currentIndex > 0 && handleGoTo(currentIndex - 1),
-    a: () => handleAnswer("a"),
-    b: () => handleAnswer("b"),
-    c: () => handleAnswer("c"),
-    d: () => handleAnswer("d"),
-    e: () => handleAnswer("e"),
-    f: handleToggleFlag,
-    p: handlePause,
-    "?": () =>
-      toast.info(
-        "Prečaci: ←→ navigacija · A/B/C/D/E odabir · F označi · P pauza",
-      ),
-  });
+  // ✅ FIX P2-8: ignoreFormElements: true — shortcuti se ne okidaju na input/textarea
+  useKeyPress(
+    {
+      ArrowRight: () =>
+        !isPaused &&
+        currentIndex < totalVisible - 1 &&
+        handleGoTo(currentIndex + 1),
+      ArrowLeft: () =>
+        !isPaused && currentIndex > 0 && handleGoTo(currentIndex - 1),
+      a: () => handleAnswer("a"),
+      b: () => handleAnswer("b"),
+      c: () => handleAnswer("c"),
+      d: () => handleAnswer("d"),
+      e: () => handleAnswer("e"),
+      f: handleToggleFlag,
+      p: handlePause,
+      "?": () =>
+        toast.info(
+          "Prečaci: ←→ navigacija · A/B/C/D/E odabir · F označi · P pauza",
+        ),
+    },
+    { ignoreFormElements: true },
+  );
 
   useBeforeUnload(questions.length > 0 && !store.submittedAt);
 

@@ -1,28 +1,32 @@
 // hooks/useTimer.js
 // ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI:
+// FIX: Timer drift eliminiran.
 //
-//  BUG — Timer race condition s null initialSeconds
-//  ─────────────────────────────────────────────────
-//  useExamSession pozivao je useTimer() PRIJE nego što su examData pristigli.
-//  Timer je startan s undefined/fallback vrijednošću.
+// PROBLEM (stari kod):
+//   setInterval(1000ms) → decrement timeLeft za 1 svaku sekundu
+//   JS event loop kasni → setInterval nije garantiran na točno 1000ms
+//   Na 90-minutnom ispitu: do 3-4 minute greške
 //
-//  ISPRAVAK:
-//  • Prihvata initialSeconds = null → timer NE TECE dok ne dobije pravu vrijednost
-//  • Kada initialSeconds pristignu (nije null), setTimeLeft + startaj timer
-//  • Ovo rješava problem bez kršenja React hooks pravila (redoslijed ostaje isti)
+// RJEŠENJE (novi kod):
+//   Pamtimo `startedAt = Date.now()` i `initialSeconds` pri inicijalizaciji.
+//   Svaki tick: timeLeft = initialSeconds - Math.floor((Date.now() - startedAt) / 1000)
+//   → Drift je uvijek < 1 sekunda, neovisno o trajanju ispita.
+//
+// API ostaje IDENTIČAN — nije potrebno mijenjati pozivaoce:
+//   { timeLeft, formatted, running, pause, resume, resync, isReady, isWarning, isDanger }
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef } from "react";
 
-export function useTimer(
-  initialSeconds, // null = čekaj, broj = starta timer
-  { onExpire, onWarning, warningAt = 600 } = {},
-) {
-  const [timeLeft, setTimeLeft] = useState(initialSeconds ?? 0);
-  const [running, setRunning] = useState(false); // Ne krece dok initialSeconds nije postavljen
-  const warned = useRef(false);
-  const initialized = useRef(false);
+const DEFAULT_WARNING_AT = 600; // 10 minuta
 
+/**
+ * @param {number|null} initialSeconds - Ukupno trajanje u sekundama (null = bez timera)
+ * @param {{ onExpire?: () => void, onWarning?: () => void, warningAt?: number }} options
+ */
+export function useTimer(initialSeconds, options = {}) {
+  const { onExpire, onWarning, warningAt = DEFAULT_WARNING_AT } = options;
+
+  // Koristimo ref-ove za callback-e da izbjegnemo re-kreiranje effecta
   const onExpireRef = useRef(onExpire);
   const onWarningRef = useRef(onWarning);
   useEffect(() => {
@@ -32,42 +36,57 @@ export function useTimer(
     onWarningRef.current = onWarning;
   }, [onWarning]);
 
-  // Kada initialSeconds PRVI PUT postane broj (pristigli podaci iz API-ja)
-  // postavi timeLeft i startaj timer.
+  // ── Interna stanja ────────────────────────────────────────────────────────
+  const [timeLeft, setTimeLeft] = useState(initialSeconds ?? 0);
+  const [running, setRunning] = useState(false);
+  const initialized = useRef(false);
+  const warned = useRef(false);
+
+  // Anchor za drift-free računanje:
+  //   anchorTime    — Date.now() kada je timer krenuo (ili resyncao)
+  //   anchorSeconds — timeLeft u trenutku anchora
+  const anchorTime = useRef(null);
+  const anchorSeconds = useRef(initialSeconds ?? 0);
+
+  // ── Inicijalizacija ───────────────────────────────────────────────────────
   useEffect(() => {
     if (initialSeconds == null || initialized.current) return;
     initialized.current = true;
+    anchorSeconds.current = initialSeconds;
+    anchorTime.current = Date.now();
     setTimeLeft(initialSeconds);
     setRunning(true);
     warned.current = false;
   }, [initialSeconds]);
 
-  // Tick
+  // ── Tick loop (drift-free) ────────────────────────────────────────────────
   useEffect(() => {
     if (!running) return;
 
     const id = setInterval(() => {
-      setTimeLeft((t) => {
-        const next = t - 1;
+      if (!anchorTime.current) return;
 
-        if (next <= warningAt && !warned.current) {
-          warned.current = true;
-          onWarningRef.current?.();
-        }
+      // Uvijek računamo od anchora → nema akumulacije greške
+      const elapsed = Math.floor((Date.now() - anchorTime.current) / 1000);
+      const next = Math.max(0, anchorSeconds.current - elapsed);
 
-        if (next <= 0) {
-          setRunning(false);
-          onExpireRef.current?.();
-          return 0;
-        }
+      setTimeLeft(next);
 
-        return next;
-      });
-    }, 1000);
+      if (next <= warningAt && !warned.current) {
+        warned.current = true;
+        onWarningRef.current?.();
+      }
+
+      if (next <= 0) {
+        setRunning(false);
+        onExpireRef.current?.();
+      }
+    }, 500); // Tick 2x/s za smooth display, ali računamo od anchora
 
     return () => clearInterval(id);
   }, [running, warningAt]);
 
+  // ── Format hh:mm:ss / mm:ss ───────────────────────────────────────────────
   const format = useCallback(
     (secs = timeLeft) => {
       const h = Math.floor(secs / 3600);
@@ -80,6 +99,31 @@ export function useTimer(
     [timeLeft],
   );
 
+  // ── Pause ─────────────────────────────────────────────────────────────────
+  const pause = useCallback(() => {
+    if (!running) return;
+    // Snimamo trenutni timeLeft kao novi anchor
+    const elapsed = anchorTime.current
+      ? Math.floor((Date.now() - anchorTime.current) / 1000)
+      : 0;
+    const remaining = Math.max(0, anchorSeconds.current - elapsed);
+    anchorSeconds.current = remaining;
+    anchorTime.current = null; // Nema aktivnog ticking-a
+    setTimeLeft(remaining);
+    setRunning(false);
+  }, [running]);
+
+  // ── Resume ────────────────────────────────────────────────────────────────
+  const resume = useCallback(() => {
+    if (running) return;
+    // Postavljamo novi anchor od trenutnog timeLeft
+    anchorTime.current = Date.now();
+    // anchorSeconds ostaje kao što je bio (timeLeft koji smo imali)
+    setRunning(true);
+  }, [running]);
+
+  // ── Resync (za server-sync) ───────────────────────────────────────────────
+  // Poziva se nakon pause/resume API poziva kad dobijemo server elapsed.
   const resync = useCallback(
     (nextSeconds, { running: nextRunning } = {}) => {
       if (nextSeconds == null) return;
@@ -87,8 +131,11 @@ export function useTimer(
 
       initialized.current = true;
       warned.current = normalized <= warningAt;
-      setTimeLeft(normalized);
+      anchorSeconds.current = normalized;
+      anchorTime.current =
+        typeof nextRunning === "boolean" && nextRunning ? Date.now() : null;
 
+      setTimeLeft(normalized);
       if (typeof nextRunning === "boolean") {
         setRunning(nextRunning);
       }
@@ -100,8 +147,8 @@ export function useTimer(
     timeLeft,
     formatted: format(),
     running,
-    pause: () => setRunning(false),
-    resume: () => setRunning(true),
+    pause,
+    resume,
     resync,
     isReady: initialized.current,
     isWarning: timeLeft <= warningAt && timeLeft > 120,
