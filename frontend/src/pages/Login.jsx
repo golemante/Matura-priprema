@@ -12,6 +12,7 @@ import { AuthLayout } from "@/components/layout/AuthLayout";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 function FormInput({ label, error, leftIcon: Icon, className, ...props }) {
   return (
@@ -56,6 +57,7 @@ export function LoginPage() {
   const from = location.state?.from;
   const redirectTo = from?.pathname ?? "/";
   const { mutate: login, isPending } = useLogin();
+  usePageTitle(PAGE_TITLES.login);
 
   const {
     register,

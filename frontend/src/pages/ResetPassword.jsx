@@ -11,8 +11,10 @@ import { cn } from "@/utils/utils";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { resetPasswordSchema as schema } from "@/utils/validators";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 export function ResetPasswordPage() {
+  usePageTitle(PAGE_TITLES.resetPassword);
   const navigate = useNavigate();
   const [isPending, setIsPending] = useState(false);
 

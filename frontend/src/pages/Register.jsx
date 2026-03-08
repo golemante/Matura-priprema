@@ -15,6 +15,7 @@ import { AuthLayout } from "@/components/layout/AuthLayout";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 function PasswordStrength({ password = "" }) {
   const checks = [
@@ -124,6 +125,7 @@ function FormInput({ label, error, leftIcon: Icon, className, ...props }) {
 export function RegisterPage() {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
+  usePageTitle(PAGE_TITLES.register);
 
   const { mutate: register, isPending } = useMutation({
     mutationFn: authApi.register,

@@ -42,6 +42,7 @@ import { SUBJECTS, EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 import { supabase } from "@/lib/supabase";
 import { attemptApi } from "@/api/attemptApi";
 import { cn } from "@/utils/utils";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -822,6 +823,7 @@ function SubjectsTab({ subjectStats, attempts }) {
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 export function StatisticsPage() {
+  usePageTitle(PAGE_TITLES.statistics);
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const defaultTab = params.get("tab") === "subjects" ? "subjects" : "history";

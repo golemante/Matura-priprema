@@ -45,6 +45,7 @@ import { useCurrentUser } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { attemptApi } from "@/api/attemptApi";
 import { cn } from "@/utils/utils";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API HOOKS
@@ -611,6 +612,7 @@ function EmptyState({ onStart }) {
 // MAIN DASHBOARD
 // ─────────────────────────────────────────────────────────────────────────────
 export function Dashboard() {
+  usePageTitle(PAGE_TITLES.dashboard);
   const user = useCurrentUser();
   const navigate = useNavigate();
 

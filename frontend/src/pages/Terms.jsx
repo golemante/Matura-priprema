@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 export function TermsPage() {
+  usePageTitle(PAGE_TITLES.terms);
   return (
     <div className="page-container py-10 md:py-14 max-w-3xl">
       <h1 className="text-3xl font-bold text-warm-900 mb-4">

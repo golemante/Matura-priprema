@@ -24,7 +24,6 @@ export const SUBJECTS = [
       badge: "bg-primary-100 text-primary-700",
       gradient: "from-primary-500 to-primary-700",
     },
-    examCount: 24,
     isPopular: true,
   },
   {
@@ -41,7 +40,6 @@ export const SUBJECTS = [
       badge: "bg-green-100 text-green-700",
       gradient: "from-green-500 to-green-700",
     },
-    examCount: 24,
     isPopular: true,
   },
   {
@@ -58,7 +56,6 @@ export const SUBJECTS = [
       badge: "bg-amber-100 text-amber-700",
       gradient: "from-amber-400 to-orange-500",
     },
-    examCount: 20,
     isPopular: true,
   },
   {
@@ -75,7 +72,6 @@ export const SUBJECTS = [
       badge: "bg-red-100 text-red-700",
       gradient: "from-red-500 to-red-700",
     },
-    examCount: 18,
     isPopular: false,
   },
   {
@@ -92,7 +88,6 @@ export const SUBJECTS = [
       badge: "bg-cyan-100 text-cyan-700",
       gradient: "from-cyan-500 to-teal-600",
     },
-    examCount: 16,
     isPopular: false,
   },
   {
@@ -109,7 +104,6 @@ export const SUBJECTS = [
       badge: "bg-fuchsia-100 text-fuchsia-700",
       gradient: "from-fuchsia-500 to-purple-600",
     },
-    examCount: 16,
     isPopular: false,
   },
   {
@@ -126,7 +120,6 @@ export const SUBJECTS = [
       badge: "bg-violet-100 text-violet-700",
       gradient: "from-violet-500 to-purple-600",
     },
-    examCount: 14,
     isPopular: false,
   },
   {
@@ -143,7 +136,6 @@ export const SUBJECTS = [
       badge: "bg-emerald-100 text-emerald-700",
       gradient: "from-emerald-500 to-green-600",
     },
-    examCount: 12,
     isPopular: false,
   },
 ];
@@ -161,7 +153,7 @@ export const EXAM_SESSIONS = [
   { id: "jesenski", name: "Jesenski rok", order: 2 },
 ];
 
-// Helper: normalizira session string na kanonski oblik za sortiranje
+/** Normalizira session string na kanonski oblik za sortiranje i usporedbu */
 export function normalizeSession(session) {
   if (session === "ljeto" || session === "ljetni") return "ljeto";
   if (session === "jesen" || session === "jesenski") return "jesen";
@@ -169,6 +161,6 @@ export function normalizeSession(session) {
 }
 
 export const DIFFICULTY_LEVELS = [
-  { id: "osnovna", name: "Osnovna razina", short: "B razina" },
   { id: "visa", name: "Viša razina", short: "A razina" },
+  { id: "osnovna", name: "Osnovna razina", short: "B razina" },
 ];

@@ -2,8 +2,10 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Home, SearchX } from "lucide-react";
 import { Button } from "@/components/common/Button";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 export function NotFoundPage() {
+  usePageTitle(PAGE_TITLES.notFound);
   return (
     <div className="flex-1 flex items-center justify-center page-container py-20">
       <motion.div

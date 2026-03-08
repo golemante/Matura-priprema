@@ -7,7 +7,7 @@
 //   • ExamCard prima prošireni exam objekt s community statistikama
 //   • Filtriranje normalizira session za usporedbu (ljeto === ljetni)
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, use } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, HelpCircle, X, Layers, RefreshCw } from "lucide-react";
@@ -20,6 +20,7 @@ import {
 } from "@/utils/constants";
 import { useExams } from "@/hooks/useExam";
 import { cn } from "@/utils/utils";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 // ── Transformacija DB → ExamCard format ──────────────────────────────────────
 //
@@ -245,6 +246,7 @@ function YearGroup({ year, exams, subject }) {
 
 // ── SubjectsPage ──────────────────────────────────────────────────────────────
 export function SubjectsPage() {
+  usePageTitle(PAGE_TITLES.subjectSelect);
   const { subjectId } = useParams();
   const [filterYear, setFilterYear] = useState(null);
   const [filterLevel, setFilterLevel] = useState(null);

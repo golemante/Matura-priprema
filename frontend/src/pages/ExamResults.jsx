@@ -53,6 +53,7 @@ import { examApi } from "@/api/examApi";
 import { attemptApi } from "@/api/attemptApi";
 import { SafeHtml } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/utils";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -803,6 +804,7 @@ function AnswerKeyError({ onRetry }) {
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 export function ResultsPage() {
+  usePageTitle(PAGE_TITLES.examResults);
   const { examId: examIdParam, attemptId: attemptIdParam } = useParams();
   const navigate = useNavigate();
   const [filter, setFilter] = useState("all");

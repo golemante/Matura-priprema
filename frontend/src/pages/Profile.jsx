@@ -9,6 +9,8 @@ import {
 import { PageWrapper } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
 import { useCurrentUser } from "@/hooks/useAuth";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
+import { use } from "react";
 
 function formatJoinDate(dateValue) {
   if (!dateValue) return "Nije dostupno";
@@ -45,6 +47,7 @@ function ProfileAvatar({ user }) {
 }
 
 export function ProfilePage() {
+  usePageTitle(PAGE_TITLES.profile);
   const user = useCurrentUser();
   const displayName = user?.name ?? user?.email?.split("@")[0] ?? "Korisnik";
 

@@ -10,8 +10,10 @@ import { authApi } from "@/api/authApi";
 import { cn } from "@/utils/utils";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { forgotPasswordSchema } from "@/utils/validators";
+import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 export function ForgotPasswordPage() {
+  usePageTitle(PAGE_TITLES.forgotPassword);
   const [sent, setSent] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [isPending, setIsPending] = useState(false);

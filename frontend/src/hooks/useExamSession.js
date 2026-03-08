@@ -1,47 +1,42 @@
-// hooks/useExamSession.js — v4
-// ═══════════════════════════════════════════════════════════════════════════
-// ISPRAVCI u v4:
+// hooks/useExamSession.js
+// ─────────────────────────────────────────────────────────────────────────────
+// P3-1: REFAKTOR — useExamSession je sada tanki orchestrator.
 //
-//  FIX P1-1  — Uklonjen ghost import `{ get } from "react-hook-form"`
-//  ─────────────────────────────────────────────────────────────────────────
-//  Taj import nije imao nikakvu svrhu u ovom hoouku. Naziv "get" mogao je
-//  zbuniti developere da misle da je to store getter. Potpuno uklonjen.
+// PRETHODNO: ~450 LOC "God hook" — init, navigacija, timer, submit, pauza,
+//            draft logika, keyboard shortcuts, sve u jednom fajlu.
 //
-//  FIX P1-2  — Race condition: Submit prije kreiranja Attempta
-//  ─────────────────────────────────────────────────────────────────────────
-//  PROBLEM: attemptApi.create() je bio fire-and-forget. Ako korisnik klikne
-//  Submit unutar prvih ~200ms (spora mreža), attemptIdRef.current je null →
-//  finish_attempt RPC se preskače → svi odgovori se NE bilježe na serveru.
+// SADA: Logika podijeljena na fokusirane module:
 //
-//  RJEŠENJE: Pratimo Promise od create() u attemptCreationPromiseRef.
-//  handleSubmit čeka na taj Promise prije nego pokuša finish().
-//  UI nije blokiran — ispit teče normalno.
+//   useExamInit     (hooks/exam/useExamInit.js)
+//     → dohvat ispita, attempt kreiranje, draft obnova, server-sync timera
 //
-//  FIX P2-1  — Uklonjen syncedAttemptRef koji nikad nije bio korišten
-//  ─────────────────────────────────────────────────────────────────────────
+//   useExamSubmit   (hooks/exam/useExamSubmit.js)
+//     → handlePause, handleResume, handleSubmit, submit modal state
 //
-//  FIX P2-8  — Keyboard shortcuts ignoriraju input/textarea elemente
-//  ─────────────────────────────────────────────────────────────────────────
-//  PROBLEM: a/b/c/d shortcuti okidali su se kad je fokus bio na <input>
-//  ili <textarea> (npr. unutar modala, pretrage).
-//  RJEŠENJE: useKeyPress dobiva opciju `ignoreFormElements: true`.
-// ═══════════════════════════════════════════════════════════════════════════
+//   useExamSession  (ovaj fajl — orchestrator)
+//     → timer, elapsed tracking, navigacija, odgovori, keyboard shortcuts
+//
+// PREDNOSTI:
+//   • Svaki modul je testabilan u izolaciji
+//   • useExamInit se može mock-ati bez simulate-anja submitta
+//   • useExamSubmit se može testirati s fake timerom
+//   • Lakše onboarding novih developera (jasna odgovornost po fajlu)
+//
+// BREAKING CHANGES: nula — API koji vraća je identičan prethodnoj verziji.
+// ExamTaking.jsx ne treba nikakve izmjene.
+// ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { useExamStore } from "@/store/examStore";
-import { useExamWithQuestions } from "@/hooks/useExam";
 import { useTimer } from "@/hooks/useTimer";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
-import { attemptApi } from "@/api/attemptApi";
-// ✅ FIX P1-1: Uklonjen `import { get } from "react-hook-form"` — bio je ghost import
+import { useExamInit } from "@/hooks/exam/useExamInit";
+import { useExamSubmit } from "@/hooks/exam/useExamSubmit";
 
 export function useExamSession(examId) {
-  const navigate = useNavigate();
   const store = useExamStore();
-
   const {
     questions,
     answers,
@@ -50,159 +45,20 @@ export function useExamSession(examId) {
     currentIndex,
     isPaused,
     attemptId,
-    startExam,
-    restoreDraft,
     setAnswer,
     toggleFlag,
     goToQuestion,
-    pauseExam,
-    resumeExam,
-    setAttemptId,
-    setExamMeta,
-    submitExam,
   } = store;
 
-  const [direction, setDirection] = useState(1);
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [showDraftModal, setShowDraftModal] = useState(false);
-  const [pendingDraft, setPendingDraft] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // ── FIX P1-2: Pratimo Promise kreiranja Attempta ─────────────────────────
-  // Bez ovoga: brzi submit mogao je poslati finish_attempt s null attemptId
-  // što znači odgovori nisu zapisani na serveru.
-  //
-  // attemptCreationPromiseRef drži:
-  //   • null     — create() još nije pokrenut
-  //   • Promise  — create() je u tijeku, čekamo ga
-  //   • "done"   — create() je završen (uspješno ili ne)
-  const attemptCreationPromiseRef = useRef(null);
-
-  const saveDraft = useCallback(
-    (nextAnswers) => {
-      const currentAttemptId =
-        attemptIdRef.current ?? draftStorage.load(examId)?.attemptId ?? null;
-      draftStorage.save(examId, nextAnswers, currentAttemptId);
-    },
-    [examId],
-  );
-
-  // Ref za attemptId u fire-and-forget async operacijama
-  const attemptIdRef = useRef(null);
-  useEffect(() => {
-    attemptIdRef.current = attemptId;
-  }, [attemptId]);
-
+  // ── Elapsed clock (anchor-based, ne interval-based — FIX P2-3) ───────────
   const elapsedClockRef = useRef({
     syncedElapsed: 0,
     localTickStartedAt: null,
   });
-  // ✅ FIX P2-1: Uklonjen `syncedAttemptRef` koji je bio deklariran ali nikad korišten
 
-  // ── Dohvati ispit + pitanja + passages ──────────────────────────────────
-  const {
-    data: examData,
-    isLoading,
-    error: fetchError,
-  } = useExamWithQuestions(examId);
-
-  // ── alreadyLoaded + isInitialized ───────────────────────────────────────
-  const alreadyLoaded = store.examId === examId && questions.length > 0;
-  const [isInitialized, setIsInitialized] = useState(alreadyLoaded);
-
-  // ── Inicijalizacija ispita ───────────────────────────────────────────────
-  useEffect(() => {
-    if (!examData) return;
-    if (examData.exam?.id !== examId) return;
-
-    if (store.examId === examId && store.questions.length > 0) {
-      setIsInitialized(true);
-      return;
-    }
-
-    const draft = draftStorage.load(examId);
-
-    startExam(examId, examData.questions, examData.passages);
-    setExamMeta(examData.exam);
-    setIsInitialized(true);
-
-    if (draft?.attemptId) {
-      // Postoji draft s attemptId — obnovi ga, nema potrebe kreirati novi
-      setAttemptId(draft.attemptId);
-      attemptCreationPromiseRef.current = "done";
-    } else {
-      // ✅ FIX P1-2: Pratimo Promise kreiranja umjesto fire-and-forget
-      const creationPromise = attemptApi
-        .create(examId)
-        .then((attempt) => {
-          if (attempt?.id) {
-            setAttemptId(attempt.id);
-            draftStorage.save(examId, draft?.answers ?? {}, attempt.id);
-          }
-        })
-        .catch((err) => {
-          console.warn("[attemptApi.create]", err);
-          toast.warning("Sesija nije pokrenuta — odgovori se čuvaju lokalno.");
-        })
-        .finally(() => {
-          // Označi kao završeno bez obzira na ishod
-          attemptCreationPromiseRef.current = "done";
-        });
-
-      // Pohrani Promise tako da handleSubmit može await-ati ga
-      attemptCreationPromiseRef.current = creationPromise;
-    }
-
-    // Provjeri draft
-    if (draft?.answers && Object.keys(draft.answers).length > 0) {
-      setPendingDraft(draft);
-      setShowDraftModal(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examData, examId]);
-
-  // Obnovi attemptId iz drafta nakon browser refresha
-  useEffect(() => {
-    if (alreadyLoaded && !attemptId) {
-      const draft = draftStorage.load(examId);
-      if (draft?.attemptId) {
-        setAttemptId(draft.attemptId);
-        attemptCreationPromiseRef.current = "done";
-      }
-    }
-  }, [alreadyLoaded, attemptId, examId, setAttemptId]);
-
-  // ── Timer ────────────────────────────────────────────────────────────────
-  const durationSeconds = examData?.exam?.duration_minutes
-    ? examData.exam.duration_minutes * 60
+  const durationSeconds = store.examMeta?.duration_minutes
+    ? store.examMeta.duration_minutes * 60
     : null;
-
-  const handleSubmitRef = useRef(null);
-
-  const timer = useTimer(durationSeconds, {
-    onExpire: () => handleSubmitRef.current?.(),
-    onWarning: () => toast.warning("Ostaje manje od 10 minuta!"),
-  });
-
-  const applyServerElapsed = useCallback(
-    (elapsedSeconds, { running = true } = {}) => {
-      if (!durationSeconds) return;
-
-      const normalizedElapsed = Math.min(
-        durationSeconds,
-        Math.max(0, Number(elapsedSeconds) || 0),
-      );
-
-      elapsedClockRef.current = {
-        syncedElapsed: normalizedElapsed,
-        localTickStartedAt: running ? Date.now() : null,
-      };
-
-      const remaining = Math.max(0, durationSeconds - normalizedElapsed);
-      timer.resync(remaining, { running });
-    },
-    [durationSeconds, timer],
-  );
 
   const getElapsed = useCallback(() => {
     if (!durationSeconds) return 0;
@@ -213,47 +69,54 @@ export function useExamSession(examId) {
     return Math.min(durationSeconds, syncedElapsed + localElapsed);
   }, [durationSeconds]);
 
-  // Server-sync timera (jednom po attemptId)
-  const syncedAttemptId = useRef(null);
+  // Definirano kao callback da ga timer može koristiti odmah pri init-u
+  // eslint-disable-next-line prefer-const
+  let timer; // deklariramo unaprijed — init-ira se ispod s useTimer
+
+  const applyServerElapsed = useCallback(
+    (elapsedSeconds, { running = true } = {}) => {
+      if (!durationSeconds) return;
+      const normalized = Math.min(
+        durationSeconds,
+        Math.max(0, Number(elapsedSeconds) || 0),
+      );
+      elapsedClockRef.current = {
+        syncedElapsed: normalized,
+        localTickStartedAt: running ? Date.now() : null,
+      };
+      const remaining = Math.max(0, durationSeconds - normalized);
+      // eslint-disable-next-line no-use-before-define
+      timerRef.current?.resync(remaining, { running });
+    },
+    [durationSeconds],
+  );
+
+  // Ref za timer — evita circular dependency (timer → applyServerElapsed → timer)
+  const timerRef = useRef(null);
+
+  // ── handleSubmit ref — injektiran nakon useExamSubmit inicijalizacije ─────
+  const handleSubmitRef = useRef(null);
+
+  // ── Timer ─────────────────────────────────────────────────────────────────
+  timer = useTimer(durationSeconds, {
+    onExpire: () => handleSubmitRef.current?.(),
+    onWarning: () => toast.warning("Ostaje manje od 10 minuta!"),
+  });
+
+  // Drži timerRef ažurnim
   useEffect(() => {
-    if (!durationSeconds || !attemptId) return;
-    if (syncedAttemptId.current === attemptId) return;
+    timerRef.current = timer;
+  });
 
-    let cancelled = false;
-
-    const syncElapsed = async () => {
-      try {
-        const snapshot = await attemptApi.getElapsed(attemptId);
-        if (cancelled) return;
-
-        const isAttemptPaused = snapshot?.status === "paused";
-        applyServerElapsed(snapshot?.elapsed_seconds ?? 0, {
-          running: !isPaused && !isAttemptPaused,
-        });
-        syncedAttemptId.current = attemptId;
-      } catch (err) {
-        console.warn("[attemptApi.getElapsed]", err);
-      }
-    };
-
-    syncElapsed();
-    return () => {
-      cancelled = true;
-    };
-  }, [attemptId, durationSeconds, isPaused, applyServerElapsed]);
-
+  // Sync elapsed clock s running stanjem timera
   useEffect(() => {
     if (!durationSeconds) return;
-
     if (timer.running && !elapsedClockRef.current.localTickStartedAt) {
       elapsedClockRef.current = {
-        syncedElapsed: elapsedClockRef.current.syncedElapsed,
+        ...elapsedClockRef.current,
         localTickStartedAt: Date.now(),
       };
-      return;
-    }
-
-    if (!timer.running && elapsedClockRef.current.localTickStartedAt) {
+    } else if (!timer.running && elapsedClockRef.current.localTickStartedAt) {
       elapsedClockRef.current = {
         syncedElapsed: getElapsed(),
         localTickStartedAt: null,
@@ -261,31 +124,62 @@ export function useExamSession(examId) {
     }
   }, [durationSeconds, timer.running, getElapsed]);
 
-  // ── Derived values ───────────────────────────────────────────────────────
+  // ── saveDraft helper ──────────────────────────────────────────────────────
+  const saveDraft = useCallback(
+    (nextAnswers) => {
+      const currentAttemptId =
+        attemptId ?? draftStorage.load(examId)?.attemptId ?? null;
+      draftStorage.save(examId, nextAnswers, currentAttemptId);
+    },
+    [examId, attemptId],
+  );
+
+  // ── Sub-hookovi ───────────────────────────────────────────────────────────
+  const init = useExamInit(examId, { applyServerElapsed });
+
+  const submit = useExamSubmit(examId, {
+    attemptIdRef: init.attemptIdRef,
+    attemptCreationPromiseRef: init.attemptCreationPromiseRef,
+    timer,
+    getElapsed,
+    applyServerElapsed,
+    durationSeconds,
+    saveDraft,
+  });
+
+  // Injektaj handleSubmitRef za timer onExpire
+  useEffect(() => {
+    handleSubmitRef.current = submit.handleSubmitRef.current;
+  });
+
+  // ── Auto-save svakih 30s ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!examId || Object.keys(answers).length === 0) return;
+    const id = setInterval(() => saveDraft(answers), 30_000);
+    return () => clearInterval(id);
+  }, [examId, answers, saveDraft]);
+
+  // ── Derived values ────────────────────────────────────────────────────────
   const totalVisible = questions.filter(
     (q) => q.questionType !== "fill_blank_mc",
   ).length;
   const answeredCount = Object.keys(answers).filter(
-    (k) => answers[k] !== null && answers[k] !== undefined,
+    (k) => answers[k] != null,
   ).length;
 
-  // ── Draft callbacks ──────────────────────────────────────────────────────
-  const confirmRestoreDraft = useCallback(() => {
-    if (pendingDraft?.answers) {
-      restoreDraft(pendingDraft.answers);
-      toast.success("Prethodni odgovori su obnovljeni.");
-    }
-    setShowDraftModal(false);
-    setPendingDraft(null);
-  }, [pendingDraft, restoreDraft]);
+  // ── Navigacija ────────────────────────────────────────────────────────────
+  const [direction, setDirection] = useState(1);
 
-  const discardDraft = useCallback(() => {
-    draftStorage.clear(examId);
-    setShowDraftModal(false);
-    setPendingDraft(null);
-  }, [examId]);
+  const handleGoTo = useCallback(
+    (idx) => {
+      if (idx < 0 || idx >= totalVisible) return;
+      setDirection(idx > currentIndex ? 1 : -1);
+      goToQuestion(idx);
+    },
+    [currentIndex, goToQuestion, totalVisible],
+  );
 
-  // ── Odgovor ──────────────────────────────────────────────────────────────
+  // ── Odgovor + zastavica ───────────────────────────────────────────────────
   const handleAnswer = useCallback(
     (letter) => {
       if (isPaused) return;
@@ -297,122 +191,13 @@ export function useExamSession(examId) {
     [isPaused, questions, currentIndex, setAnswer, saveDraft],
   );
 
-  // ── Zastavice ─────────────────────────────────────────────────────────────
   const handleToggleFlag = useCallback(() => {
     const current = questions[currentIndex];
     if (!current) return;
     toggleFlag(current.id);
   }, [questions, currentIndex, toggleFlag]);
 
-  // ── Navigacija ────────────────────────────────────────────────────────────
-  const handleGoTo = useCallback(
-    (idx) => {
-      if (idx < 0 || idx >= totalVisible) return;
-      setDirection(idx > currentIndex ? 1 : -1);
-      goToQuestion(idx);
-    },
-    [currentIndex, goToQuestion, totalVisible],
-  );
-
-  // ── Pauza ─────────────────────────────────────────────────────────────────
-  const handlePause = useCallback(async () => {
-    if (isPaused) return;
-
-    const elapsed = getElapsed();
-    elapsedClockRef.current = {
-      syncedElapsed: elapsed,
-      localTickStartedAt: null,
-    };
-
-    pauseExam();
-    timer.resync(Math.max(0, (durationSeconds ?? 0) - elapsed), {
-      running: false,
-    });
-
-    const currentAnswers = useExamStore.getState().answers;
-    saveDraft(currentAnswers);
-
-    const aid = attemptIdRef.current;
-    if (aid) {
-      attemptApi
-        .pause(aid, elapsed, currentAnswers)
-        .catch((err) => console.warn("[pause_attempt]", err));
-    }
-    toast.info("Ispit pauziran. Odgovori su sačuvani.");
-  }, [isPaused, pauseExam, timer, getElapsed, saveDraft, durationSeconds]);
-
-  // ── Nastavak ──────────────────────────────────────────────────────────────
-  const handleResume = useCallback(async () => {
-    if (!isPaused) return;
-
-    const aid = attemptIdRef.current;
-    let serverElapsed = getElapsed();
-
-    if (aid) {
-      try {
-        const resumeData = await attemptApi.resume(aid);
-        serverElapsed = resumeData?.elapsed_seconds ?? serverElapsed;
-      } catch (err) {
-        console.warn("[resume_attempt]", err);
-      }
-    }
-
-    applyServerElapsed(serverElapsed, { running: true });
-    resumeExam();
-    toast.success("Ispit nastavljen.");
-  }, [isPaused, resumeExam, getElapsed, applyServerElapsed]);
-
-  // ── Predaja ispita ────────────────────────────────────────────────────────
-  const handleSubmit = useCallback(async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-
-    const currentAnswers = useExamStore.getState().answers;
-    const elapsed = getElapsed();
-
-    // ✅ FIX P1-2: Čekaj kreiranje Attempta ako je još u tijeku
-    // Bez ovoga brzi submit šalje finish_attempt s null attemptId
-    const creationRef = attemptCreationPromiseRef.current;
-    if (creationRef && creationRef !== "done") {
-      try {
-        await creationRef;
-      } catch {
-        // Kreiranje je failalo — nastavimo bez attemptId (offline fallback)
-      }
-    }
-
-    const aid = attemptIdRef.current;
-
-    try {
-      let rpcResult = null;
-      if (aid) {
-        rpcResult = await attemptApi.finish(aid, currentAnswers, elapsed);
-      }
-      submitExam(rpcResult);
-      draftStorage.clear(examId);
-      navigate(aid ? `/rezultati/pokusaj/${aid}` : `/rezultati/${examId}`);
-    } catch (err) {
-      console.error("[handleSubmit]", err);
-      toast.error("Greška pri predaji ispita. Pokušaj ponovo.");
-      setIsSubmitting(false);
-    }
-  }, [isSubmitting, submitExam, examId, navigate, getElapsed]);
-
-  useEffect(() => {
-    handleSubmitRef.current = handleSubmit;
-  }, [handleSubmit]);
-
-  // ── Auto-save svakih 30s ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (!examId || Object.keys(answers).length === 0) return;
-    const id = setInterval(() => {
-      saveDraft(answers);
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [examId, answers, saveDraft]);
-
-  // ── Keyboard shortcuts ────────────────────────────────────────────────────
-  // ✅ FIX P2-8: ignoreFormElements: true — shortcuti se ne okidaju na input/textarea
+  // ── Keyboard shortcuts (FIX P2-8: ignoreFormElements) ────────────────────
   useKeyPress(
     {
       ArrowRight: () =>
@@ -427,23 +212,24 @@ export function useExamSession(examId) {
       d: () => handleAnswer("d"),
       e: () => handleAnswer("e"),
       f: handleToggleFlag,
-      p: handlePause,
+      p: submit.handlePause,
       "?": () =>
-        toast.info(
-          "Prečaci: ←→ navigacija · A/B/C/D/E odabir · F označi · P pauza",
-        ),
+        toast.info("Prečaci: ←→ navigacija · A–E odabir · F označi · P pauza"),
     },
     { ignoreFormElements: true },
   );
 
   useBeforeUnload(questions.length > 0 && !store.submittedAt);
 
+  // ── Computed current question ─────────────────────────────────────────────
   const current = questions[currentIndex] ?? null;
   const currentPassage = current?.passageId
     ? (passages[current.passageId] ?? null)
     : null;
   const isCurrentFlagged = current ? flagged.has(current.id) : false;
 
+  // ── Public API ────────────────────────────────────────────────────────────
+  // IDENTIČAN s prethodnom verzijom — ExamTaking.jsx ne treba izmjene.
   return {
     questions,
     answers,
@@ -457,22 +243,26 @@ export function useExamSession(examId) {
     isCurrentFlagged,
     direction,
     isPaused,
-    isSubmitting,
     examMeta: store.examMeta,
-    isLoading,
-    isInitialized,
-    fetchError,
-    showSubmitModal,
-    setShowSubmitModal,
-    showDraftModal,
-    confirmRestoreDraft,
-    discardDraft,
+
+    isLoading: init.isLoading,
+    isInitialized: init.isInitialized,
+    fetchError: init.fetchError,
+
+    isSubmitting: submit.isSubmitting,
+    showSubmitModal: submit.showSubmitModal,
+    setShowSubmitModal: submit.setShowSubmitModal,
+
+    showDraftModal: init.showDraftModal,
+    confirmRestoreDraft: init.confirmRestoreDraft,
+    discardDraft: init.discardDraft,
+
     handleAnswer,
     handleToggleFlag,
     handleGoTo,
-    handleSubmit,
-    handlePause,
-    handleResume,
+    handleSubmit: submit.handleSubmit,
+    handlePause: submit.handlePause,
+    handleResume: submit.handleResume,
     timer,
   };
 }

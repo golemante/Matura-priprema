@@ -39,6 +39,7 @@ import { ExamTimer } from "@/components/exam/Timer";
 import { useExamSession } from "@/hooks/useExamSession";
 import { EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 import { cn } from "@/utils/utils";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const slideVariants = {
   enter: (dir) => ({ x: dir > 0 ? 28 : -28, opacity: 0 }),
@@ -589,6 +590,8 @@ function PausedOverlay({ onResume }) {
 
 // ── Quiz Page ─────────────────────────────────────────────────────────────────
 export function QuizPage() {
+  const { examMeta } = useExamSession(examId);
+  usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
   const { examId } = useParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -606,7 +609,6 @@ export function QuizPage() {
     direction,
     isPaused,
     isSubmitting,
-    examMeta,
     isLoading,
     isInitialized,
     fetchError,
