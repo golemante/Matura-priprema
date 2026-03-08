@@ -590,8 +590,6 @@ function PausedOverlay({ onResume }) {
 
 // ── Quiz Page ─────────────────────────────────────────────────────────────────
 export function QuizPage() {
-  const { examMeta } = useExamSession(examId);
-  usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
   const { examId } = useParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -608,6 +606,7 @@ export function QuizPage() {
     isCurrentFlagged,
     direction,
     isPaused,
+    examMeta,
     isSubmitting,
     isLoading,
     isInitialized,
@@ -625,6 +624,8 @@ export function QuizPage() {
     handleResume,
     timer,
   } = useExamSession(examId);
+
+  usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
 
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;

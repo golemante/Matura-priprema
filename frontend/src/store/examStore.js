@@ -59,6 +59,7 @@ export const useExamStore = create((set, get) => ({
   startExam: (examId, questions, passages) =>
     set({
       examId,
+      examMeta: null,
       questions,
       passages,
       answers: {},
