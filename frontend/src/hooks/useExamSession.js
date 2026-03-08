@@ -32,8 +32,8 @@ import { useKeyPress } from "@/hooks/useKeyPress";
 import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
-import { useExamInit } from "@/hooks/exam/useExamInit";
-import { useExamSubmit } from "@/hooks/exam/useExamSubmit";
+import { useExamInit } from "@/hooks/useExamInit";
+import { useExamSubmit } from "@/hooks/useExamSubmit";
 
 export function useExamSession(examId) {
   const store = useExamStore();
