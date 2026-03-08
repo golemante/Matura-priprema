@@ -105,6 +105,18 @@ export const attemptApi = {
     return data;
   },
 
+  // Koristi se za re-sync timera nakon refresh/reopen sesije.
+  getElapsed: async (attemptId) => {
+    const { data, error } = await supabase
+      .from("attempts")
+      .select("elapsed_seconds, status")
+      .eq("id", attemptId)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
   // ── 5. Dohvati sve pokušaje korisnika (RLS automatski filtrira) ────────────
   // JOIN na exams za prikaz metapodataka (predmet, godina, rok, razina).
   // Sortira: completed koji su završeni nedavno su prvi.

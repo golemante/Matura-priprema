@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@/utils/validators";
 import { useLogin } from "@/hooks/useAuth";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Mail, Lock } from "lucide-react";
 // eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
@@ -52,6 +52,9 @@ function FormInput({ label, error, leftIcon: Icon, className, ...props }) {
 }
 
 export function LoginPage() {
+  const location = useLocation();
+  const from = location.state?.from;
+  const redirectTo = from?.pathname ?? "/";
   const { mutate: login, isPending } = useLogin();
 
   const {
@@ -87,7 +90,11 @@ export function LoginPage() {
       <AuthDivider />
 
       {/* Email/password form */}
-      <form onSubmit={handleSubmit(login)} className="space-y-4" noValidate>
+      <form
+        onSubmit={handleSubmit((values) => login({ ...values, redirectTo }))}
+        className="space-y-4"
+        noValidate
+      >
         <FormInput
           label="Email adresa"
           type="email"

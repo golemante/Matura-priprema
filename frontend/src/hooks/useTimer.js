@@ -80,12 +80,29 @@ export function useTimer(
     [timeLeft],
   );
 
+  const resync = useCallback(
+    (nextSeconds, { running: nextRunning } = {}) => {
+      if (nextSeconds == null) return;
+      const normalized = Math.max(0, Number(nextSeconds) || 0);
+
+      initialized.current = true;
+      warned.current = normalized <= warningAt;
+      setTimeLeft(normalized);
+
+      if (typeof nextRunning === "boolean") {
+        setRunning(nextRunning);
+      }
+    },
+    [warningAt],
+  );
+
   return {
     timeLeft,
     formatted: format(),
     running,
     pause: () => setRunning(false),
     resume: () => setRunning(true),
+    resync,
     isReady: initialized.current,
     isWarning: timeLeft <= warningAt && timeLeft > 120,
     isDanger: timeLeft <= 120,

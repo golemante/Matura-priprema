@@ -26,6 +26,7 @@ import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
 import { attemptApi } from "@/api/attemptApi";
+import { get } from "react-hook-form";
 
 export function useExamSession(examId) {
   const navigate = useNavigate();
@@ -57,11 +58,26 @@ export function useExamSession(examId) {
   const [pendingDraft, setPendingDraft] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const saveDraft = useCallback(
+    (nextAnswers) => {
+      const currentAttemptId =
+        attemptIdRef.current ?? draftStorage.load(examId)?.attemptId ?? null;
+      draftStorage.save(examId, nextAnswers, currentAttemptId);
+    },
+    [examId],
+  );
+
   // Ref za attemptId u fire-and-forget async operacijama
   const attemptIdRef = useRef(null);
   useEffect(() => {
     attemptIdRef.current = attemptId;
   }, [attemptId]);
+
+  const elapsedClockRef = useRef({
+    syncedElapsed: 0,
+    localTickStartedAt: null,
+  });
+  const syncedAttemptRef = useRef(null);
 
   // ── Dohvati ispit + pitanja + passages ──────────────────────────────────
   const {
@@ -84,26 +100,31 @@ export function useExamSession(examId) {
       return;
     }
 
+    const draft = draftStorage.load(examId);
+
     startExam(examId, examData.questions, examData.passages);
     setExamMeta(examData.exam);
     setIsInitialized(true);
 
-    // Kreiraj attempt u bazi (async, ne blokira UI)
-    attemptApi
-      .create(examId)
-      .then((attempt) => {
-        if (attempt?.id) {
-          setAttemptId(attempt.id);
-          draftStorage.save(examId, {}, attempt.id);
-        }
-      })
-      .catch((err) => {
-        console.warn("[attemptApi.create]", err);
-        toast.warning("Sesija nije pokrenuta — odgovori se čuvaju lokalno.");
-      });
+    if (draft?.attemptId) {
+      setAttemptId(draft.attemptId);
+    } else {
+      // Kreiraj attempt u bazi (async, ne blokira UI)
+      attemptApi
+        .create(examId)
+        .then((attempt) => {
+          if (attempt?.id) {
+            setAttemptId(attempt.id);
+            draftStorage.save(examId, draft?.answers ?? {}, attempt.id);
+          }
+        })
+        .catch((err) => {
+          console.warn("[attemptApi.create]", err);
+          toast.warning("Sesija nije pokrenuta — odgovori se čuvaju lokalno.");
+        });
+    }
 
     // Provjeri draft
-    const draft = draftStorage.load(examId);
     if (draft?.answers && Object.keys(draft.answers).length > 0) {
       setPendingDraft(draft);
       setShowDraftModal(true);
@@ -133,12 +154,82 @@ export function useExamSession(examId) {
     onWarning: () => toast.warning("Ostaje manje od 10 minuta!"),
   });
 
-  // Helper: koliko sekundi je prošlo od starta
-  // Koristimo ovo umjesto elapsedRef koji se oslanjao na nepostojeći onTick
+  const applyServerElapsed = useCallback(
+    (elapsedSeconds, { running = true } = {}) => {
+      if (!durationSeconds) return;
+
+      const normalizedElapsed = Math.min(
+        durationSeconds,
+        Math.max(0, Number(elapsedSeconds) || 0),
+      );
+
+      elapsedClockRef.current = {
+        syncedElapsed: normalizedElapsed,
+        localTickStartedAt: running ? Date.now() : null,
+      };
+
+      const remaining = Math.max(0, durationSeconds - normalizedElapsed);
+      timer.resync(remaining, { running });
+    },
+    [durationSeconds, timer],
+  );
+
   const getElapsed = useCallback(() => {
     if (!durationSeconds) return 0;
-    return Math.max(0, durationSeconds - timer.timeLeft);
-  }, [durationSeconds, timer.timeLeft]);
+    const { syncedElapsed, localTickStartedAt } = elapsedClockRef.current;
+    const localElapsed = localTickStartedAt
+      ? Math.floor((Date.now() - localTickStartedAt) / 1000)
+      : 0;
+
+    return Math.min(durationSeconds, syncedElapsed + localElapsed);
+  }, [durationSeconds]);
+
+  useEffect(() => {
+    if (!durationSeconds || !attemptId) return;
+    if (syncedAttemptRef.current === attemptId) return;
+
+    let cancelled = false;
+
+    const syncElapsed = async () => {
+      try {
+        const snapshot = await attemptApi.getElapsed(attemptId);
+        if (cancelled) return;
+
+        const isAttemptPaused = snapshot?.status === "paused";
+        applyServerElapsed(snapshot?.elapsed_seconds ?? 0, {
+          running: !isPaused && !isAttemptPaused,
+        });
+        syncedAttemptRef.current = attemptId;
+      } catch (err) {
+        console.warn("[attemptApi.getElapsed]", err);
+      }
+    };
+
+    syncElapsed();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attemptId, durationSeconds, isPaused, applyServerElapsed]);
+
+  useEffect(() => {
+    if (!durationSeconds) return;
+
+    if (timer.running && !elapsedClockRef.current.localTickStartedAt) {
+      elapsedClockRef.current = {
+        syncedElapsed: elapsedClockRef.current.syncedElapsed,
+        localTickStartedAt: Date.now(),
+      };
+      return;
+    }
+
+    if (!timer.running && elapsedClockRef.current.localTickStartedAt) {
+      elapsedClockRef.current = {
+        syncedElapsed: getElapsed(),
+        localTickStartedAt: null,
+      };
+    }
+  }, [durationSeconds, timer.running, getElapsed]);
 
   // ── Derived values ───────────────────────────────────────────────────────
   const totalVisible = questions.filter(
@@ -171,13 +262,9 @@ export function useExamSession(examId) {
       const current = questions[currentIndex];
       if (!current) return;
       setAnswer(current.id, letter);
-      draftStorage.save(
-        examId,
-        useExamStore.getState().answers,
-        attemptIdRef.current,
-      );
+      saveDraft(useExamStore.getState().answers);
     },
-    [isPaused, questions, currentIndex, setAnswer, examId],
+    [isPaused, questions, currentIndex, setAnswer, saveDraft],
   );
 
   // ── Zastavice ─────────────────────────────────────────────────────────────
@@ -200,12 +287,20 @@ export function useExamSession(examId) {
   // ── Pauza ─────────────────────────────────────────────────────────────────
   const handlePause = useCallback(async () => {
     if (isPaused) return;
+
+    const elapsed = getElapsed();
+    elapsedClockRef.current = {
+      syncedElapsed: elapsed,
+      localTickStartedAt: null,
+    };
+
     pauseExam();
-    timer.pause();
+    timer.resync(Math.max(0, (durationSeconds ?? 0) - elapsed), {
+      running: false,
+    });
 
     const currentAnswers = useExamStore.getState().answers;
-    const elapsed = getElapsed();
-    draftStorage.save(examId, currentAnswers, attemptIdRef.current);
+    saveDraft(currentAnswers);
 
     const aid = attemptIdRef.current;
     if (aid) {
@@ -214,22 +309,28 @@ export function useExamSession(examId) {
         .catch((err) => console.warn("[pause_attempt]", err));
     }
     toast.info("Ispit pauziran. Odgovori su sačuvani.");
-  }, [isPaused, pauseExam, timer, examId, getElapsed]);
+  }, [isPaused, pauseExam, timer, getElapsed, saveDraft, durationSeconds]);
 
   // ── Nastavak ──────────────────────────────────────────────────────────────
   const handleResume = useCallback(async () => {
     if (!isPaused) return;
-    resumeExam();
-    timer.resume();
 
     const aid = attemptIdRef.current;
+    let serverElapsed = getElapsed();
+
     if (aid) {
-      attemptApi
-        .resume(aid)
-        .catch((err) => console.warn("[resume_attempt]", err));
+      try {
+        const resumeData = await attemptApi.resume(aid);
+        serverElapsed = resumeData?.elapsed_seconds ?? serverElapsed;
+      } catch (err) {
+        console.warn("[resume_attempt]", err);
+      }
     }
+
+    applyServerElapsed(serverElapsed, { running: true });
+    resumeExam();
     toast.success("Ispit nastavljen.");
-  }, [isPaused, resumeExam, timer]);
+  }, [isPaused, resumeExam, getElapsed, applyServerElapsed]);
 
   // ── Predaja ispita ────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
@@ -264,10 +365,10 @@ export function useExamSession(examId) {
   useEffect(() => {
     if (!examId || Object.keys(answers).length === 0) return;
     const id = setInterval(() => {
-      draftStorage.save(examId, answers, attemptIdRef.current);
+      saveDraft(answers);
     }, 30_000);
     return () => clearInterval(id);
-  }, [examId, answers]);
+  }, [examId, answers, saveDraft]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useKeyPress({

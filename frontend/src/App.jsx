@@ -46,6 +46,8 @@ function App() {
             { ...session.user, name: extractName(session.user) },
             session.access_token,
           );
+        } else {
+          clearAuth();
         }
         // Bez obzira ima li sesije, authReady = true → renderaj app
         setAuthReady(true);
