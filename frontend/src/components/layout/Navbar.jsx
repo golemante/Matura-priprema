@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   BookOpenCheck,
   Menu,
@@ -71,7 +71,7 @@ function ProfileDropdown({ user, onClose }) {
           className="flex items-center gap-2.5 px-4 py-2 text-sm text-warm-700 hover:bg-warm-50 hover:text-warm-900 transition-colors"
         >
           <LayoutDashboard size={15} className="text-warm-400" />
-          Dashboard
+          Početna ploča
         </Link>
         <Link
           to="/rezultati"
@@ -79,7 +79,15 @@ function ProfileDropdown({ user, onClose }) {
           className="flex items-center gap-2.5 px-4 py-2 text-sm text-warm-700 hover:bg-warm-50 hover:text-warm-900 transition-colors"
         >
           <BarChart2 size={15} className="text-warm-400" />
-          Moji rezultati
+          Rezultati
+        </Link>
+        <Link
+          to="/profil"
+          onClick={onClose}
+          className="flex items-center gap-2.5 px-4 py-2 text-sm text-warm-700 hover:bg-warm-50 hover:text-warm-900 transition-colors"
+        >
+          <User size={15} className="text-warm-400" />
+          Moj profil
         </Link>
       </div>
 
@@ -266,7 +274,7 @@ export function Header() {
                   className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-colors"
                 >
                   <LayoutDashboard size={15} />
-                  Dashboard
+                  Početna ploča
                 </Link>
                 <Link
                   to="/rezultati"
@@ -274,7 +282,15 @@ export function Header() {
                   className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-colors"
                 >
                   <BarChart2 size={15} />
-                  Moji rezultati
+                  Rezultati
+                </Link>
+                <Link
+                  to="/profil"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-colors"
+                >
+                  <User size={15} />
+                  Moj profil
                 </Link>
                 <div className="border-t border-warm-100 mt-1 pt-1">
                   {/* User info u mobilnom */}

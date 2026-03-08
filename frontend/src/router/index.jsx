@@ -22,8 +22,17 @@ const StatisticsPage = lazy(() =>
 const Dashboard = lazy(() =>
   import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })),
 );
+const ProfilePage = lazy(() =>
+  import("@/pages/Profile").then((m) => ({ default: m.ProfilePage })),
+);
 const NotFoundPage = lazy(() =>
   import("@/pages/NotFound").then((m) => ({ default: m.NotFoundPage })),
+);
+const TermsPage = lazy(() =>
+  import("@/pages/Terms").then((m) => ({ default: m.TermsPage })),
+);
+const PrivacyPage = lazy(() =>
+  import("@/pages/Privacy").then((m) => ({ default: m.PrivacyPage })),
 );
 // Auth stranice (bez layouta)
 const LoginPage = lazy(() =>
@@ -97,6 +106,10 @@ export const router = createBrowserRouter([
         element: withSuspense(<SubjectsPage />),
       },
       {
+        path: "rezultati/pokusaj/:attemptId",
+        element: withSuspense(<ResultsPage />),
+      },
+      {
         path: "rezultati/:examId",
         element: withSuspense(<ResultsPage />),
       },
@@ -109,6 +122,20 @@ export const router = createBrowserRouter([
       {
         path: "dashboard",
         element: <ProtectedRoute>{withSuspense(<Dashboard />)}</ProtectedRoute>,
+      },
+      {
+        path: "uvjeti",
+        element: withSuspense(<TermsPage />),
+      },
+      {
+        path: "privatnost",
+        element: withSuspense(<PrivacyPage />),
+      },
+      {
+        path: "profil",
+        element: (
+          <ProtectedRoute>{withSuspense(<ProfilePage />)}</ProtectedRoute>
+        ),
       },
       {
         path: "*",

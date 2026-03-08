@@ -142,13 +142,19 @@ export function LoginPage() {
       {/* Footer */}
       <p className="text-xs text-warm-400 text-center mt-6 leading-relaxed">
         Prijavom prihvaćaš{" "}
-        <a href="#" className="underline hover:text-warm-600 transition-colors">
+        <Link
+          to="/uvjeti"
+          className="underline hover:text-warm-600 transition-colors"
+        >
           uvjete korištenja
-        </a>{" "}
+        </Link>{" "}
         i{" "}
-        <a href="#" className="underline hover:text-warm-600 transition-colors">
+        <Link
+          to="/privatnost"
+          className="underline hover:text-warm-600 transition-colors"
+        >
           politiku privatnosti
-        </a>
+        </Link>
         .
       </p>
     </AuthLayout>

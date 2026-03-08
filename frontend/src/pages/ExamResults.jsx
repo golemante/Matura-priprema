@@ -50,6 +50,7 @@ import { Button } from "@/components/common/Button";
 import { SUBJECTS } from "@/utils/constants";
 import { useExamStore } from "@/store/examStore";
 import { examApi } from "@/api/examApi";
+import { attemptApi } from "@/api/attemptApi";
 import { SafeHtml } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/utils";
 
@@ -802,19 +803,145 @@ function AnswerKeyError({ onRetry }) {
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 export function ResultsPage() {
-  const { examId } = useParams();
+  const { examId: examIdParam, attemptId: attemptIdParam } = useParams();
   const navigate = useNavigate();
   const [filter, setFilter] = useState("all");
 
   const lastResult = useExamStore((s) => s.lastResult);
+  const hasStoreResult =
+    !!lastResult &&
+    (!examIdParam || lastResult.examId === examIdParam) &&
+    (!attemptIdParam || lastResult.attemptId === attemptIdParam);
 
-  useEffect(() => {
-    if (!lastResult || lastResult.examId !== examId) {
-      navigate("/", { replace: true });
+  const {
+    data: attemptData,
+    isLoading: loadingAttempt,
+    error: attemptError,
+  } = useQuery({
+    queryKey: ["attempt", attemptIdParam],
+    queryFn: () => attemptApi.getById(attemptIdParam),
+    enabled: !hasStoreResult && !!attemptIdParam,
+    retry: 1,
+  });
+
+  const {
+    data: examContent,
+    isLoading: loadingExam,
+    error: examError,
+  } = useQuery({
+    queryKey: ["exam-with-questions", attemptData?.exam_id],
+    queryFn: () => examApi.getWithQuestions(attemptData.exam_id),
+    enabled: !hasStoreResult && !!attemptData?.exam_id,
+    staleTime: Infinity,
+  });
+
+  const effectiveAttemptId = hasStoreResult
+    ? lastResult?.attemptId
+    : (attemptData?.id ?? attemptIdParam);
+
+  const {
+    data: answerKey,
+    isLoading: loadingKey,
+    error: keyError,
+    refetch: retryKey,
+  } = useQuery({
+    queryKey: ["answer-key", effectiveAttemptId],
+    queryFn: () => examApi.getAnswerKey(effectiveAttemptId),
+    enabled: !!effectiveAttemptId,
+    staleTime: Infinity,
+    retry: 2,
+  });
+
+  const resolvedData = useMemo(() => {
+    if (hasStoreResult && lastResult) {
+      return {
+        examId: lastResult.examId,
+        attemptId: lastResult.attemptId,
+        questions: lastResult.questions ?? [],
+        answers: lastResult.answers ?? {},
+        passages: lastResult.passages ?? {},
+        flagged: lastResult.flagged ?? new Set(),
+        elapsedSeconds: lastResult.elapsedSeconds ?? null,
+        rpcResult: lastResult.rpcResult ?? null,
+        examMeta: lastResult.examMeta ?? null,
+      };
     }
-  }, [lastResult, examId, navigate]);
 
-  if (!lastResult || lastResult.examId !== examId) return null;
+    if (!attemptData || !examContent) return null;
+
+    const restoredAnswers = (attemptData.attempt_answers ?? []).reduce(
+      (acc, row) => {
+        acc[row.question_id] = row.chosen_option ?? null;
+        return acc;
+      },
+      {},
+    );
+
+    return {
+      examId: attemptData.exam_id,
+      attemptId: attemptData.id,
+      questions: examContent.questions ?? [],
+      answers: restoredAnswers,
+      passages: examContent.passages ?? {},
+      flagged: new Set(),
+      elapsedSeconds: attemptData.elapsed_seconds ?? null,
+      rpcResult: {
+        score_pct: attemptData.score_pct,
+        correct_count: attemptData.correct_count,
+        total_count: attemptData.total_count,
+        elapsed_seconds: attemptData.elapsed_seconds,
+        answered_count: (attemptData.attempt_answers ?? []).filter(
+          (row) => row.chosen_option != null,
+        ).length,
+        skipped_count: (attemptData.attempt_answers ?? []).filter(
+          (row) => row.chosen_option == null,
+        ).length,
+      },
+      examMeta: attemptData.exam ?? examContent.exam ?? null,
+    };
+  }, [hasStoreResult, lastResult, attemptData, examContent]);
+
+  if (!hasStoreResult && !attemptIdParam) {
+    return (
+      <PageWrapper className="max-w-2xl mx-auto py-10">
+        <div className="p-5 rounded-xl border border-warm-300 bg-warm-100">
+          <p className="text-sm font-semibold text-warm-800">
+            Rezultat nije dostupan.
+          </p>
+          <p className="text-sm text-warm-600 mt-1">
+            Otvori rezultat preko trajnog linka oblika
+            <span className="font-mono"> /rezultati/pokusaj/:attemptId</span>.
+          </p>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (!hasStoreResult && (loadingAttempt || loadingExam)) {
+    return (
+      <PageWrapper className="max-w-2xl mx-auto py-12">
+        <div className="flex items-center gap-2 text-warm-600 text-sm">
+          <div className="w-4 h-4 rounded-full border-2 border-primary-300 border-t-primary-600 animate-spin" />
+          Učitavanje rezultata pokušaja...
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (attemptError || examError || !resolvedData) {
+    return (
+      <PageWrapper className="max-w-2xl mx-auto py-10">
+        <div className="p-5 rounded-xl border border-red-200 bg-red-50">
+          <p className="text-sm font-semibold text-red-700">
+            Rezultat nije dostupan ili attemptId ne postoji.
+          </p>
+          <p className="text-sm text-red-600 mt-1">
+            Provjeri poveznicu ili pokušaj kasnije.
+          </p>
+        </div>
+      </PageWrapper>
+    );
+  }
 
   const {
     questions,
@@ -823,42 +950,25 @@ export function ResultsPage() {
     flagged,
     elapsedSeconds,
     rpcResult,
-    attemptId,
     examMeta,
-  } = lastResult;
+    examId,
+  } = resolvedData;
 
-  // ── Dohvati točne odgovore ──────────────────────────────────────────────
-  const {
-    data: answerKey,
-    isLoading: loadingKey,
-    error: keyError,
-    refetch: retryKey,
-  } = useQuery({
-    queryKey: ["answer-key", attemptId],
-    queryFn: () => examApi.getAnswerKey(attemptId),
-    enabled: !!attemptId,
-    staleTime: Infinity,
-    retry: 2,
-  });
-
-  // ── Score values ──────────────────────────────────────────────────────────
   const pct = rpcResult?.score_pct ?? null;
   const correctCount = rpcResult?.correct_count ?? null;
   const totalCount =
     rpcResult?.total_count ??
     questions.filter((q) => q.questionType !== "fill_blank_mc").length;
 
-  const subjectId = lastResult.examMeta?.subject_id ?? examId?.split("-")[0];
+  const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const subject = SUBJECTS.find((s) => s.id === subjectId);
   const backLink = subject ? `/predmeti/${subject.id}` : "/";
 
-  // ── Sekcije ───────────────────────────────────────────────────────────────
   const sections = useMemo(
     () => [...new Set(questions.map((q) => q.sectionLabel ?? "Ostalo"))],
     [questions],
   );
 
-  // ── Filter counts ─────────────────────────────────────────────────────────
   const scoreable = questions.filter((q) => q.questionType !== "fill_blank_mc");
   const filterCounts = useMemo(
     () => ({
@@ -877,7 +987,6 @@ export function ResultsPage() {
       <PageWrapper className="max-w-2xl mx-auto pb-24">
         <Confetti active={pct !== null && pct >= 75} />
 
-        {/* Back link */}
         <Link
           to={backLink}
           className="inline-flex items-center gap-2 text-sm text-warm-500 hover:text-warm-800 mb-5 transition-colors font-medium"
@@ -886,7 +995,12 @@ export function ResultsPage() {
           Natrag na ispite
         </Link>
 
-        {/* ── Score hero ─────────────────────────────────────────────── */}
+        {examMeta && (
+          <p className="text-xs text-warm-500 mb-3">
+            {subject?.name ?? subjectId?.toUpperCase()} · {examMeta.year}. ·{" "}
+            {examMeta.session} · {examMeta.level}
+          </p>
+        )}
         {pct !== null && (
           <ScoreHero
             pct={pct}
@@ -898,7 +1012,6 @@ export function ResultsPage() {
           />
         )}
 
-        {/* Ako nema score (npr. anonimni korisnik ili RPC fail) */}
         {pct === null && (
           <div className="flex items-start gap-3 p-4 bg-warm-100 border border-warm-300 rounded-xl mb-4">
             <AlertCircle
@@ -906,18 +1019,15 @@ export function ResultsPage() {
               className="text-warm-500 flex-shrink-0 mt-0.5"
             />
             <p className="text-sm text-warm-700">
-              Rezultat nije dostupan — nisi prijavljen/a ili je došlo do greške
-              pri ocjenjivanju. Možeš svejedno pregledati sve odgovore ispod.
+              Rezultat nije dostupan — možeš svejedno pregledati sve odgovore
+              ispod.
             </p>
           </div>
         )}
 
-        {/* ── Answer key error ───────────────────────────────────────── */}
         {keyError && <AnswerKeyError onRetry={retryKey} />}
 
-        {/* ── Pregled pitanja ────────────────────────────────────────── */}
         <div className="mt-5">
-          {/* Header + filter */}
           <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <h2 className="text-base font-bold text-warm-900 flex items-center gap-2">
               <TrendingUp size={16} className="text-warm-400" />
@@ -930,7 +1040,6 @@ export function ResultsPage() {
             />
           </div>
 
-          {/* Sekcije */}
           {sections.map((section) => (
             <SectionReview
               key={section}
@@ -945,7 +1054,6 @@ export function ResultsPage() {
             />
           ))}
 
-          {/* Prazno stanje za filter */}
           {sections.every((s) => {
             const sq = questions.filter(
               (q) =>
@@ -985,7 +1093,6 @@ export function ResultsPage() {
         </div>
       </PageWrapper>
 
-      {/* ── Sticky bottom CTA ─────────────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-sm border-t border-warm-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 py-3.5 flex items-center gap-3">
           <Link
@@ -997,7 +1104,7 @@ export function ResultsPage() {
           </Link>
 
           <button
-            onClick={() => navigate(`/ispit/${examId}`)}
+            onClick={() => navigate(examId ? `/ispit/${examId}` : "/")}
             className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800 transition-colors shadow-[0_2px_8px_-2px_rgba(45,84,232,0.4)]"
           >
             <RotateCcw size={14} />

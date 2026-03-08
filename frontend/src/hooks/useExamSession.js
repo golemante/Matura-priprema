@@ -248,7 +248,7 @@ export function useExamSession(examId) {
       }
       submitExam(rpcResult);
       draftStorage.clear(examId);
-      navigate(`/rezultati/${examId}`);
+      navigate(aid ? `/rezultati/pokusaj/${aid}` : `/rezultati/${examId}`);
     } catch (err) {
       console.error("[handleSubmit]", err);
       toast.error("Greška pri predaji ispita. Pokušaj ponovo.");

@@ -27,6 +27,9 @@ export function Footer() {
           >
             Privatnost
           </Link>
+          <Link to="/uvjeti" className="hover:text-warm-800 transition-colors">
+            Uvjeti
+          </Link>
         </nav>
         <p className="text-xs text-warm-400">
           © {new Date().getFullYear()} MaturaPrip

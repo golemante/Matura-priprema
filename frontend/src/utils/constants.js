@@ -169,6 +169,6 @@ export function normalizeSession(session) {
 }
 
 export const DIFFICULTY_LEVELS = [
-  { id: "osnovna", name: "Osnovna razina", short: "A razina" },
-  { id: "visa", name: "Viša razina", short: "B razina" },
+  { id: "osnovna", name: "Osnovna razina", short: "B razina" },
+  { id: "visa", name: "Viša razina", short: "A razina" },
 ];
