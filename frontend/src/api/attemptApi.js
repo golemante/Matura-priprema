@@ -1,35 +1,26 @@
 // api/attemptApi.js
 // ─────────────────────────────────────────────────────────────────────────────
-// IZMJENE vs. prethodne verzije:
+// ISPRAVCI v5:
 //
-//  ✅ NOVO: checkActive(examId)
-//     Provjeri postoji li već in_progress ili paused attempt za ovaj exam+user.
-//     Vraća attempt objekt ako postoji, null ako ne postoji.
-//     Koristi se u useExamInit.js PRIJE create() poziva (P1-1 fix).
+//  ✅ FIX KRITIČNI: getElapsed() sada vraća started_at i total_paused_seconds
+//     PRIJE: SELECT elapsed_seconds, status → za in_progress attempt elapsed
+//            je uvijek NULL → timer se uvijek resetirao na puni trajanje!
+//     SADA:  SELECT + started_at + total_paused_seconds → syncElapsed može
+//            izračunati stvarno proteklo vrijeme čak i bez prethodne pauze.
 //
-//  ✅ FIX: create() sada koristi throwNormalized umjesto `throw error`
-//     Konzistentno s examApi.js (P3-1 fix).
+//  ✅ NOVO: getAnswers(attemptId)
+//     Učitava spremljene odgovore iz attempt_answers za pauziran attempt.
+//     Koristi se u useExamInit kada nema lokalnog drafta (npr. drugi uređaj).
 //
-//  ✅ NEIZMIJENJENO: finish(), pause(), resume(), getElapsed(), getAll(),
-//     getById() — sve je ostalo identično prethodnoj verziji.
+//  ✅ FIX: checkActive() sada vraća total_paused_seconds za kompletni sync.
+//
+//  ✅ NEIZMIJENJENO: create(), finish(), pause(), resume(), getAll(), getById()
 // ─────────────────────────────────────────────────────────────────────────────
 import { supabase } from "@/lib/supabase";
 import { throwNormalized } from "@/lib/normalizeError";
 
 export const attemptApi = {
-  // ── 0. Provjeri postoji li aktivan attempt (P1-1: anti-duplicate) ─────────
-  //
-  // ZAŠTO: Bez ove provjere, svaki mount ExamTaking-a kreira novi attempt.
-  // Korisnik koji refresha stranicu ili navigira back/forward akumulira
-  // bezbroj `in_progress` pokušaja za isti ispit.
-  //
-  // IMPLEMENTACIJA:
-  //   Querija attempts s filterom na user_id (RLS automatski) + exam_id +
-  //   status IN ('in_progress', 'paused').
-  //   Vraća null ako nema aktivnog pokušaja.
-  //
-  // POZIVA SE: u useExamInit.js, PRIJE create().
-  //
+  // ── 0. Provjeri postoji li aktivan attempt (anti-duplicate) ───────────────
   checkActive: async (examId) => {
     const {
       data: { user },
@@ -38,24 +29,21 @@ export const attemptApi = {
 
     const { data, error } = await supabase
       .from("attempts")
-      .select("id, started_at, elapsed_seconds, status, paused_at")
+      .select(
+        "id, started_at, elapsed_seconds, status, paused_at, total_paused_seconds",
+      )
       .eq("exam_id", examId)
       .eq("user_id", user.id)
       .in("status", ["in_progress", "paused"])
       .order("created_at", { ascending: false })
       .limit(1)
-      .maybeSingle(); // maybeSingle() vraća null umjesto error-a ako nema zapisa
+      .maybeSingle();
 
     if (error) throwNormalized(error);
-    return data ?? null; // null = nema aktivnog pokušaja
+    return data ?? null;
   },
 
   // ── 1. Kreiraj attempt na POČETKU ispita ──────────────────────────────────
-  // Vraća null ako korisnik nije prijavljen (anon korisnici mogu čitati ispit,
-  // ali rezultati se ne bilježe u bazi).
-  //
-  // ⚠️  POZIVAJ NAKON checkActive() — ako checkActive() vrati attempt,
-  //     koristi taj attempt umjesto kreiranja novog!
   create: async (examId) => {
     const {
       data: { user },
@@ -72,17 +60,11 @@ export const attemptApi = {
       .select("id, started_at")
       .single();
 
-    if (error) throwNormalized(error); // ← FIX P3-1: bio `throw error`
-    return data; // { id: UUID, started_at: TIMESTAMPTZ }
+    if (error) throwNormalized(error);
+    return data;
   },
 
   // ── 2. Završi ispit — RPC finish_attempt ──────────────────────────────────
-  //
-  // p_answers mora biti JSONB OBJECT { "uuid": "a"|null }
-  // DB RPC: v_chosen := p_answers ->> v_question.id::TEXT
-  //
-  // Returna: { correct_count, total_count, score_pct, elapsed_seconds }
-  //
   finish: async (attemptId, answers, elapsedSeconds) => {
     const answersObj = Object.fromEntries(
       Object.entries(answers).map(([qId, letter]) => [qId, letter ?? null]),
@@ -95,13 +77,10 @@ export const attemptApi = {
     });
 
     if (error) throwNormalized(error);
-    return data; // { correct_count, total_count, score_pct, elapsed_seconds }
+    return data;
   },
 
   // ── 3. Pauziraj ispit — RPC pause_attempt ─────────────────────────────────
-  //
-  // p_answers mora biti JSONB OBJECT (isti razlog kao finish)
-  //
   pause: async (attemptId, elapsedSeconds, answers = null) => {
     const answersObj = answers
       ? Object.fromEntries(
@@ -119,29 +98,69 @@ export const attemptApi = {
   },
 
   // ── 4. Nastavi pauziran ispit — RPC resume_attempt ────────────────────────
-  // Vraća: { elapsed_seconds, total_paused_seconds }
   resume: async (attemptId) => {
     const { data, error } = await supabase.rpc("resume_attempt", {
       p_attempt_id: attemptId,
     });
 
     if (error) throwNormalized(error);
-    return data;
+    return data; // { elapsed_seconds, total_paused_seconds }
   },
 
-  // ── 5. Dohvati elapsed + status (za server-sync timera) ───────────────────
+  // ── 5. Dohvati elapsed + status za server-sync timera ─────────────────────
+  //
+  // FIX KRITIČNI: Dodan started_at i total_paused_seconds.
+  //
+  // ZAŠTO: Za in_progress attempt, elapsed_seconds je NULL u bazi
+  // (postavljeno je samo pri pauzi/završetku). Bez started_at, timer bi
+  // se uvijek resetirao na puno trajanje pri refreshu stranice.
+  //
+  // syncElapsed u useExamInit.js koristi ove podatke za računanje:
+  //   elapsed = Date.now() - started_at - total_paused_seconds
+  //
   getElapsed: async (attemptId) => {
     const { data, error } = await supabase
       .from("attempts")
-      .select("elapsed_seconds, status")
+      .select(
+        "elapsed_seconds, status, started_at, total_paused_seconds, paused_at",
+      )
       .eq("id", attemptId)
       .single();
 
     if (error) throwNormalized(error);
     return data;
+    // Vraća: {
+    //   elapsed_seconds: number|null,  — NULL za in_progress koji nije bio pauziran
+    //   status: 'in_progress'|'paused'|'completed'|'abandoned',
+    //   started_at: string,             — ISO timestamp
+    //   total_paused_seconds: number,   — ukupno pauzirano vrijeme
+    //   paused_at: string|null
+    // }
   },
 
-  // ── 6. Dohvati sve pokušaje korisnika (RLS automatski filtrira) ────────────
+  // ── 6. Učitaj odgovore za pauziran attempt ────────────────────────────────
+  //
+  // NOVO: Koristi se u useExamInit kada nema lokalnog drafta ali postoji
+  // pauziran attempt u bazi (npr. korisnik se prijavio s drugog uređaja).
+  //
+  // Vraća: { [questionId]: letter } ili null ako nema odgovora.
+  //
+  getAnswers: async (attemptId) => {
+    const { data, error } = await supabase
+      .from("attempt_answers")
+      .select("question_id, chosen_option")
+      .eq("attempt_id", attemptId)
+      .not("chosen_option", "is", null); // Preskači NULL = preskočena pitanja
+
+    if (error) throwNormalized(error);
+    if (!data?.length) return null;
+
+    return Object.fromEntries(
+      data.map((row) => [row.question_id, row.chosen_option]),
+    );
+  },
+
+  // ── 7. Dohvati sve pokušaje korisnika ─────────────────────────────────────
   getAll: async () => {
     const { data, error } = await supabase
       .from("attempts")
@@ -174,7 +193,7 @@ export const attemptApi = {
     return data ?? [];
   },
 
-  // ── 7. Jedan pokušaj s detaljima ───────────────────────────────────────────
+  // ── 8. Jedan pokušaj s detaljima ───────────────────────────────────────────
   getById: async (id) => {
     const { data, error } = await supabase
       .from("attempts")

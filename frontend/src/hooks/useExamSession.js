@@ -1,27 +1,17 @@
 // hooks/useExamSession.js
 // ─────────────────────────────────────────────────────────────────────────────
-// IZMJENE vs. prethodne verzije:
+// ISPRAVCI v5:
 //
-//  ✅ FIX P2-1: useShallow za store selektore
-//     Umjesto `const store = useExamStore()` (cijeli store subscription),
-//     koristimo useShallow koji re-renderira samo kada se relevantni dijelovi
-//     store-a promijene. Timer ticki (useTimer lokalni state) NE uzrokuju
-//     re-render examStore subscription.
+//  ✅ FIX KRITIČNI #4 (nastavak): handleSubmitRef.current sync
+//     PRIJE: `handleSubmitRef.current = submit.handleSubmitRef.current`
+//            → Kopiralo je TRENUTNU VRIJEDNOST ref-a (null!) u drugi ref.
+//            → Timer onExpire je pozivao null → ispit se nikad nije predao
+//               automatski kad je isteklo vrijeme!
+//     SADA:  `handleSubmitRef.current = submit.handleSubmit`
+//            → Direktno postavlja funkciju, ne kopira ref vrijednost.
+//            → Timer onExpire ispravno predaje ispit.
 //
-//  ✅ FIX P2-2: Debounced draft save (750ms)
-//     handleAnswer sada poziva debounced verziju saveDraft umjesto instant.
-//     Brzo klikanje kroz opcije (A→B→C) neće kreirati 3 draft write-a,
-//     već samo 1 nakon 750ms od zadnjeg klika.
-//     Direktni pozivi (pauza, submit) i dalje koriste instant save.
-//
-//  ✅ NOVO P1-2: useTabVisibility integriran
-//     Prati izlaske iz taba tijekom aktivnog ispita.
-//     tabDataRef je dostupan submitExam() pozivu za uključivanje u lastResult.
-//
-//  ✅ NOVO P2-3: useImagePreload integriran
-//     Preloada imageUrl za iduća 3 pitanja u pozadini.
-//
-//  ✅ Public API identičan prethodnoj verziji — ExamTaking.jsx ne treba izmjene.
+//  ✅ Sve ostale funkcionalnosti ostaju identične — ExamTaking.jsx ne treba izmjene.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -36,8 +26,7 @@ import { toast } from "@/store/toastStore";
 import { useExamInit } from "@/hooks/useExamInit";
 import { useExamSubmit } from "@/hooks/useExamSubmit";
 
-// ── Debounce helper (ne importa se useDebounce hook jer nam treba callback,
-//    ne value debounce) ────────────────────────────────────────────────────────
+// ── Debounce helper ────────────────────────────────────────────────────────────
 function debounce(fn, ms) {
   let id;
   const debounced = (...args) => {
@@ -53,15 +42,7 @@ function debounce(fn, ms) {
 }
 
 export function useExamSession(examId) {
-  // ── FIX P2-1: Atomični selektori s useShallow ─────────────────────────────
-  //
-  // PRIJE: `const store = useExamStore()` — pretplaćen na SVE promjene store-a.
-  //         Svaki setAnswer(), toggleFlag(), goToQuestion() → re-render cijelog
-  //         useExamSession + svih konsumera (ExamTaking, QuestionDisplay, itd.).
-  //
-  // SADA: useShallow kompilira plitku usporedbu — re-render samo kad se
-  //       neka od selektiranih vrijednosti zaista promijeni.
-  //
+  // ── Store selektori (useShallow za performance) ───────────────────────────
   const {
     examId: storeExamId,
     questions,
@@ -96,16 +77,11 @@ export function useExamSession(examId) {
     })),
   );
 
-  // ── Tab visibility tracking (P1-2) ────────────────────────────────────────
-  //
-  // Aktivno samo dok ispit traje (questions postoje i nije submittan).
-  // tabDataRef.current = { switchCount, totalHiddenMs }
-  // Koristi se u useExamSubmit → submitExam(rpcResult, tabData)
-  //
+  // ── Tab visibility tracking ────────────────────────────────────────────────
   const isExamActive = questions.length > 0 && !submittedAt;
   const tabDataRef = useTabVisibility({ enabled: isExamActive });
 
-  // ── Elapsed clock (anchor-based, ne interval-based) ───────────────────────
+  // ── Elapsed clock (anchor-based, bez drift-a) ─────────────────────────────
   const elapsedClockRef = useRef({
     syncedElapsed: 0,
     localTickStartedAt: null,
@@ -125,7 +101,6 @@ export function useExamSession(examId) {
     return Math.min(durationSeconds, syncedElapsed + localElapsed);
   }, [durationSeconds]);
 
-  // Definirano kao callback da ga timer može koristiti odmah pri init-u
   // eslint-disable-next-line prefer-const
   let timer;
 
@@ -148,6 +123,12 @@ export function useExamSession(examId) {
   );
 
   const timerRef = useRef(null);
+
+  // ── handleSubmitRef: čuva najnoviji handleSubmit za timer onExpire ─────────
+  //
+  // FIX #4: Ovaj ref čuva FUNKCIJU, ne drugi ref.
+  // Postavlja se u useEffect ispod koji prati submit.handleSubmit.
+  //
   const handleSubmitRef = useRef(null);
 
   // ── Timer ─────────────────────────────────────────────────────────────────
@@ -175,16 +156,7 @@ export function useExamSession(examId) {
     }
   }, [durationSeconds, timer.running, getElapsed]);
 
-  // ── FIX P2-2: Debounced saveDraft (750ms) ────────────────────────────────
-  //
-  // PROBLEM: Prethodni handleAnswer pozivao je saveDraft() sinhrono na svaki
-  //          klik. Korisnik koji brzo pregledava opcije (A→B→C→D) generira
-  //          4 localStorage write-a u istoj sekundi.
-  //
-  // RJEŠENJE: debounce na 750ms za normalne odgovore.
-  //           Direktni pozivi (pauza, auto-save interval, submit) i dalje
-  //           koriste `debouncedSaveDraft.flush()` za instant zapis.
-  //
+  // ── Draft save (debounced 750ms + immediate flush) ────────────────────────
   const saveDraftImmediate = useCallback(
     (nextAnswers) => {
       const currentAttemptId =
@@ -194,11 +166,9 @@ export function useExamSession(examId) {
     [examId, attemptId],
   );
 
-  // Kreiraj debounced verziju — stabilna ref da se ne rekreira na svakom renderu
   const debouncedSaveDraftRef = useRef(null);
   if (!debouncedSaveDraftRef.current) {
     debouncedSaveDraftRef.current = debounce((answers) => {
-      // Čita attemptId direktno iz store-a (ne iz closure-a) da izbjegne stale
       const aid =
         useExamStore.getState().attemptId ??
         draftStorage.load(examId)?.attemptId ??
@@ -207,7 +177,6 @@ export function useExamSession(examId) {
     }, 750);
   }
 
-  // Wrapper koji eksponira i flush
   const saveDraft = useCallback(
     (nextAnswers, { immediate = false } = {}) => {
       if (immediate) {
@@ -231,14 +200,23 @@ export function useExamSession(examId) {
     applyServerElapsed,
     durationSeconds,
     saveDraft,
-    tabDataRef, // ← proslijeđen da submit može uključiti tabData u lastResult
+    tabDataRef,
   });
 
+  // ── FIX #4: Postavi handleSubmitRef.current na FUNKCIJU, ne na ref ─────────
+  //
+  // PRIJE: handleSubmitRef.current = submit.handleSubmitRef.current
+  //        → kopiralo je .current vrijednost (null pri mount-u) iz sub-hooka
+  //        → timer onExpire zvao null → autosubmit na istek nije radio!
+  //
+  // SADA: handleSubmitRef.current = submit.handleSubmit
+  //       → direktno referencira funkciju iz useExamSubmit
+  //
   useEffect(() => {
-    handleSubmitRef.current = submit.handleSubmitRef.current;
-  });
+    handleSubmitRef.current = submit.handleSubmit;
+  }, [submit.handleSubmit]);
 
-  // ── Auto-save svakih 30s (immediate) ─────────────────────────────────────
+  // ── Auto-save svakih 30s ──────────────────────────────────────────────────
   useEffect(() => {
     if (!examId || Object.keys(answers).length === 0) return;
     const id = setInterval(
@@ -285,7 +263,6 @@ export function useExamSession(examId) {
       const current = questions[currentIndex];
       if (!current) return;
       setAnswer(current.id, letter);
-      // Debounced draft save (P2-2)
       saveDraft(useExamStore.getState().answers);
     },
     [isPaused, questions, currentIndex, setAnswer, saveDraft],
@@ -306,10 +283,10 @@ export function useExamSession(examId) {
         handleGoTo(currentIndex + 1),
       ArrowLeft: () =>
         !isPaused && currentIndex > 0 && handleGoTo(currentIndex - 1),
-      a: () => handleAnswer("a"),
-      b: () => handleAnswer("b"),
-      c: () => handleAnswer("c"),
-      d: () => handleAnswer("d"),
+      a: () => !isPaused && handleAnswer("a"),
+      b: () => !isPaused && handleAnswer("b"),
+      c: () => !isPaused && handleAnswer("c"),
+      d: () => !isPaused && handleAnswer("d"),
       f: handleToggleFlag,
       p: submit.handlePause,
       "?": () =>
@@ -320,9 +297,7 @@ export function useExamSession(examId) {
 
   useBeforeUnload(questions.length > 0 && !submittedAt);
 
-  // ── FIX P2-3: Image preloading ────────────────────────────────────────────
-  // Preloada imageUrl za iduća 3 pitanja u pozadini.
-  // Nema vidljivog efekta na UI — čisto performance improvement.
+  // ── Image preloading (performance) ───────────────────────────────────────
   useImagePreload(questions, currentIndex, { ahead: 3 });
 
   // ── Computed current question ─────────────────────────────────────────────
@@ -333,43 +308,50 @@ export function useExamSession(examId) {
   const isCurrentFlagged = current ? flagged.has(current.id) : false;
 
   // ── Public API ────────────────────────────────────────────────────────────
-  // Identičan prethodnoj verziji — ExamTaking.jsx ne treba izmjene.
   return {
+    // Init state
+    isLoading: init.isLoading,
+    isInitialized: init.isInitialized,
+    fetchError: init.fetchError,
+    examData: init.examData,
+
+    // Draft modal
+    showDraftModal: init.showDraftModal,
+    pendingDraft: init.pendingDraft,
+    confirmRestoreDraft: init.confirmRestoreDraft,
+    discardDraft: init.discardDraft,
+
+    // Store state
     questions,
     answers,
     flagged,
     passages,
-    current,
-    currentPassage,
     currentIndex,
-    totalVisible,
-    answeredCount,
-    isCurrentFlagged,
-    direction,
     isPaused,
     examMeta,
 
-    isLoading: init.isLoading,
-    isInitialized: init.isInitialized,
-    fetchError: init.fetchError,
+    // Derived
+    current,
+    currentPassage,
+    isCurrentFlagged,
+    totalVisible,
+    answeredCount,
+    direction,
 
+    // Timer
+    timer,
+
+    // Actions
+    handleGoTo,
+    handleAnswer,
+    handleToggleFlag,
+
+    // Submit actions
     isSubmitting: submit.isSubmitting,
     showSubmitModal: submit.showSubmitModal,
     setShowSubmitModal: submit.setShowSubmitModal,
-
-    showDraftModal: init.showDraftModal,
-    confirmRestoreDraft: init.confirmRestoreDraft,
-    discardDraft: init.discardDraft,
-
-    handleAnswer,
-    handleToggleFlag,
-    handleGoTo,
-    handleSubmit: submit.handleSubmit,
     handlePause: submit.handlePause,
     handleResume: submit.handleResume,
-    timer,
-
-    // Tab tracking data (za debug / future backend integration)
-    tabDataRef,
+    handleSubmit: submit.handleSubmit,
   };
 }
