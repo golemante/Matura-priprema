@@ -80,9 +80,15 @@ export const examApi = {
 
     if (questionsRes.error) throwNormalized(questionsRes.error);
 
+    // Defenzivno: u nekim rubnim slučajevima klijent može dobiti null/neočekivan
+    // payload bez eksplicitnog error-a. Time izbjegavamo runtime crash u UI-u.
+    const questionRows = Array.isArray(questionsRes.data)
+      ? questionsRes.data
+      : [];
+
     // Dedupliciraj passages u mapu
     const passagesMap = {};
-    questionsRes.data.forEach((row) => {
+    questionRows.forEach((row) => {
       if (row.passage_id && !passagesMap[row.passage_id]) {
         passagesMap[row.passage_id] = {
           id: row.passage_id,
@@ -98,23 +104,29 @@ export const examApi = {
       }
     });
 
-    const questions = questionsRes.data.map((row) => ({
-      id: row.id,
-      examId: row.exam_id,
-      position: row.position,
-      positionLabel: row.position_label ?? String(row.position),
-      sectionLabel: row.section_label ?? null,
-      questionType: row.question_type ?? "multiple_choice",
-      parentQuestionId: row.parent_question_id ?? null,
-      text: row.text,
-      inlineText: row.inline_text ?? null,
-      points: row.points ?? 1,
-      passageId: row.passage_id ?? null,
-      imageUrl: row.image_url ?? null,
-      options: Array.isArray(row.options) ? row.options : [],
-    }));
+    const questions = questionRows
+      .filter((row) => row?.id)
+      .map((row) => ({
+        id: row.id,
+        examId: row.exam_id,
+        position: row.position,
+        positionLabel: row.position_label ?? String(row.position),
+        sectionLabel: row.section_label ?? null,
+        questionType: row.question_type ?? "multiple_choice",
+        parentQuestionId: row.parent_question_id ?? null,
+        text: row.text ?? "",
+        inlineText: row.inline_text ?? null,
+        points: row.points ?? 1,
+        passageId: row.passage_id ?? null,
+        imageUrl: row.image_url ?? null,
+        options: Array.isArray(row.options) ? row.options : [],
+      }));
 
-    return { exam: examData, questions, passages: passagesMap };
+    return {
+      exam: examData ?? null,
+      questions,
+      passages: passagesMap,
+    };
   },
 
   // ── Answer Key (točni odgovori — samo za completed attempts) ─────────────

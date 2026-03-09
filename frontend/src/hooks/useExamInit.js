@@ -72,8 +72,16 @@ export function useExamInit(examId, { applyServerElapsed }) {
 
     const draft = draftStorage.load(examId);
 
-    startExam(examId, examData.questions, examData.passages);
-    setExamMeta(examData.exam);
+    const safeQuestions = Array.isArray(examData.questions)
+      ? examData.questions
+      : [];
+    const safePassages =
+      examData.passages && typeof examData.passages === "object"
+        ? examData.passages
+        : {};
+
+    startExam(examId, safeQuestions, safePassages);
+    setExamMeta(examData.exam ?? null);
     setIsInitialized(true);
 
     if (draft?.attemptId) {

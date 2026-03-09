@@ -648,6 +648,13 @@ export function QuizPage() {
   if (isLoading || !isInitialized) return <ExamSkeleton showPassage={false} />;
   if (questions.length === 0)
     return <ExamEmptyState backLink={backLink} examMeta={examMeta} />;
+  if (!current)
+    return (
+      <ExamErrorState
+        error={new Error("Neispravno stanje pitanja. Osvježi stranicu.")}
+        backLink={backLink}
+      />
+    );
 
   const isLastQuestion = currentIndex === totalVisible - 1;
 
