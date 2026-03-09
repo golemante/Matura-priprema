@@ -118,12 +118,17 @@ export function useExamSession(examId) {
   // handleSubmitRef drži najnoviji handleSubmit za timer onExpire
   const handleSubmitRef = useRef(null);
 
+  // ISPRAVAK Rules of Hooks: useCallback MORA biti na top levelu,
+  // ne unutar objekta koji se prosljeđuje useTimer!
+  const onTimerExpire = useCallback(() => handleSubmitRef.current?.(), []);
+  const onTimerWarning = useCallback(
+    () => toast.warning("Ostaje manje od 10 minuta!"),
+    [],
+  );
+
   const timer = useTimer(durationSeconds, {
-    onExpire: useCallback(() => handleSubmitRef.current?.(), []),
-    onWarning: useCallback(
-      () => toast.warning("Ostaje manje od 10 minuta!"),
-      [],
-    ),
+    onExpire: onTimerExpire,
+    onWarning: onTimerWarning,
   });
 
   // Ref za timer objekt (dostupan submit/pause callbackima)
