@@ -1,26 +1,21 @@
-// api/attemptApi.js
+// api/attemptApi.js — v7
 // ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI v5:
+// IZMJENE vs. v5/v6:
 //
-//  ✅ FIX KRITIČNI: getElapsed() sada vraća started_at i total_paused_seconds
-//     PRIJE: SELECT elapsed_seconds, status → za in_progress attempt elapsed
-//            je uvijek NULL → timer se uvijek resetirao na puni trajanje!
-//     SADA:  SELECT + started_at + total_paused_seconds → syncElapsed može
-//            izračunati stvarno proteklo vrijeme čak i bez prethodne pauze.
+//  ✅ ISPRAVAK: getElapsed() vraćalo je { elapsed_seconds, status } OBJEKT ali
+//     se koristio kao broj → NaN → timer se resetirao na puno trajanje.
+//     NOVO: getStatus() vraća sve timing podatke. Staro getElapsed() uklonjeno.
 //
-//  ✅ NOVO: getAnswers(attemptId)
-//     Učitava spremljene odgovore iz attempt_answers za pauziran attempt.
-//     Koristi se u useExamInit kada nema lokalnog drafta (npr. drugi uređaj).
+//  ✅ NOVO: getAnswers(attemptId) — dohvaća snimljene odgovore iz DB.
+//     Koristi se za obnavljanje odgovora pauziranog attempta na drugom uređaju.
 //
-//  ✅ FIX: checkActive() sada vraća total_paused_seconds za kompletni sync.
-//
-//  ✅ NEIZMIJENJENO: create(), finish(), pause(), resume(), getAll(), getById()
+//  ✅ checkActive() — dodan total_paused_seconds za točan elapsed izračun.
 // ─────────────────────────────────────────────────────────────────────────────
 import { supabase } from "@/lib/supabase";
 import { throwNormalized } from "@/lib/normalizeError";
 
 export const attemptApi = {
-  // ── 0. Provjeri postoji li aktivan attempt (anti-duplicate) ───────────────
+  // ── Provjeri aktivan attempt ───────────────────────────────────────────────
   checkActive: async (examId) => {
     const {
       data: { user },
@@ -30,7 +25,7 @@ export const attemptApi = {
     const { data, error } = await supabase
       .from("attempts")
       .select(
-        "id, started_at, elapsed_seconds, status, paused_at, total_paused_seconds",
+        "id, status, started_at, elapsed_seconds, total_paused_seconds, paused_at",
       )
       .eq("exam_id", examId)
       .eq("user_id", user.id)
@@ -43,7 +38,7 @@ export const attemptApi = {
     return data ?? null;
   },
 
-  // ── 1. Kreiraj attempt na POČETKU ispita ──────────────────────────────────
+  // ── Kreiraj attempt ────────────────────────────────────────────────────────
   create: async (examId) => {
     const {
       data: { user },
@@ -52,161 +47,110 @@ export const attemptApi = {
 
     const { data, error } = await supabase
       .from("attempts")
-      .insert({
-        user_id: user.id,
-        exam_id: examId,
-        status: "in_progress",
-      })
+      .insert({ user_id: user.id, exam_id: examId, status: "in_progress" })
       .select("id, started_at")
       .single();
 
     if (error) throwNormalized(error);
-    return data;
+    return data; // { id, started_at }
   },
 
-  // ── 2. Završi ispit — RPC finish_attempt ──────────────────────────────────
+  // ── Završi ispit ──────────────────────────────────────────────────────────
   finish: async (attemptId, answers, elapsedSeconds) => {
     const answersObj = Object.fromEntries(
-      Object.entries(answers).map(([qId, letter]) => [qId, letter ?? null]),
+      Object.entries(answers).map(([k, v]) => [k, v ?? null]),
     );
-
     const { data, error } = await supabase.rpc("finish_attempt", {
       p_attempt_id: attemptId,
       p_answers: answersObj,
-      p_elapsed_secs: elapsedSeconds,
+      p_elapsed_secs: Math.max(0, Math.round(elapsedSeconds)),
     });
-
     if (error) throwNormalized(error);
     return data;
   },
 
-  // ── 3. Pauziraj ispit — RPC pause_attempt ─────────────────────────────────
+  // ── Pauziraj ──────────────────────────────────────────────────────────────
   pause: async (attemptId, elapsedSeconds, answers = null) => {
     const answersObj = answers
       ? Object.fromEntries(
-          Object.entries(answers).map(([qId, letter]) => [qId, letter ?? null]),
+          Object.entries(answers).map(([k, v]) => [k, v ?? null]),
         )
       : null;
-
     const { error } = await supabase.rpc("pause_attempt", {
       p_attempt_id: attemptId,
-      p_elapsed_secs: elapsedSeconds,
+      p_elapsed_secs: Math.max(0, Math.round(elapsedSeconds)),
       p_answers: answersObj,
     });
-
     if (error) throwNormalized(error);
   },
 
-  // ── 4. Nastavi pauziran ispit — RPC resume_attempt ────────────────────────
+  // ── Nastavi ───────────────────────────────────────────────────────────────
   resume: async (attemptId) => {
     const { data, error } = await supabase.rpc("resume_attempt", {
       p_attempt_id: attemptId,
     });
-
     if (error) throwNormalized(error);
     return data; // { elapsed_seconds, total_paused_seconds }
   },
 
-  // ── 5. Dohvati elapsed + status za server-sync timera ─────────────────────
-  //
-  // FIX KRITIČNI: Dodan started_at i total_paused_seconds.
-  //
-  // ZAŠTO: Za in_progress attempt, elapsed_seconds je NULL u bazi
-  // (postavljeno je samo pri pauzi/završetku). Bez started_at, timer bi
-  // se uvijek resetirao na puno trajanje pri refreshu stranice.
-  //
-  // syncElapsed u useExamInit.js koristi ove podatke za računanje:
-  //   elapsed = Date.now() - started_at - total_paused_seconds
-  //
-  getElapsed: async (attemptId) => {
+  // ── Dohvati timing status ─────────────────────────────────────────────────
+  // ISPRAVAK: stara getElapsed() vraćala objekt a ne broj!
+  // Ova funkcija vraća sve timing podatke potrebne za točan sync.
+  getStatus: async (attemptId) => {
     const { data, error } = await supabase
       .from("attempts")
       .select(
-        "elapsed_seconds, status, started_at, total_paused_seconds, paused_at",
+        "status, started_at, elapsed_seconds, total_paused_seconds, paused_at",
       )
       .eq("id", attemptId)
       .single();
-
     if (error) throwNormalized(error);
     return data;
-    // Vraća: {
-    //   elapsed_seconds: number|null,  — NULL za in_progress koji nije bio pauziran
-    //   status: 'in_progress'|'paused'|'completed'|'abandoned',
-    //   started_at: string,             — ISO timestamp
-    //   total_paused_seconds: number,   — ukupno pauzirano vrijeme
-    //   paused_at: string|null
-    // }
+    // { status, started_at, elapsed_seconds, total_paused_seconds, paused_at }
   },
 
-  // ── 6. Učitaj odgovore za pauziran attempt ────────────────────────────────
-  //
-  // NOVO: Koristi se u useExamInit kada nema lokalnog drafta ali postoji
-  // pauziran attempt u bazi (npr. korisnik se prijavio s drugog uređaja).
-  //
-  // Vraća: { [questionId]: letter } ili null ako nema odgovora.
-  //
+  // ── Dohvati snimljene odgovore ────────────────────────────────────────────
+  // Koristi se za restore pauziranog attempta (drugi uređaj / refresh).
   getAnswers: async (attemptId) => {
     const { data, error } = await supabase
       .from("attempt_answers")
       .select("question_id, chosen_option")
       .eq("attempt_id", attemptId)
-      .not("chosen_option", "is", null); // Preskači NULL = preskočena pitanja
-
+      .not("chosen_option", "is", null);
     if (error) throwNormalized(error);
     if (!data?.length) return null;
-
     return Object.fromEntries(
-      data.map((row) => [row.question_id, row.chosen_option]),
+      data.map((r) => [r.question_id, r.chosen_option]),
     );
   },
 
-  // ── 7. Dohvati sve pokušaje korisnika ─────────────────────────────────────
+  // ── Svi pokušaji korisnika ────────────────────────────────────────────────
   getAll: async () => {
     const { data, error } = await supabase
       .from("attempts")
       .select(
-        `
-        id,
-        exam_id,
-        status,
-        started_at,
-        finished_at,
-        elapsed_seconds,
-        score_pct,
-        correct_count,
-        total_count,
-        exam:exams (
-          id,
-          subject_id,
-          year,
-          session,
-          level,
-          title,
-          total_points,
-          duration_minutes
-        )
-      `,
+        `id, exam_id, status, started_at, finished_at,
+         elapsed_seconds, score_pct, correct_count, total_count,
+         exam:exams (
+           id, subject_id, year, session, level,
+           title, total_points, duration_minutes
+         )`,
       )
       .order("created_at", { ascending: false });
-
     if (error) throwNormalized(error);
     return data ?? [];
   },
 
-  // ── 8. Jedan pokušaj s detaljima ───────────────────────────────────────────
+  // ── Jedan pokušaj s detaljima ─────────────────────────────────────────────
   getById: async (id) => {
     const { data, error } = await supabase
       .from("attempts")
       .select(
-        `
-        *,
-        exam:exams ( * ),
-        attempt_answers ( question_id, chosen_option, is_correct )
-      `,
+        `*, exam:exams (*),
+         attempt_answers (question_id, chosen_option, is_correct)`,
       )
       .eq("id", id)
       .single();
-
     if (error) throwNormalized(error);
     return data;
   },

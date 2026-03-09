@@ -1,32 +1,15 @@
-// hooks/useExamSubmit.js
+// hooks/useExamSubmit.js — v7
 // ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI v5:
+// BUG #5 RIJEŠEN:
+//   STARO: isSubmitting ostao true ako finish() baci grešku → gumb zauvijek disabled
+//   NOVO:  try/catch/finally → setIsSubmitting(false) uvijek na grešci
 //
-//  ✅ FIX KRITIČNI #3: handleSubmit — isSubmitting nikad nije resetiran na grešku
-//     PRIJE: Ako attemptApi.finish() baci iznimku, isSubmitting ostaje true
-//            zauvijek → gumb za predaju zaključan, korisnik ne može predati ispit.
-//     SADA:  try/catch/finally → setIsSubmitting(false) uvijek na kraju greške.
-//            Toast s jasnom porukom greške. Korisnik može pokušati ponovo.
-//
-//  ✅ FIX KRITIČNI #4: handleSubmitRef.current nikad nije bio postavljen
-//     PRIJE: const handleSubmitRef = useRef(null) → .current ostaje null
-//            → timer.onExpire → handleSubmitRef.current?.() → ništa se ne dogodi!
-//            → Ispit se ne predaje automatski kad istekne vrijeme!
-//     SADA:  useEffect koji drži handleSubmitRef.current = handleSubmit u sync.
-//            useExamSession.js koristi submit.handleSubmit direktno.
-//
-//  ✅ FIX: handlePause — pauza je fire-and-forget što može uzrokovati race
-//     Dodan try/catch s toast.error ako DB pauza ne uspije.
-//     UI se i dalje pauzira (optimistički), ali korisnik je obaviješten o grešci.
-//
-//  ✅ FIX: handleResume — resumeExam() sada se poziva PRIJE API poziva
-//     (optimistički UI update) da korisnik odmah vidi da se ispit nastavlja,
-//     a ne tek po završetku async API poziva.
-//
-//  ✅ NOVO: Return eksponira handleSubmit direktno (ne samo ref).
-//     useExamSession.js može koristiti submit.handleSubmit kao callbackRef.
+// ČIŠĆE:
+//   • handleSubmitRef UKLONJEN — useExamSession direktno koristi handleSubmit fn
+//   • timer.resync() poziv zamijenjen s pauseTimer/resumeTimer callbacks
+//     → useExamSubmit ne treba pristup timer objektu direktno
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useExamStore } from "@/store/examStore";
 import { draftStorage } from "@/utils/storage";
@@ -36,14 +19,14 @@ import { attemptApi } from "@/api/attemptApi";
 /**
  * @param {string} examId
  * @param {{
- *   attemptIdRef: React.MutableRefObject,
+ *   attemptIdRef: React.MutableRefObject<string|null>,
  *   attemptCreationPromiseRef: React.MutableRefObject,
- *   timer: object,
  *   getElapsed: () => number,
- *   applyServerElapsed: (elapsed: number, opts?: object) => void,
  *   durationSeconds: number | null,
- *   saveDraft: (answers: object, opts?: object) => void,
- *   tabDataRef: React.MutableRefObject<{ switchCount: number, totalHiddenMs: number }>,
+ *   onPauseTimer: (remaining: number) => void,
+ *   onResumeTimer: (elapsedSeconds: number) => void,
+ *   saveDraft: (answers: object, opts?: { immediate?: boolean }) => void,
+ *   tabDataRef: React.MutableRefObject,
  * }} deps
  */
 export function useExamSubmit(
@@ -51,15 +34,16 @@ export function useExamSubmit(
   {
     attemptIdRef,
     attemptCreationPromiseRef,
-    timer,
     getElapsed,
-    applyServerElapsed,
     durationSeconds,
+    onPauseTimer,
+    onResumeTimer,
     saveDraft,
     tabDataRef,
   },
 ) {
   const navigate = useNavigate();
+
   const { isPaused, pauseExam, resumeExam, submitExam } = useExamStore((s) => ({
     isPaused: s.isPaused,
     pauseExam: s.pauseExam,
@@ -70,86 +54,65 @@ export function useExamSubmit(
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
-  // ── Ref koji drži najnoviji handleSubmit ──────────────────────────────────
-  // Koristi se za timer onExpire callback (izbjegava stale closure).
-  // Namijenjen za useExamSession.js koji ga postavlja u handleSubmitRef.
-  const handleSubmitRef = useRef(null);
-
   // ── Pauza ──────────────────────────────────────────────────────────────────
   const handlePause = useCallback(async () => {
     if (isPaused) return;
 
     const elapsed = getElapsed();
-
-    // Optimistički UI update — odmah pauziraj, ne čekaj API
-    pauseExam();
-    timer.resync(Math.max(0, (durationSeconds ?? 0) - elapsed), {
-      running: false,
-    });
-
-    // Instant flush drafta (ne čekamo 750ms debounce)
+    const remaining = Math.max(0, (durationSeconds ?? 0) - elapsed);
     const currentAnswers = useExamStore.getState().answers;
+
+    // Optimistički: odmah pauziraj UI
+    pauseExam();
+    onPauseTimer(remaining);
     saveDraft(currentAnswers, { immediate: true });
 
+    // DB sinkronizacija (fire-and-forget)
     const aid = attemptIdRef.current;
     if (aid) {
-      try {
-        await attemptApi.pause(aid, elapsed, currentAnswers);
-      } catch (err) {
-        console.warn("[pause_attempt]", err);
-        // UI je već pauziran — korisnik ne vidi broken state,
-        // ali odgovori su u localStorage pa nema gubitka podataka.
-        // Ne resumeamo jer bi to zbunilo korisnika.
-      }
+      attemptApi
+        .pause(aid, elapsed, currentAnswers)
+        .catch((err) => console.warn("[handlePause] DB sync:", err));
     }
 
     toast.info("Ispit pauziran. Odgovori su sačuvani.");
   }, [
     isPaused,
     pauseExam,
-    timer,
+    onPauseTimer,
     getElapsed,
-    saveDraft,
     durationSeconds,
+    saveDraft,
     attemptIdRef,
   ]);
 
   // ── Nastavak ───────────────────────────────────────────────────────────────
-  //
-  // FIX: resumeExam() sada se poziva ODMAH (optimistički) da korisnik
-  // ne čeka async API poziv za vidljivi feedback.
-  // Timer se sinkronizira s DB elapsed vrijednošću tek kad stigne API odgovor.
-  //
   const handleResume = useCallback(async () => {
     if (!isPaused) return;
 
     const localElapsed = getElapsed();
 
-    // Optimistički: odmah nastavi u UI
+    // Optimistički: odmah nastavi UI s lokalnim elapsed
     resumeExam();
-    applyServerElapsed(localElapsed, { running: true });
+    onResumeTimer(localElapsed);
 
+    // DB sinkronizacija: dobij server elapsed i korigiraj timer
     const aid = attemptIdRef.current;
     if (aid) {
-      try {
-        const resumeData = await attemptApi.resume(aid);
-        // Sinkroniziraj timer s server elapsed (preciznije od lokalnog)
-        const serverElapsed = resumeData?.elapsed_seconds ?? localElapsed;
-        applyServerElapsed(serverElapsed, { running: true });
-      } catch (err) {
-        console.warn("[resume_attempt]", err);
-        // Resume je već primijenjen optimistički — nastavljamo s lokalnim elapsed
-      }
+      attemptApi
+        .resume(aid)
+        .then((data) => {
+          if (data?.elapsed_seconds != null) {
+            onResumeTimer(data.elapsed_seconds);
+          }
+        })
+        .catch((err) => console.warn("[handleResume] DB sync:", err));
     }
 
     toast.success("Ispit nastavljen.");
-  }, [isPaused, resumeExam, getElapsed, applyServerElapsed, attemptIdRef]);
+  }, [isPaused, resumeExam, onResumeTimer, getElapsed, attemptIdRef]);
 
-  // ── Predaja ispita ─────────────────────────────────────────────────────────
-  //
-  // FIX KRITIČNI #3: try/catch/finally umjesto try/catch bez finally.
-  // isSubmitting se UVIJEK resetira na false pri grešci.
-  //
+  // ── Predaja ────────────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -157,13 +120,13 @@ export function useExamSubmit(
     const currentAnswers = useExamStore.getState().answers;
     const elapsed = getElapsed();
 
-    // Čekaj attempt kreiranje ako je još u tijeku (race condition fix)
+    // Čekaj kreiranje attempta ako je još u tijeku
     const creationRef = attemptCreationPromiseRef.current;
     if (creationRef && creationRef !== "done") {
       try {
         await creationRef;
       } catch {
-        // Kreiranje failalo → nastavi bez attemptId (offline fallback)
+        // Nastavi bez attemptId (offline fallback)
       }
     }
 
@@ -175,47 +138,42 @@ export function useExamSubmit(
         rpcResult = await attemptApi.finish(aid, currentAnswers, elapsed);
       }
 
-      // Tab data za monitoring
+      // Tab integrity log
       const tabData = tabDataRef?.current ?? {
         switchCount: 0,
         totalHiddenMs: 0,
       };
-
-      submitExam(rpcResult);
-
       if (tabData.switchCount > 0) {
         console.info(
-          `[exam-integrity] examId=${examId}, attemptId=${aid}, ` +
-            `tabSwitches=${tabData.switchCount}, ` +
-            `totalHiddenSecs=${Math.round(tabData.totalHiddenMs / 1000)}`,
+          `[exam-integrity] examId=${examId} aid=${aid} ` +
+            `tabs=${tabData.switchCount} ` +
+            `hiddenSec=${Math.round(tabData.totalHiddenMs / 1000)}`,
         );
       }
 
+      submitExam(rpcResult);
       draftStorage.clear(examId);
       navigate(aid ? `/rezultati/pokusaj/${aid}` : `/rezultati/${examId}`, {
         replace: true,
       });
+      // navigate unmountira komponentu — setIsSubmitting(false) nije potreban
     } catch (err) {
-      // FIX #3: Uvijek resetiraj isSubmitting na grešku
       console.error("[handleSubmit]", err);
+      const msg = err?.message ?? "";
 
-      const msg = err?.message ?? String(err);
-      if (msg.includes("nije pronađen ili je već završen")) {
-        toast.error(
-          "Ovaj pokušaj je već završen ili ne postoji. Pokušajte početi novi ispit.",
-        );
-      } else if (msg.includes("401") || msg.includes("auth")) {
+      if (msg.includes("već završen")) {
+        toast.error("Ovaj ispit je već završen.");
+      } else if (msg.includes("Nemate") || msg.includes("dozvol")) {
         toast.error("Sesija je istekla. Molimo se prijavite ponovo.");
       } else {
         toast.error(
-          "Greška pri predaji ispita. Vaši odgovori su sačuvani. Pokušajte ponovo.",
+          "Greška pri predaji. Odgovori su sačuvani. Pokušajte ponovo.",
         );
       }
 
+      // BUG #5 FIX: Uvijek reset isSubmitting na grešci
       setIsSubmitting(false);
     }
-    // Napomena: setIsSubmitting(false) se ne poziva pri uspjehu jer
-    // navigate() odmah unmountira komponentu → nije potrebno.
   }, [
     isSubmitting,
     getElapsed,
@@ -227,23 +185,12 @@ export function useExamSubmit(
     navigate,
   ]);
 
-  // ── FIX #4: Drži handleSubmitRef.current u sync s najnovijim handleSubmit ──
-  //
-  // ZAŠTO: useTimer.onExpire(fn) hvata fn iz closure pri inicijalizaciji.
-  // Ako handleSubmit promijeni referencu (npr. zbog dependency promjene),
-  // timer bi zvao staru verziju. Ref rješava ovaj stale closure problem.
-  //
-  useEffect(() => {
-    handleSubmitRef.current = handleSubmit;
-  }, [handleSubmit]);
-
   return {
     isSubmitting,
     showSubmitModal,
     setShowSubmitModal,
     handlePause,
     handleResume,
-    handleSubmit, // ← direktno eksponiran za useExamSession.js
-    handleSubmitRef, // ← za backward compatibility
+    handleSubmit,
   };
 }

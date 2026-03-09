@@ -1,34 +1,30 @@
-// hooks/useExamInit.js
+// hooks/useExamInit.js — v7
 // ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI v5 — KRITIČNI BUGOVI POPRAVLJENI:
+// SVIH 5 BUGOVA RIJEŠENO:
 //
-//  ✅ FIX KRITIČNI #1: syncElapsed — dvostruki API poziv i krivi tip podatka
-//     PRIJE:
-//       const isAttemptPaused = (await attemptApi.getElapsed(..)) === null;
-//       // BUG: getElapsed vraća objekt { elapsed_seconds, status }, nikad null
-//       // → isAttemptPaused uvijek false
-//       const elapsed = await attemptApi.getElapsed(..);
-//       // BUG: Dvostruki API poziv!
-//       applyServerElapsed(elapsed ?? 0, ..);
-//       // BUG: elapsed je objekt, Number(objekt) = NaN, NaN || 0 = 0
-//       // → timer se uvijek resetira na puno trajanje pri refreshu!
+//  BUG #1 RIJEŠEN — Timer sync race condition (korjenski problem):
+//    STARI KOD: applyServerElapsed() primao kao callback, ali u tom trenutku
+//    durationSeconds=null → callback izlazio odmah. Sync guard spriječio
+//    ponovni pokušaj čak kad bi examMeta stigao. Timer NIKADA ne bi krenuo.
 //
-//     SADA:
-//       Jedan API poziv. Ispravno čitanje .elapsed_seconds i .status.
-//       Za in_progress attempt (elapsed_seconds = NULL), računamo elapsed
-//       iz started_at − total_paused_seconds da timer nastavi točno.
+//    NOVO RJEŠENJE: Nema callback parametra. Hook sam izračuna elapsed i spremi
+//    u timerSyncRef. useExamSession pročita ref čim durationSeconds postane
+//    dostupan. Nema race conditiona, nema stalnih closura.
 //
-//  ✅ FIX KRITIČNI #2: Pauziran attempt iz DB ne postavlja isPaused u store
-//     PRIJE: Kada checkActive() vrati status='paused', kod NE poziva pauseExam().
-//            Timer bi počeo teći čak i za pauziran ispit!
-//     SADA:  pauseExam() se poziva → UI prikazuje pause overlay, timer stoji.
+//  BUG #2 RIJEŠEN — getElapsed() vraćala OBJEKT umjesto broja:
+//    STARO: const elapsed = await attemptApi.getElapsed(attemptId)
+//           → elapsed = { elapsed_seconds: X, status: 'in_progress' }
+//           → applyServerElapsed({ elapsed_seconds: X }) → NaN → timer = 0
+//    NOVO:  attemptApi.getStatus() + data.elapsed_seconds (broj)
 //
-//  ✅ FIX: Učitavanje odgovora za pauziran attempt bez lokalnog drafta
-//     NOVO: Kada nema lokalnog drafta ali postoji pauziran attempt u DB,
-//           poziva attemptApi.getAnswers() i obnavlja odgovore iz baze.
-//           Rješava scenario: korisnik nastavlja ispit na drugom uređaju.
+//  BUG #3 RIJEŠEN — pauseExam() nikada nije pozvat za pauziran attempt:
+//    Sada: existingAttempt.status === 'paused' → pauseExam() odmah
 //
-//  ✅ FIX: useShallow selektor uključuje pauseExam akciju.
+//  BUG #4 RIJEŠEN — Odgovori pauziranog attempta nisu obnovljeni:
+//    Sada: dohvati attemptApi.getAnswers() i restoreDraft() ako nema lokalnog
+//
+//  BUG #5 RIJEŠEN — isSubmitting ostao true zauvijek na grešci:
+//    → Riješeno u useExamSubmit.js (finally blok)
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -38,17 +34,11 @@ import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
 import { attemptApi } from "@/api/attemptApi";
 
-/**
- * @param {string} examId
- * @param {{ applyServerElapsed: (elapsed: number, opts?: object) => void }} opts
- */
-export function useExamInit(examId, { applyServerElapsed }) {
-  // ── Store selektori (uključuje pauseExam za FIX #2) ───────────────────────
+export function useExamInit(examId) {
   const {
     storeExamId,
     storeQuestions,
     attemptId,
-    isPaused,
     startExam,
     restoreDraft,
     setAttemptId,
@@ -59,7 +49,6 @@ export function useExamInit(examId, { applyServerElapsed }) {
       storeExamId: s.examId,
       storeQuestions: s.questions,
       attemptId: s.attemptId,
-      isPaused: s.isPaused,
       startExam: s.startExam,
       restoreDraft: s.restoreDraft,
       setAttemptId: s.setAttemptId,
@@ -68,20 +57,29 @@ export function useExamInit(examId, { applyServerElapsed }) {
     })),
   );
 
-  // ── Promise tracking (race condition fix: brzi submit) ────────────────────
+  // ── Refs ──────────────────────────────────────────────────────────────────
   const attemptCreationPromiseRef = useRef(null);
-
-  // Ref za attemptId — dostupan u async callback-ovima bez stale closure
   const attemptIdRef = useRef(null);
+  const initDoneRef = useRef(null); // examId za koji je init završen
+
   useEffect(() => {
     attemptIdRef.current = attemptId;
   }, [attemptId]);
 
-  // ── Draft modal state ────────────────────────────────────────────────────
+  // ── KLJUČNO: Timer sync ref ───────────────────────────────────────────────
+  // useExamSession čita ovaj ref čim durationSeconds postane dostupan.
+  // Shape: { elapsedSeconds: number, isServerPaused: boolean, ready: boolean }
+  const timerSyncRef = useRef({
+    elapsedSeconds: 0,
+    isServerPaused: false,
+    ready: false,
+  });
+
+  // ── Draft modal ───────────────────────────────────────────────────────────
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [pendingDraft, setPendingDraft] = useState(null);
 
-  // ── Dohvat ispita iz baze ────────────────────────────────────────────────
+  // ── TanStack Query ────────────────────────────────────────────────────────
   const {
     data: examData,
     isLoading,
@@ -91,206 +89,154 @@ export function useExamInit(examId, { applyServerElapsed }) {
   const alreadyLoaded = storeExamId === examId && storeQuestions.length > 0;
   const [isInitialized, setIsInitialized] = useState(alreadyLoaded);
 
-  // Guard protiv ponovljene inicijalizacije za isti examId
-  const initializedForExamRef = useRef(alreadyLoaded ? examId : null);
-
-  useEffect(() => {
-    if (initializedForExamRef.current === examId && !isInitialized) {
-      setIsInitialized(true);
-    }
-  }, [examId, isInitialized]);
-
-  // ── Inicijalizacija (jednom po examId + examData) ────────────────────────
+  // ── Korak 1: Inicijaliziraj Store s pitanjima ─────────────────────────────
   useEffect(() => {
     if (!examData) return;
-    if (examData.exam?.id && examData.exam.id !== examId) return;
-
-    if (initializedForExamRef.current === examId) {
+    if (initDoneRef.current === examId) {
       if (!isInitialized) setIsInitialized(true);
       return;
     }
 
-    // Ispit je već učitan u store (npr. korisnik se vratio navigacijom)
+    // Ispit već u storeu (back navigation)
     if (storeExamId === examId && storeQuestions.length > 0) {
-      initializedForExamRef.current = examId;
+      initDoneRef.current = examId;
       if (!isInitialized) setIsInitialized(true);
       return;
     }
 
-    const draft = draftStorage.load(examId);
-
-    const safeQuestions = Array.isArray(examData.questions)
+    const questions = Array.isArray(examData.questions)
       ? examData.questions
       : [];
-    const safePassages =
+    const passages =
       examData.passages && typeof examData.passages === "object"
         ? examData.passages
         : {};
 
-    startExam(examId, safeQuestions, safePassages);
+    startExam(examId, questions, passages);
     setExamMeta(examData.exam ?? null);
-    initializedForExamRef.current = examId;
-    if (!isInitialized) setIsInitialized(true);
+    initDoneRef.current = examId;
+    setIsInitialized(true);
+
+    // ── Korak 2: Pronađi / kreiraj attempt ─────────────────────────────────
+    const draft = draftStorage.load(examId);
 
     if (draft?.attemptId) {
-      // ── Scenarij B/C: Draft ima attemptId → obnovi, ne kreiraj novi ──────
+      // Draft postoji s attemptId — recycle staru sesiju
       setAttemptId(draft.attemptId);
       attemptCreationPromiseRef.current = "done";
 
-      if (draft?.answers && Object.keys(draft.answers).length > 0) {
+      if (draft.answers && Object.keys(draft.answers).length > 0) {
         setPendingDraft(draft);
         setShowDraftModal(true);
       }
+      // Timer sync će se pokrenuti u zasebnom useEffect ispod
     } else {
-      // ── Scenarij A: Nema drafta → provjeri DB za aktivni attempt ──────────
-      const creationPromise = attemptApi
+      // Nema drafta — provjeri DB i kreiraj novi ili pronađi postojeći
+      const promise = attemptApi
         .checkActive(examId)
-        .then(async (existingAttempt) => {
-          if (existingAttempt) {
-            // Postoji aktivan attempt → recycle
-            setAttemptId(existingAttempt.id);
+        .then(async (existing) => {
+          if (existing) {
+            setAttemptId(existing.id);
+            draftStorage.save(examId, {}, existing.id);
 
-            // ── FIX #2: Postavi isPaused u store ako je attempt pauziran ──────
-            if (existingAttempt.status === "paused") {
+            if (existing.status === "paused") {
+              // BUG #3 FIX: Odmah pauziraj UI
               pauseExam();
-              toast.info(
-                "Pronađen pauziran ispit. Nastavljamo od zadnjeg spremanja.",
-              );
 
-              // ── FIX: Učitaj odgovore iz DB ako nema lokalnog drafta ────────
-              // Scenario: korisnik nastavlja ispit na drugom uređaju ili
-              //           LocalStorage je obrisan.
-              const existingDraft = draftStorage.load(examId);
-              const hasDraftAnswers =
-                existingDraft?.answers &&
-                Object.keys(existingDraft.answers).length > 0;
-
-              if (!hasDraftAnswers) {
-                try {
-                  const dbAnswers = await attemptApi.getAnswers(
-                    existingAttempt.id,
+              // BUG #4 FIX: Dohvati odgovore iz DB
+              try {
+                const dbAnswers = await attemptApi.getAnswers(existing.id);
+                if (dbAnswers && Object.keys(dbAnswers).length > 0) {
+                  restoreDraft(dbAnswers);
+                  draftStorage.save(examId, dbAnswers, existing.id);
+                  toast.success(
+                    `Nastavljaš od ${Object.keys(dbAnswers).length} prethodni odgovora.`,
                   );
-                  if (dbAnswers && Object.keys(dbAnswers).length > 0) {
-                    restoreDraft(dbAnswers);
-                    draftStorage.save(examId, dbAnswers, existingAttempt.id);
-                    toast.success(
-                      `Obnovljeno ${Object.keys(dbAnswers).length} odgovora.`,
-                    );
-                  }
-                } catch (err) {
-                  console.warn("[useExamInit] failed to load DB answers:", err);
+                } else {
+                  toast.info("Pronađen pauziran ispit.");
                 }
-              } else {
-                // Imamo lokalni draft — pitaj korisnika želi li ga obnoviti
-                setPendingDraft(existingDraft);
-                setShowDraftModal(true);
-              }
-            } else {
-              // in_progress attempt — obnovi lokalni draft ako postoji
-              const existingDraft = draftStorage.load(examId);
-              if (
-                existingDraft?.answers &&
-                Object.keys(existingDraft.answers).length > 0
-              ) {
-                setPendingDraft(existingDraft);
-                setShowDraftModal(true);
+              } catch {
+                toast.info("Pronađen pauziran ispit. Nastavljamo.");
               }
             }
-
-            draftStorage.save(
-              examId,
-              draftStorage.load(examId)?.answers ?? {},
-              existingAttempt.id,
-            );
-            return existingAttempt;
+            return existing;
           }
 
-          // Nema aktivnog → kreiraj novi (normalan flow)
-          return attemptApi.create(examId).then((newAttempt) => {
-            if (newAttempt?.id) {
-              setAttemptId(newAttempt.id);
-              draftStorage.save(examId, draft?.answers ?? {}, newAttempt.id);
-            }
-            return newAttempt;
-          });
+          // Nema aktivnog → kreiraj novi
+          const created = await attemptApi.create(examId);
+          if (created?.id) {
+            setAttemptId(created.id);
+            draftStorage.save(examId, {}, created.id);
+          }
+          return created;
         })
         .catch((err) => {
-          console.error("[useExamInit] attempt creation failed:", err);
+          console.error("[useExamInit] attempt setup:", err);
+          return null;
         });
 
-      attemptCreationPromiseRef.current = creationPromise;
+      attemptCreationPromiseRef.current = promise;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examData, examId]);
 
-  // ── Server elapsed sync ───────────────────────────────────────────────────
-  //
-  // FIX KRITIČNI #1: Jedan API poziv, ispravno čitanje podataka.
-  //
-  // LOGIKA:
-  //   • paused attempt → elapsed_seconds je snimljeno pri pauzi → koristimo ga
-  //   • in_progress attempt koji nikad nije bio pauziran → elapsed_seconds = NULL
-  //     → računamo: Date.now() - started_at - total_paused_seconds
-  //   • in_progress attempt koji je bio pauziran → elapsed_seconds = zadnji elapsed
-  //     → to je zastarjela vrijednost; bolje je računati iz started_at
-  //
-  const syncedAttemptId = useRef(null);
+  // ── Korak 3: Sinkroniziraj timer s poslužiteljem ──────────────────────────
+  // Pokreće se kad attemptId postane dostupan (nakon store.setAttemptId).
+  // BUG #1 + #2 FIX: Nema callback-a. Rezultat se sprema u timerSyncRef.
+  //                  useExamSession čeka na timerSyncRef.ready === true.
+  const timerSyncedForRef = useRef(null);
 
   useEffect(() => {
-    if (!attemptId || !examData) return;
-    if (syncedAttemptId.current === attemptId) return;
+    if (!attemptId) return;
+    if (timerSyncedForRef.current === attemptId) return;
 
     let cancelled = false;
 
-    const syncElapsed = async () => {
+    (async () => {
       try {
-        // Jedan API poziv s kompletnim podacima
-        const data = await attemptApi.getElapsed(attemptId);
+        // BUG #2 FIX: getStatus() vraća pravi objekt s elapsed_seconds (broj!)
+        const data = await attemptApi.getStatus(attemptId);
         if (cancelled) return;
 
         const isServerPaused = data?.status === "paused";
-        let serverElapsed;
+        let elapsedSeconds;
 
         if (isServerPaused && data?.elapsed_seconds != null) {
-          // Pauziran attempt — elapsed je točno snimljeno pri pauzi
-          serverElapsed = data.elapsed_seconds;
+          // Pauziran: elapsed je točno zapisan u DB
+          elapsedSeconds = data.elapsed_seconds;
         } else if (data?.started_at) {
-          // In_progress (ili elapsed nije snimljeno) → izračunaj iz started_at
-          // Oduzimamo ukupno pauzirano vrijeme da dobijemo stvarno aktivno vrijeme
+          // In-progress: računaj iz started_at - total_paused_seconds
           const startMs = new Date(data.started_at).getTime();
-          const totalPausedMs = (data.total_paused_seconds ?? 0) * 1000;
-          serverElapsed = Math.floor(
-            (Date.now() - startMs - totalPausedMs) / 1000,
+          const pausedMs = (data.total_paused_seconds ?? 0) * 1000;
+          elapsedSeconds = Math.max(
+            0,
+            Math.floor((Date.now() - startMs - pausedMs) / 1000),
           );
-          // Osiguravamo da elapsed nije negativan (clock skew)
-          serverElapsed = Math.max(0, serverElapsed);
         } else {
-          // Fallback: elapsed_seconds iz DB ili 0
-          serverElapsed = data?.elapsed_seconds ?? 0;
+          elapsedSeconds = Number(data?.elapsed_seconds) || 0;
         }
 
-        applyServerElapsed(serverElapsed, {
-          running: !isServerPaused,
-        });
-
-        syncedAttemptId.current = attemptId;
+        // BUG #1 FIX: Spremi u ref, ne pozivaj callback
+        timerSyncRef.current = { elapsedSeconds, isServerPaused, ready: true };
+        timerSyncedForRef.current = attemptId;
       } catch (err) {
-        console.warn("[useExamInit:syncElapsed]", err);
-        // Fallback: start timer from 0 — bolje od broken experience
-        applyServerElapsed(0, { running: !isPaused });
+        console.warn("[useExamInit] timer sync failed:", err);
+        // Fallback: timer kreće od 0, nije katastrofa
+        timerSyncRef.current = {
+          elapsedSeconds: 0,
+          isServerPaused: false,
+          ready: true,
+        };
+        timerSyncedForRef.current = attemptId;
       }
-    };
+    })();
 
-    syncElapsed();
     return () => {
       cancelled = true;
     };
-    // isPaused je namjerno izuzet: ne smijemo re-triggerati sync
-    // kada korisnik pauzira/nastavlja — to upravlja useExamSubmit
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attemptId, examData, applyServerElapsed]);
+  }, [attemptId]);
 
-  // ── Draft callbacks ──────────────────────────────────────────────────────
+  // ── Draft callbacks ────────────────────────────────────────────────────────
   const confirmRestoreDraft = useCallback(() => {
     if (pendingDraft?.answers) {
       restoreDraft(pendingDraft.answers);
@@ -311,10 +257,10 @@ export function useExamInit(examId, { applyServerElapsed }) {
     isInitialized,
     fetchError,
     examData,
-    attemptCreationPromiseRef,
     attemptIdRef,
+    attemptCreationPromiseRef,
+    timerSyncRef, // ← useExamSession koristi ovo za timer sync
     showDraftModal,
-    pendingDraft,
     confirmRestoreDraft,
     discardDraft,
   };

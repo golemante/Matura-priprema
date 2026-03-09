@@ -1,17 +1,31 @@
-// hooks/useExamSession.js
+// hooks/useExamSession.js — v7
 // ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI v5:
+// SVIH 5 BUGOVA RIJEŠENO:
 //
-//  ✅ FIX KRITIČNI #4 (nastavak): handleSubmitRef.current sync
-//     PRIJE: `handleSubmitRef.current = submit.handleSubmitRef.current`
-//            → Kopiralo je TRENUTNU VRIJEDNOST ref-a (null!) u drugi ref.
-//            → Timer onExpire je pozivao null → ispit se nikad nije predao
-//               automatski kad je isteklo vrijeme!
-//     SADA:  `handleSubmitRef.current = submit.handleSubmit`
-//            → Direktno postavlja funkciju, ne kopira ref vrijednost.
-//            → Timer onExpire ispravno predaje ispit.
+//  BUG #1 — Timer sync race condition [KORJENSKI PROBLEM]:
+//    STARO: applyServerElapsed() callback s durationSeconds u closure.
+//           examMeta još nije učitan → durationSeconds=null → callback izlazi.
+//           syncedAttemptId guard blokira ponovni pokušaj. Timer NIKADA ne krene.
+//    NOVO:  timerSyncRef (iz useExamInit) drži elapsed podatke bez callbacka.
+//           useEffect čeka dok su OBOJE dostupni: durationSeconds + timerSyncRef.ready
+//           Polling svakih 100ms ako sync nije spreman. Timer uvijek krene točno.
 //
-//  ✅ Sve ostale funkcionalnosti ostaju identične — ExamTaking.jsx ne treba izmjene.
+//  BUG #2 — getElapsed() vraćala objekt umjesto broja:
+//    Riješeno u useExamInit.js → attemptApi.getStatus().elapsed_seconds (broj)
+//
+//  BUG #3 — pauseExam() nije pozvan za pauziran attempt:
+//    Riješeno u useExamInit.js → pauseExam() odmah na status==='paused'
+//
+//  BUG #4 — Odgovori pauziranog attempta nisu obnovljeni:
+//    Riješeno u useExamInit.js → attemptApi.getAnswers() + restoreDraft()
+//
+//  BUG #5 — isSubmitting zauvijek true na grešci:
+//    Riješeno u useExamSubmit.js → finally blok
+//
+//  DODATNI ISPRAVCI:
+//  • let timer antipattern uklonjen → const timer = useTimer(...)
+//  • handleSubmitRef.current = submit.handleSubmit (ne .handleSubmitRef.current)
+//  • auto-save svakih 30s
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -29,22 +43,21 @@ import { useExamSubmit } from "@/hooks/useExamSubmit";
 // ── Debounce helper ────────────────────────────────────────────────────────────
 function debounce(fn, ms) {
   let id;
-  const debounced = (...args) => {
+  const d = (...args) => {
     clearTimeout(id);
     id = setTimeout(() => fn(...args), ms);
   };
-  debounced.flush = (...args) => {
+  d.flush = (...args) => {
     clearTimeout(id);
     fn(...args);
   };
-  debounced.cancel = () => clearTimeout(id);
-  return debounced;
+  d.cancel = () => clearTimeout(id);
+  return d;
 }
 
 export function useExamSession(examId) {
-  // ── Store selektori (useShallow za performance) ───────────────────────────
+  // ── Store selektori (useShallow: re-render samo kad se zaista promijeni) ───
   const {
-    examId: storeExamId,
     questions,
     answers,
     flagged,
@@ -57,10 +70,8 @@ export function useExamSession(examId) {
     setAnswer,
     toggleFlag,
     goToQuestion,
-    submitExam: storeSubmitExam,
   } = useExamStore(
     useShallow((s) => ({
-      examId: s.examId,
       questions: s.questions,
       answers: s.answers,
       flagged: s.flagged,
@@ -73,7 +84,6 @@ export function useExamSession(examId) {
       setAnswer: s.setAnswer,
       toggleFlag: s.toggleFlag,
       goToQuestion: s.goToQuestion,
-      submitExam: s.submitExam,
     })),
   );
 
@@ -81,157 +91,178 @@ export function useExamSession(examId) {
   const isExamActive = questions.length > 0 && !submittedAt;
   const tabDataRef = useTabVisibility({ enabled: isExamActive });
 
-  // ── Elapsed clock (anchor-based, bez drift-a) ─────────────────────────────
-  const elapsedClockRef = useRef({
-    syncedElapsed: 0,
-    localTickStartedAt: null,
-  });
-
+  // ── Duration ──────────────────────────────────────────────────────────────
   const durationSeconds = useMemo(
     () => (examMeta?.duration_minutes ? examMeta.duration_minutes * 60 : null),
     [examMeta],
   );
 
-  const getElapsed = useCallback(() => {
-    if (!durationSeconds) return 0;
-    const { syncedElapsed, localTickStartedAt } = elapsedClockRef.current;
-    const localElapsed = localTickStartedAt
-      ? Math.floor((Date.now() - localTickStartedAt) / 1000)
-      : 0;
-    return Math.min(durationSeconds, syncedElapsed + localElapsed);
+  // Ref uvijek drži aktualnu vrijednost (za getElapsed koji se ne smije mjenjati)
+  const durationRef = useRef(durationSeconds);
+  useEffect(() => {
+    durationRef.current = durationSeconds;
   }, [durationSeconds]);
 
-  // eslint-disable-next-line prefer-const
-  let timer;
+  // ── Elapsed clock (anchor-based, bez drift-a) ─────────────────────────────
+  const elapsedClockRef = useRef({ syncedElapsed: 0, startedAt: null });
 
-  const applyServerElapsed = useCallback(
-    (elapsedSeconds, { running = true } = {}) => {
-      if (!durationSeconds) return;
-      const normalized = Math.min(
-        durationSeconds,
-        Math.max(0, Number(elapsedSeconds) || 0),
-      );
-      elapsedClockRef.current = {
-        syncedElapsed: normalized,
-        localTickStartedAt: running ? Date.now() : null,
-      };
-      const remaining = Math.max(0, durationSeconds - normalized);
-      // eslint-disable-next-line no-use-before-define
-      timerRef.current?.resync(remaining, { running });
-    },
-    [durationSeconds],
-  );
-
-  const timerRef = useRef(null);
-
-  // ── handleSubmitRef: čuva najnoviji handleSubmit za timer onExpire ─────────
-  //
-  // FIX #4: Ovaj ref čuva FUNKCIJU, ne drugi ref.
-  // Postavlja se u useEffect ispod koji prati submit.handleSubmit.
-  //
-  const handleSubmitRef = useRef(null);
+  const getElapsed = useCallback(() => {
+    const dur = durationRef.current;
+    if (!dur) return 0;
+    const { syncedElapsed, startedAt } = elapsedClockRef.current;
+    const local = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
+    return Math.min(dur, syncedElapsed + local);
+  }, []); // Stabilan — koristi samo refove
 
   // ── Timer ─────────────────────────────────────────────────────────────────
-  timer = useTimer(durationSeconds, {
-    onExpire: () => handleSubmitRef.current?.(),
-    onWarning: () => toast.warning("Ostaje manje od 10 minuta!"),
+  // handleSubmitRef drži najnoviji handleSubmit za timer onExpire
+  const handleSubmitRef = useRef(null);
+
+  const timer = useTimer(durationSeconds, {
+    onExpire: useCallback(() => handleSubmitRef.current?.(), []),
+    onWarning: useCallback(
+      () => toast.warning("Ostaje manje od 10 minuta!"),
+      [],
+    ),
   });
 
+  // Ref za timer objekt (dostupan submit/pause callbackima)
+  const timerRef = useRef(timer);
   useEffect(() => {
     timerRef.current = timer;
   });
 
+  // Prati running stanje za elapsed clock
   useEffect(() => {
     if (!durationSeconds) return;
-    if (timer.running && !elapsedClockRef.current.localTickStartedAt) {
+    if (timer.running && !elapsedClockRef.current.startedAt) {
       elapsedClockRef.current = {
         ...elapsedClockRef.current,
-        localTickStartedAt: Date.now(),
+        startedAt: Date.now(),
       };
-    } else if (!timer.running && elapsedClockRef.current.localTickStartedAt) {
+    } else if (!timer.running && elapsedClockRef.current.startedAt) {
       elapsedClockRef.current = {
         syncedElapsed: getElapsed(),
-        localTickStartedAt: null,
+        startedAt: null,
       };
     }
   }, [durationSeconds, timer.running, getElapsed]);
 
-  // ── Draft save (debounced 750ms + immediate flush) ────────────────────────
-  const saveDraftImmediate = useCallback(
-    (nextAnswers) => {
-      const currentAttemptId =
-        attemptId ?? draftStorage.load(examId)?.attemptId ?? null;
-      draftStorage.save(examId, nextAnswers, currentAttemptId);
+  // ── Timer control callbacks (prosljeđuju se useExamSubmit) ────────────────
+  const onPauseTimer = useCallback(
+    (remaining) => {
+      elapsedClockRef.current = {
+        syncedElapsed: getElapsed(),
+        startedAt: null,
+      };
+      timerRef.current?.resync(remaining, { running: false });
     },
-    [examId, attemptId],
+    [getElapsed],
   );
 
+  const onResumeTimer = useCallback((elapsedSeconds) => {
+    const dur = durationRef.current;
+    if (!dur) return;
+    const normalized = Math.min(dur, Math.max(0, Number(elapsedSeconds) || 0));
+    const remaining = Math.max(0, dur - normalized);
+    elapsedClockRef.current = {
+      syncedElapsed: normalized,
+      startedAt: Date.now(),
+    };
+    timerRef.current?.resync(remaining, { running: true });
+  }, []);
+
+  // ── useExamInit ────────────────────────────────────────────────────────────
+  // BUG #1 FIX: Nema applyServerElapsed callback. Init eksponira timerSyncRef.
+  const init = useExamInit(examId);
+
+  // ── BUG #1 FIX: Timer sync effect ─────────────────────────────────────────
+  // Čeka dok su OBOJE dostupni: durationSeconds + timerSyncRef.ready.
+  // Polling interval rješava race condition — ako sync stigne prije examMeta,
+  // čekamo examMeta. Ako examMeta stigne prije syncа, čekamo sync.
+  const timerAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (!durationSeconds) return; // Čekaj examMeta
+    if (timerAppliedRef.current) return; // Već primijenjeno
+
+    const tryApply = () => {
+      const syncData = init.timerSyncRef.current;
+      if (!syncData.ready) return false; // Sync još nije spreman
+
+      timerAppliedRef.current = true;
+      onResumeTimer(syncData.elapsedSeconds);
+
+      // Ako je server rekao da je pauziran → zaustavi timer
+      if (syncData.isServerPaused) {
+        const dur = durationRef.current ?? 0;
+        const remaining = Math.max(0, dur - syncData.elapsedSeconds);
+        elapsedClockRef.current = {
+          syncedElapsed: syncData.elapsedSeconds,
+          startedAt: null,
+        };
+        timerRef.current?.resync(remaining, { running: false });
+      }
+      return true;
+    };
+
+    if (tryApply()) return; // Odmah gotovo
+
+    // Polling dok sync ne bude spreman
+    const id = setInterval(() => {
+      if (tryApply()) clearInterval(id);
+    }, 100);
+    return () => clearInterval(id);
+  }, [durationSeconds, init.timerSyncRef, onResumeTimer]);
+
+  // ── Draft save (debounced 750ms) ───────────────────────────────────────────
   const debouncedSaveDraftRef = useRef(null);
   if (!debouncedSaveDraftRef.current) {
-    debouncedSaveDraftRef.current = debounce((answers) => {
+    debouncedSaveDraftRef.current = debounce((nextAnswers) => {
       const aid =
         useExamStore.getState().attemptId ??
         draftStorage.load(examId)?.attemptId ??
         null;
-      draftStorage.save(examId, answers, aid);
+      draftStorage.save(examId, nextAnswers, aid);
     }, 750);
   }
+  useEffect(() => () => debouncedSaveDraftRef.current?.cancel(), []);
 
-  const saveDraft = useCallback(
-    (nextAnswers, { immediate = false } = {}) => {
-      if (immediate) {
-        debouncedSaveDraftRef.current.flush(nextAnswers);
-        saveDraftImmediate(nextAnswers);
-      } else {
-        debouncedSaveDraftRef.current(nextAnswers);
-      }
-    },
-    [saveDraftImmediate],
-  );
+  const saveDraft = useCallback((nextAnswers, { immediate = false } = {}) => {
+    if (immediate) {
+      debouncedSaveDraftRef.current.flush(nextAnswers);
+    } else {
+      debouncedSaveDraftRef.current(nextAnswers);
+    }
+  }, []);
 
-  // ── Sub-hookovi ───────────────────────────────────────────────────────────
-  const init = useExamInit(examId, { applyServerElapsed });
-
+  // ── useExamSubmit ──────────────────────────────────────────────────────────
   const submit = useExamSubmit(examId, {
     attemptIdRef: init.attemptIdRef,
     attemptCreationPromiseRef: init.attemptCreationPromiseRef,
-    timer,
     getElapsed,
-    applyServerElapsed,
     durationSeconds,
+    onPauseTimer,
+    onResumeTimer,
     saveDraft,
     tabDataRef,
   });
 
-  // ── FIX #4: Postavi handleSubmitRef.current na FUNKCIJU, ne na ref ─────────
-  //
-  // PRIJE: handleSubmitRef.current = submit.handleSubmitRef.current
-  //        → kopiralo je .current vrijednost (null pri mount-u) iz sub-hooka
-  //        → timer onExpire zvao null → autosubmit na istek nije radio!
-  //
-  // SADA: handleSubmitRef.current = submit.handleSubmit
-  //       → direktno referencira funkciju iz useExamSubmit
-  //
+  // BUG UKLONJEN: Direktna referenca, ne kopija .current!
+  // submit.handleSubmit je stabilan useCallback — ref je uvijek aktualan
   useEffect(() => {
     handleSubmitRef.current = submit.handleSubmit;
   }, [submit.handleSubmit]);
 
-  // ── Auto-save svakih 30s ──────────────────────────────────────────────────
+  // ── Auto-save svakih 30s ───────────────────────────────────────────────────
   useEffect(() => {
-    if (!examId || Object.keys(answers).length === 0) return;
+    if (!examId || !Object.keys(answers).length) return;
     const id = setInterval(
       () => saveDraft(answers, { immediate: true }),
       30_000,
     );
     return () => clearInterval(id);
   }, [examId, answers, saveDraft]);
-
-  // ── Cleanup debounce na unmount ───────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      debouncedSaveDraftRef.current?.cancel();
-    };
-  }, []);
 
   // ── Derived values ────────────────────────────────────────────────────────
   const totalVisible = useMemo(
@@ -240,7 +271,7 @@ export function useExamSession(examId) {
   );
 
   const answeredCount = useMemo(
-    () => Object.keys(answers).filter((k) => answers[k] != null).length,
+    () => Object.values(answers).filter((v) => v != null).length,
     [answers],
   );
 
@@ -256,22 +287,21 @@ export function useExamSession(examId) {
     [currentIndex, goToQuestion, totalVisible],
   );
 
-  // ── Odgovor + zastavica ───────────────────────────────────────────────────
+  // ── Odgovori + zastavice ──────────────────────────────────────────────────
   const handleAnswer = useCallback(
     (letter) => {
       if (isPaused) return;
-      const current = questions[currentIndex];
-      if (!current) return;
-      setAnswer(current.id, letter);
+      const q = questions[currentIndex];
+      if (!q) return;
+      setAnswer(q.id, letter);
       saveDraft(useExamStore.getState().answers);
     },
     [isPaused, questions, currentIndex, setAnswer, saveDraft],
   );
 
   const handleToggleFlag = useCallback(() => {
-    const current = questions[currentIndex];
-    if (!current) return;
-    toggleFlag(current.id);
+    const q = questions[currentIndex];
+    if (q) toggleFlag(q.id);
   }, [questions, currentIndex, toggleFlag]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -296,8 +326,6 @@ export function useExamSession(examId) {
   );
 
   useBeforeUnload(questions.length > 0 && !submittedAt);
-
-  // ── Image preloading (performance) ───────────────────────────────────────
   useImagePreload(questions, currentIndex, { ahead: 3 });
 
   // ── Computed current question ─────────────────────────────────────────────
@@ -313,11 +341,7 @@ export function useExamSession(examId) {
     isLoading: init.isLoading,
     isInitialized: init.isInitialized,
     fetchError: init.fetchError,
-    examData: init.examData,
-
-    // Draft modal
     showDraftModal: init.showDraftModal,
-    pendingDraft: init.pendingDraft,
     confirmRestoreDraft: init.confirmRestoreDraft,
     discardDraft: init.discardDraft,
 
@@ -346,7 +370,7 @@ export function useExamSession(examId) {
     handleAnswer,
     handleToggleFlag,
 
-    // Submit actions
+    // Submit
     isSubmitting: submit.isSubmitting,
     showSubmitModal: submit.showSubmitModal,
     setShowSubmitModal: submit.setShowSubmitModal,
