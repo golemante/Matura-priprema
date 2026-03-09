@@ -60,7 +60,24 @@ export const examApi = {
         .order("position", { ascending: true }),
     ]);
 
-    if (examRes.error) throwNormalized(examRes.error);
+    let examData = examRes.data;
+
+    // Fallback: neki anon setupi dopuštaju čitanje preko exams_with_stats view-a,
+    // ali ne i direktno iz `exams` tablice. U tom slučaju pokušaj dohvatiti
+    // metapodatke iz view-a da odabir ispita ne pada odmah na grešku.
+    if (examRes.error) {
+      const { data: examFromView, error: viewError } = await supabase
+        .from("exams_with_stats")
+        .select(
+          "id, subject_id, year, session, level, duration_minutes, title, total_points, component, question_count",
+        )
+        .eq("id", examId)
+        .single();
+
+      if (viewError) throwNormalized(examRes.error);
+      examData = examFromView;
+    }
+
     if (questionsRes.error) throwNormalized(questionsRes.error);
 
     // Dedupliciraj passages u mapu
@@ -97,7 +114,7 @@ export const examApi = {
       options: Array.isArray(row.options) ? row.options : [],
     }));
 
-    return { exam: examRes.data, questions, passages: passagesMap };
+    return { exam: examData, questions, passages: passagesMap };
   },
 
   // ── Answer Key (točni odgovori — samo za completed attempts) ─────────────
