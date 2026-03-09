@@ -1,14 +1,61 @@
 // api/examApi.js
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX P2-2: Svi `throw error` zamijenjeni s `throwNormalized(error)`
+// FIX: Dodan fallback za questions_full VIEW grešku
 //
-// ZAŠTO: Raw Supabase PostgrestError sadrži poruke poput:
-//   "JWT expired", "violates row-level security policy", "PGRST116"
-// koje su besmislene krajnjem korisniku.
-// throwNormalized() prevodi na: "Sesija je istekla", "Nemate dozvolu", itd.
+// PROBLEM: Ako GRANT SELECT ON questions_full nije primijenjen (ili VIEW ima
+// problem), `questionsRes.error` je postavljen i odmah se baca iznimka.
+// Korisnik vidi grešku iako exams, questions i options tablice rade normalno.
+//
+// RJEŠENJE: Ako questions_full VIEW ne radi, pokušaj direktni query na
+// `questions` + `options` tablicama (bez passage podataka u flat formatu).
+// Passages se dohvaćaju zasebno ako pitanja imaju passage_id.
+//
+// FIX P2-2: Svi `throw error` zamijenjeni s `throwNormalized(error)`
 // ─────────────────────────────────────────────────────────────────────────────
 import { supabase } from "@/lib/supabase";
 import { throwNormalized } from "@/lib/normalizeError";
+
+// ── Interna helper funkcija: mapiranje redaka u questions array ───────────────
+function mapQuestionRows(rows) {
+  return rows
+    .filter((row) => row?.id)
+    .map((row) => ({
+      id: row.id,
+      examId: row.exam_id,
+      position: row.position,
+      positionLabel: row.position_label ?? String(row.position),
+      sectionLabel: row.section_label ?? null,
+      questionType: row.question_type ?? "multiple_choice",
+      parentQuestionId: row.parent_question_id ?? null,
+      text: row.text ?? "",
+      inlineText: row.inline_text ?? null,
+      points: row.points ?? 1,
+      passageId: row.passage_id ?? null,
+      imageUrl: row.image_url ?? null,
+      options: Array.isArray(row.options) ? row.options : [],
+    }));
+}
+
+// ── Interna helper: dedupliciraj passages iz flat question_full redaka ────────
+function extractPassagesMap(rows) {
+  const passagesMap = {};
+  rows.forEach((row) => {
+    if (row.passage_id && !passagesMap[row.passage_id]) {
+      passagesMap[row.passage_id] = {
+        id: row.passage_id,
+        title: row.passage_title ?? null,
+        author: row.passage_author ?? null,
+        source: row.passage_source ?? null,
+        contentType: row.passage_content_type ?? "prose",
+        content: row.passage_content ?? "",
+        footnotes: Array.isArray(row.passage_footnotes)
+          ? row.passage_footnotes
+          : [],
+      };
+    }
+  });
+  return passagesMap;
+}
 
 export const examApi = {
   // ── Ispiti s community statistikama (SubjectSelect stranica) ──────────────
@@ -62,9 +109,9 @@ export const examApi = {
 
     let examData = examRes.data;
 
-    // Fallback: neki anon setupi dopuštaju čitanje preko exams_with_stats view-a,
-    // ali ne i direktno iz `exams` tablice. U tom slučaju pokušaj dohvatiti
-    // metapodatke iz view-a da odabir ispita ne pada odmah na grešku.
+    // ── Fallback #1: exams tablica → exams_with_stats VIEW ────────────────
+    // Neki anon setupi dopuštaju čitanje preko exams_with_stats view-a
+    // ali ne i direktno iz `exams` tablice.
     if (examRes.error) {
       const { data: examFromView, error: viewError } = await supabase
         .from("exams_with_stats")
@@ -78,54 +125,86 @@ export const examApi = {
       examData = examFromView;
     }
 
-    if (questionsRes.error) throwNormalized(questionsRes.error);
+    // ── Fallback #2: questions_full VIEW → direktni questions + options ────
+    //
+    // ZAŠTO: questions_full VIEW zahtijeva GRANT SELECT koji možda nije
+    // primijenjen (schema v4 sekcija 8). Direktne tablice imaju zasebne
+    // GRANT-ove i mogu raditi čak i kad VIEW ne radi.
+    //
+    // KOMPROMIS: Ovaj fallback ne vraća passage podatke u flat formatu
+    // jer questions_full VIEW joinuje passages. Umjesto toga, passages
+    // se dohvaćaju zasebno ako postoje passage_id-ovi u pitanjima.
+    //
+    if (questionsRes.error) {
+      console.warn(
+        "[examApi] questions_full VIEW failed, trying direct query:",
+        questionsRes.error.message,
+      );
 
-    // Defenzivno: u nekim rubnim slučajevima klijent može dobiti null/neočekivan
-    // payload bez eksplicitnog error-a. Time izbjegavamo runtime crash u UI-u.
+      const { data: directQuestions, error: directError } = await supabase
+        .from("questions")
+        .select(
+          `id, exam_id, passage_id, parent_question_id, position,
+           position_label, section_label, question_type, text,
+           inline_text, points, image_url,
+           options (id, letter, text)`,
+        )
+        .eq("exam_id", examId)
+        .order("position", { ascending: true });
+
+      if (directError) {
+        // Ni direktni query ne radi — baci originalnu grešku (questions_full)
+        // jer je vjerojatno informativnija (npr. 42501 permission denied)
+        throwNormalized(questionsRes.error);
+      }
+
+      const questionRows = Array.isArray(directQuestions)
+        ? directQuestions
+        : [];
+
+      // Dohvati passages zasebno ako postoje passage_id-ovi
+      const passageIds = [
+        ...new Set(questionRows.map((q) => q.passage_id).filter(Boolean)),
+      ];
+
+      let passagesMap = {};
+      if (passageIds.length > 0) {
+        const { data: passagesData } = await supabase
+          .from("passages")
+          .select("id, title, author, source, content_type, content, footnotes")
+          .in("id", passageIds);
+
+        if (passagesData) {
+          passagesData.forEach((p) => {
+            passagesMap[p.id] = {
+              id: p.id,
+              title: p.title ?? null,
+              author: p.author ?? null,
+              source: p.source ?? null,
+              contentType: p.content_type ?? "prose",
+              content: p.content ?? "",
+              footnotes: Array.isArray(p.footnotes) ? p.footnotes : [],
+            };
+          });
+        }
+      }
+
+      return {
+        exam: examData ?? null,
+        questions: mapQuestionRows(questionRows),
+        passages: passagesMap,
+      };
+    }
+
+    // ── Normalan put: questions_full VIEW je radio ─────────────────────────
     const questionRows = Array.isArray(questionsRes.data)
       ? questionsRes.data
       : [];
 
-    // Dedupliciraj passages u mapu
-    const passagesMap = {};
-    questionRows.forEach((row) => {
-      if (row.passage_id && !passagesMap[row.passage_id]) {
-        passagesMap[row.passage_id] = {
-          id: row.passage_id,
-          title: row.passage_title ?? null,
-          author: row.passage_author ?? null,
-          source: row.passage_source ?? null,
-          contentType: row.passage_content_type ?? "prose",
-          content: row.passage_content ?? "",
-          footnotes: Array.isArray(row.passage_footnotes)
-            ? row.passage_footnotes
-            : [],
-        };
-      }
-    });
-
-    const questions = questionRows
-      .filter((row) => row?.id)
-      .map((row) => ({
-        id: row.id,
-        examId: row.exam_id,
-        position: row.position,
-        positionLabel: row.position_label ?? String(row.position),
-        sectionLabel: row.section_label ?? null,
-        questionType: row.question_type ?? "multiple_choice",
-        parentQuestionId: row.parent_question_id ?? null,
-        text: row.text ?? "",
-        inlineText: row.inline_text ?? null,
-        points: row.points ?? 1,
-        passageId: row.passage_id ?? null,
-        imageUrl: row.image_url ?? null,
-        options: Array.isArray(row.options) ? row.options : [],
-      }));
-
     return {
       exam: examData ?? null,
-      questions,
-      passages: passagesMap,
+      questions: mapQuestionRows(questionRows),
+      passages: extractPassagesMap(questionRows),
     };
   },
 

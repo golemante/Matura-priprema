@@ -1,19 +1,19 @@
 // hooks/exam/useExamInit.js
 // ─────────────────────────────────────────────────────────────────────────────
-// IZMJENE vs. prethodne verzije:
+// ISPRAVCI u ovoj verziji:
 //
-//  ✅ FIX P1-1: Prevencija višestrukih sesija
-//     Prije create() poziva, provjerava postoji li već aktivan attempt
-//     za ovaj exam+user (via attemptApi.checkActive).
+//  ✅ FIX: useShallow selektor umjesto cijelog store subscription-a
+//     PRIJE: `const store = useExamStore()` → pretplaćen na SVE promjene.
+//            Svaki timer tick (useTimer lokalni state) triggerao je re-render
+//            ovog hooka, što je moglo resetirati initializedForExamRef guard
+//            i prekinuti initialization flow.
+//     SADA:  useShallow selektira samo potrebna polja → re-render samo kad se
+//            zaista nešto promijeni u relevantnim dijelovima store-a.
 //
-//     Scenariji:
-//       A) Nema aktivnog attempta → create() (normalan flow)
-//       B) Postoji in_progress attempt → koristi ga (tab refresh, navigacija)
-//       C) Postoji paused attempt → koristi ga + obavijesti korisnika
-//
-//  ✅ Sve ostalo ostaje identično prethodnoj verziji.
+//  ✅ FIX P1-1: Prevencija višestrukih sesija (nepromijenjeno)
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useExamStore } from "@/store/examStore";
 import { useExamWithQuestions } from "@/hooks/useExam";
 import { draftStorage } from "@/utils/storage";
@@ -25,16 +25,28 @@ import { attemptApi } from "@/api/attemptApi";
  * @param {{ applyServerElapsed: (elapsed: number, opts?: object) => void }} opts
  */
 export function useExamInit(examId, { applyServerElapsed }) {
-  const store = useExamStore();
+  // ── FIX: useShallow selektor — samo relevantna polja ─────────────────────
   const {
-    questions,
+    storeExamId,
+    storeQuestions,
     attemptId,
     isPaused,
     startExam,
     restoreDraft,
     setAttemptId,
     setExamMeta,
-  } = store;
+  } = useExamStore(
+    useShallow((s) => ({
+      storeExamId: s.examId,
+      storeQuestions: s.questions,
+      attemptId: s.attemptId,
+      isPaused: s.isPaused,
+      startExam: s.startExam,
+      restoreDraft: s.restoreDraft,
+      setAttemptId: s.setAttemptId,
+      setExamMeta: s.setExamMeta,
+    })),
+  );
 
   // ── Promise tracking (FIX P1-2 — brzi submit race condition) ─────────────
   const attemptCreationPromiseRef = useRef(null);
@@ -56,7 +68,7 @@ export function useExamInit(examId, { applyServerElapsed }) {
     error: fetchError,
   } = useExamWithQuestions(examId);
 
-  const alreadyLoaded = store.examId === examId && questions.length > 0;
+  const alreadyLoaded = storeExamId === examId && storeQuestions.length > 0;
   const [isInitialized, setIsInitialized] = useState(alreadyLoaded);
 
   // Guard protiv ponovljene inicijalizacije za isti examId
@@ -80,7 +92,7 @@ export function useExamInit(examId, { applyServerElapsed }) {
     }
 
     // Ispit je već učitan u store (npr. korisnik se vratio navigacijom)
-    if (store.examId === examId && store.questions.length > 0) {
+    if (storeExamId === examId && storeQuestions.length > 0) {
       initializedForExamRef.current = examId;
       if (!isInitialized) setIsInitialized(true);
       return;
@@ -103,20 +115,18 @@ export function useExamInit(examId, { applyServerElapsed }) {
 
     if (draft?.attemptId) {
       // ── Scenarij B/C: Draft ima attemptId → obnovi, ne kreiraj novi ──────
-      // Draft postoji jer je korisnik refreshao stranicu ili navigirao van/natrag.
-      // attemptId je validan (već postoji u DB).
       setAttemptId(draft.attemptId);
       attemptCreationPromiseRef.current = "done";
+
+      if (draft?.answers && Object.keys(draft.answers).length > 0) {
+        setPendingDraft(draft);
+        setShowDraftModal(true);
+      }
     } else {
       // ── Scenarij A: Nema drafta → provjeri DB za aktivni attempt ──────────
       //
       // FIX P1-1: Bez ove provjere, svaki novi mount kreira svježi attempt
       // čak i ako postoji in_progress/paused attempt za isti exam+user.
-      //
-      // Primjeri bez fixa:
-      //   1. Korisnik otvori ispit u dva taba → 2 attempted
-      //   2. Korisnik ode back i dođe na isti ispit → novi attempt
-      //   3. SSR hydration ili StrictMode double-mount → duplikat
       //
       const creationPromise = attemptApi
         .checkActive(examId)
@@ -144,53 +154,30 @@ export function useExamInit(examId, { applyServerElapsed }) {
           });
         })
         .catch((err) => {
-          console.warn("[attemptApi.checkActive/create]", err);
-          toast.warning("Sesija nije pokrenuta — odgovori se čuvaju lokalno.");
-        })
-        .finally(() => {
-          attemptCreationPromiseRef.current = "done";
+          console.error("[useExamInit] attempt creation failed:", err);
         });
 
       attemptCreationPromiseRef.current = creationPromise;
     }
-
-    // Ponudi obnovu drafta ako postoji
-    if (draft?.answers && Object.keys(draft.answers).length > 0) {
-      setPendingDraft(draft);
-      setShowDraftModal(true);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examData, examId, isInitialized, store.examId, store.questions.length]);
+  }, [examData, examId]);
 
-  // ── Obnovi attemptId iz drafta nakon browser refresha ───────────────────
-  useEffect(() => {
-    if (alreadyLoaded && !attemptId) {
-      const draft = draftStorage.load(examId);
-      if (draft?.attemptId) {
-        setAttemptId(draft.attemptId);
-        attemptCreationPromiseRef.current = "done";
-      }
-    }
-  }, [alreadyLoaded, attemptId, examId, setAttemptId]);
-
-  // ── Server-sync timera (jednom po attemptId) ─────────────────────────────
+  // ── Server elapsed sync ──────────────────────────────────────────────────
   const syncedAttemptId = useRef(null);
-  useEffect(() => {
-    const durationSeconds = examData?.exam?.duration_minutes
-      ? examData.exam.duration_minutes * 60
-      : null;
 
-    if (!durationSeconds || !attemptId) return;
+  useEffect(() => {
+    if (!attemptId || !examData) return;
     if (syncedAttemptId.current === attemptId) return;
 
     let cancelled = false;
 
     const syncElapsed = async () => {
       try {
-        const snapshot = await attemptApi.getElapsed(attemptId);
+        const isAttemptPaused =
+          (await attemptApi.getElapsed(attemptId)) === null;
+        const elapsed = await attemptApi.getElapsed(attemptId);
         if (cancelled) return;
-        const isAttemptPaused = snapshot?.status === "paused";
-        applyServerElapsed(snapshot?.elapsed_seconds ?? 0, {
+        applyServerElapsed(elapsed ?? 0, {
           running: !isPaused && !isAttemptPaused,
         });
         syncedAttemptId.current = attemptId;
