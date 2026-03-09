@@ -59,14 +59,30 @@ export function useExamInit(examId, { applyServerElapsed }) {
   const alreadyLoaded = store.examId === examId && questions.length > 0;
   const [isInitialized, setIsInitialized] = useState(alreadyLoaded);
 
+  // Guard protiv ponovljene inicijalizacije za isti examId
+  // (štiti od potencijalnih petlji ako query observer emitira novi data ref).
+  const initializedForExamRef = useRef(alreadyLoaded ? examId : null);
+
+  useEffect(() => {
+    if (initializedForExamRef.current === examId && !isInitialized) {
+      setIsInitialized(true);
+    }
+  }, [examId, isInitialized]);
+
   // ── Inicijalizacija (jednom po examId + examData) ────────────────────────
   useEffect(() => {
     if (!examData) return;
-    if (examData.exam?.id !== examId) return;
+    if (examData.exam?.id && examData.exam.id !== examId) return;
+
+    if (initializedForExamRef.current === examId) {
+      if (!isInitialized) setIsInitialized(true);
+      return;
+    }
 
     // Ispit je već učitan u store (npr. korisnik se vratio navigacijom)
     if (store.examId === examId && store.questions.length > 0) {
-      setIsInitialized(true);
+      initializedForExamRef.current = examId;
+      if (!isInitialized) setIsInitialized(true);
       return;
     }
 
@@ -82,7 +98,8 @@ export function useExamInit(examId, { applyServerElapsed }) {
 
     startExam(examId, safeQuestions, safePassages);
     setExamMeta(examData.exam ?? null);
-    setIsInitialized(true);
+    initializedForExamRef.current = examId;
+    if (!isInitialized) setIsInitialized(true);
 
     if (draft?.attemptId) {
       // ── Scenarij B/C: Draft ima attemptId → obnovi, ne kreiraj novi ──────
@@ -143,7 +160,7 @@ export function useExamInit(examId, { applyServerElapsed }) {
       setShowDraftModal(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examData, examId]);
+  }, [examData, examId, isInitialized, store.examId, store.questions.length]);
 
   // ── Obnovi attemptId iz drafta nakon browser refresha ───────────────────
   useEffect(() => {
