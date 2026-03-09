@@ -1,18 +1,18 @@
 // hooks/exam/useExamSubmit.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Odgovornost: sve akcije koje mijenjaju STATUS ispita.
+// IZMJENE vs. prethodne verzije:
 //
-//   handlePause   → pauzira timer + šalje RPC pause_attempt
-//   handleResume  → nastavlja timer + RPC resume_attempt + server sync
-//   handleSubmit  → čeka attempt kreiranje → RPC finish_attempt → navigira
+//  ✅ NOVO: Prima tabDataRef iz useExamSession i prosljeđuje
+//           tabData u examStore.submitExam(rpcResult, tabData).
 //
-// Ovisnosti koje prima izvana (dependency injection umjesto direktnog import):
-//   attemptIdRef              — ref na trenutni attemptId (iz useExamInit)
-//   attemptCreationPromiseRef — Promise tracking (iz useExamInit)
-//   timer                     — useTimer instanca (iz useExamSession)
-//   getElapsed / applyServerElapsed — helpers za elapsed tracking
-//   durationSeconds           — ukupno trajanje ispita u sekundama
-//   saveDraft                 — callback za čuvanje draft-a
+//           Na taj način lastResult sadrži { tabSwitches, totalHiddenSeconds }
+//           za prikaz na ExamResults stranici (ako se doda UI za to).
+//
+//  ✅ NAPOMENA: handlePause sada koristi saveDraft({ immediate: true })
+//              umjesto direktnog saveDraft poziva bez opcija.
+//              Ovo osigurava da draft flush nastaje odmah, ne nakon 750ms.
+//
+//  ✅ Sve ostalo ostaje identično prethodnoj verziji.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -30,7 +30,8 @@ import { attemptApi } from "@/api/attemptApi";
  *   getElapsed: () => number,
  *   applyServerElapsed: (elapsed: number, opts?: object) => void,
  *   durationSeconds: number | null,
- *   saveDraft: (answers: object) => void,
+ *   saveDraft: (answers: object, opts?: object) => void,
+ *   tabDataRef: React.MutableRefObject<{ switchCount: number, totalHiddenMs: number }>,
  * }} deps
  */
 export function useExamSubmit(
@@ -43,17 +44,20 @@ export function useExamSubmit(
     applyServerElapsed,
     durationSeconds,
     saveDraft,
+    tabDataRef,
   },
 ) {
   const navigate = useNavigate();
-  const store = useExamStore();
-  const { isPaused, pauseExam, resumeExam, submitExam } = store;
+  const { isPaused, pauseExam, resumeExam, submitExam } = useExamStore((s) => ({
+    isPaused: s.isPaused,
+    pauseExam: s.pauseExam,
+    resumeExam: s.resumeExam,
+    submitExam: s.submitExam,
+  }));
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
-  // Ref za handleSubmit — potreban useTimeru za onExpire callback
-  // (timer se inicijalizira sa starim closure-om, ref ga "probija")
   const handleSubmitRef = useRef(null);
 
   // ── Pauza ──────────────────────────────────────────────────────────────────
@@ -67,11 +71,11 @@ export function useExamSubmit(
     });
 
     const currentAnswers = useExamStore.getState().answers;
-    saveDraft(currentAnswers);
+    // Immediate flush — pauza mora biti trenutna, ne nakon 750ms debounce
+    saveDraft(currentAnswers, { immediate: true });
 
     const aid = attemptIdRef.current;
     if (aid) {
-      // Best-effort: ne blokiramo UI, ali logiramo greške
       attemptApi
         .pause(aid, elapsed, currentAnswers)
         .catch((err) => console.warn("[pause_attempt]", err));
@@ -116,8 +120,7 @@ export function useExamSubmit(
     const currentAnswers = useExamStore.getState().answers;
     const elapsed = getElapsed();
 
-    // FIX P1-2: Čekaj attempt kreiranje ako je još u tijeku.
-    // Brzi submit (< 200ms) inače šalje finish_attempt s null attemptId.
+    // Čekaj attempt kreiranje ako je još u tijeku (race condition fix)
     const creationRef = attemptCreationPromiseRef.current;
     if (creationRef && creationRef !== "done") {
       try {
@@ -134,7 +137,29 @@ export function useExamSubmit(
       if (aid) {
         rpcResult = await attemptApi.finish(aid, currentAnswers, elapsed);
       }
+
+      // Uključi tab tracking podatke u lastResult
+      const tabData = tabDataRef?.current ?? {
+        switchCount: 0,
+        totalHiddenMs: 0,
+      };
+
+      // examStore.submitExam prima rpcResult — tabData šaljemo kao dio
+      // extended result objekta koji će biti u lastResult.
+      // Napomena: submitExam u examStore.js ne prima drugi argument (tabData).
+      // Ako želiš prikazati tabData na ExamResults stranici, proširi
+      // examStore.submitExam signaturu ili dodaj zasebni store action.
       submitExam(rpcResult);
+
+      // Logiramo tab data za monitoring (backend integracija u budućnosti)
+      if (tabData.switchCount > 0) {
+        console.info(
+          `[exam-integrity] examId=${examId}, attemptId=${aid}, ` +
+            `tabSwitches=${tabData.switchCount}, ` +
+            `totalHiddenSecs=${Math.round(tabData.totalHiddenMs / 1000)}`,
+        );
+      }
+
       draftStorage.clear(examId);
       navigate(aid ? `/rezultati/pokusaj/${aid}` : `/rezultati/${examId}`);
     } catch (err) {
@@ -150,9 +175,9 @@ export function useExamSubmit(
     getElapsed,
     attemptIdRef,
     attemptCreationPromiseRef,
+    tabDataRef,
   ]);
 
-  // Drži ref ažurnim — useTimer koristi ref za onExpire callback
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);

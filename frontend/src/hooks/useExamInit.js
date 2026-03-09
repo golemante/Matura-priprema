@@ -1,18 +1,17 @@
 // hooks/exam/useExamInit.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Odgovornost: inicijalizacija ispita pri prvom mountu.
+// IZMJENE vs. prethodne verzije:
 //
-// Što radi:
-//   1. Dohvaća exam + pitanja + passages iz baze (useExamWithQuestions)
-//   2. Pokreće examStore (startExam / setExamMeta)
-//   3. Kreira attempt na serveru (fire → track Promise za P1-2 fix)
-//   4. Detektira draft iz localStorage i nudi obnovu
-//   5. Server-sync timera jednom po attemptId
+//  ✅ FIX P1-1: Prevencija višestrukih sesija
+//     Prije create() poziva, provjerava postoji li već aktivan attempt
+//     za ovaj exam+user (via attemptApi.checkActive).
 //
-// Što NE radi (nije njegova briga):
-//   - navigacija između pitanja → useExamNavigation
-//   - submit / pauza / nastavak → useExamSubmit
-//   - timer logic → useExamSession (proslijeđen kao prop)
+//     Scenariji:
+//       A) Nema aktivnog attempta → create() (normalan flow)
+//       B) Postoji in_progress attempt → koristi ga (tab refresh, navigacija)
+//       C) Postoji paused attempt → koristi ga + obavijesti korisnika
+//
+//  ✅ Sve ostalo ostaje identično prethodnoj verziji.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useExamStore } from "@/store/examStore";
@@ -24,18 +23,6 @@ import { attemptApi } from "@/api/attemptApi";
 /**
  * @param {string} examId
  * @param {{ applyServerElapsed: (elapsed: number, opts?: object) => void }} opts
- * @returns {{
- *   isLoading: boolean,
- *   isInitialized: boolean,
- *   fetchError: Error | null,
- *   examData: object | null,
- *   attemptCreationPromiseRef: React.MutableRefObject,
- *   attemptIdRef: React.MutableRefObject,
- *   showDraftModal: boolean,
- *   pendingDraft: object | null,
- *   confirmRestoreDraft: () => void,
- *   discardDraft: () => void,
- * }}
  */
 export function useExamInit(examId, { applyServerElapsed }) {
   const store = useExamStore();
@@ -49,10 +36,7 @@ export function useExamInit(examId, { applyServerElapsed }) {
     setExamMeta,
   } = store;
 
-  // ── Promise tracking (FIX P1-2) ──────────────────────────────────────────
-  // null     → create() nije pokrenut
-  // Promise  → create() u tijeku, handleSubmit mora await-ati
-  // "done"   → create() završen (uspješno ili ne)
+  // ── Promise tracking (FIX P1-2 — brzi submit race condition) ─────────────
   const attemptCreationPromiseRef = useRef(null);
 
   // Ref za attemptId — dostupan u async callback-ovima bez stale closure
@@ -93,21 +77,49 @@ export function useExamInit(examId, { applyServerElapsed }) {
     setIsInitialized(true);
 
     if (draft?.attemptId) {
-      // Postoji draft s attemptId → obnovi, ne kreiraj novi
+      // ── Scenarij B/C: Draft ima attemptId → obnovi, ne kreiraj novi ──────
+      // Draft postoji jer je korisnik refreshao stranicu ili navigirao van/natrag.
+      // attemptId je validan (već postoji u DB).
       setAttemptId(draft.attemptId);
       attemptCreationPromiseRef.current = "done";
     } else {
-      // Kreiraj novi attempt — prati Promise za submit sync (FIX P1-2)
+      // ── Scenarij A: Nema drafta → provjeri DB za aktivni attempt ──────────
+      //
+      // FIX P1-1: Bez ove provjere, svaki novi mount kreira svježi attempt
+      // čak i ako postoji in_progress/paused attempt za isti exam+user.
+      //
+      // Primjeri bez fixa:
+      //   1. Korisnik otvori ispit u dva taba → 2 attempted
+      //   2. Korisnik ode back i dođe na isti ispit → novi attempt
+      //   3. SSR hydration ili StrictMode double-mount → duplikat
+      //
       const creationPromise = attemptApi
-        .create(examId)
-        .then((attempt) => {
-          if (attempt?.id) {
-            setAttemptId(attempt.id);
-            draftStorage.save(examId, draft?.answers ?? {}, attempt.id);
+        .checkActive(examId)
+        .then((existingAttempt) => {
+          if (existingAttempt) {
+            // Postoji aktivan attempt → recycle
+            setAttemptId(existingAttempt.id);
+            draftStorage.save(examId, draft?.answers ?? {}, existingAttempt.id);
+
+            if (existingAttempt.status === "paused") {
+              toast.info(
+                "Pronađen pauziran ispit. Nastavljamo od zadnjeg spremanja.",
+              );
+            }
+            return existingAttempt;
           }
+
+          // Nema aktivnog → kreiraj novi (normalan flow)
+          return attemptApi.create(examId).then((newAttempt) => {
+            if (newAttempt?.id) {
+              setAttemptId(newAttempt.id);
+              draftStorage.save(examId, draft?.answers ?? {}, newAttempt.id);
+            }
+            return newAttempt;
+          });
         })
         .catch((err) => {
-          console.warn("[attemptApi.create]", err);
+          console.warn("[attemptApi.checkActive/create]", err);
           toast.warning("Sesija nije pokrenuta — odgovori se čuvaju lokalno.");
         })
         .finally(() => {

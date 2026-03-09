@@ -1,43 +1,69 @@
 // hooks/useExamSession.js
 // ─────────────────────────────────────────────────────────────────────────────
-// P3-1: REFAKTOR — useExamSession je sada tanki orchestrator.
+// IZMJENE vs. prethodne verzije:
 //
-// PRETHODNO: ~450 LOC "God hook" — init, navigacija, timer, submit, pauza,
-//            draft logika, keyboard shortcuts, sve u jednom fajlu.
+//  ✅ FIX P2-1: useShallow za store selektore
+//     Umjesto `const store = useExamStore()` (cijeli store subscription),
+//     koristimo useShallow koji re-renderira samo kada se relevantni dijelovi
+//     store-a promijene. Timer ticki (useTimer lokalni state) NE uzrokuju
+//     re-render examStore subscription.
 //
-// SADA: Logika podijeljena na fokusirane module:
+//  ✅ FIX P2-2: Debounced draft save (750ms)
+//     handleAnswer sada poziva debounced verziju saveDraft umjesto instant.
+//     Brzo klikanje kroz opcije (A→B→C) neće kreirati 3 draft write-a,
+//     već samo 1 nakon 750ms od zadnjeg klika.
+//     Direktni pozivi (pauza, submit) i dalje koriste instant save.
 //
-//   useExamInit     (hooks/exam/useExamInit.js)
-//     → dohvat ispita, attempt kreiranje, draft obnova, server-sync timera
+//  ✅ NOVO P1-2: useTabVisibility integriran
+//     Prati izlaske iz taba tijekom aktivnog ispita.
+//     tabDataRef je dostupan submitExam() pozivu za uključivanje u lastResult.
 //
-//   useExamSubmit   (hooks/exam/useExamSubmit.js)
-//     → handlePause, handleResume, handleSubmit, submit modal state
+//  ✅ NOVO P2-3: useImagePreload integriran
+//     Preloada imageUrl za iduća 3 pitanja u pozadini.
 //
-//   useExamSession  (ovaj fajl — orchestrator)
-//     → timer, elapsed tracking, navigacija, odgovori, keyboard shortcuts
-//
-// PREDNOSTI:
-//   • Svaki modul je testabilan u izolaciji
-//   • useExamInit se može mock-ati bez simulate-anja submitta
-//   • useExamSubmit se može testirati s fake timerom
-//   • Lakše onboarding novih developera (jasna odgovornost po fajlu)
-//
-// BREAKING CHANGES: nula — API koji vraća je identičan prethodnoj verziji.
-// ExamTaking.jsx ne treba nikakve izmjene.
+//  ✅ Public API identičan prethodnoj verziji — ExamTaking.jsx ne treba izmjene.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useExamStore } from "@/store/examStore";
 import { useTimer } from "@/hooks/useTimer";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import { useBeforeUnload } from "@/hooks/useBeforeUnload";
+import { useTabVisibility } from "@/hooks/useTabVisibility";
+import { useImagePreload } from "@/hooks/useImagePreload";
 import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
 import { useExamInit } from "@/hooks/useExamInit";
 import { useExamSubmit } from "@/hooks/useExamSubmit";
 
+// ── Debounce helper (ne importa se useDebounce hook jer nam treba callback,
+//    ne value debounce) ────────────────────────────────────────────────────────
+function debounce(fn, ms) {
+  let id;
+  const debounced = (...args) => {
+    clearTimeout(id);
+    id = setTimeout(() => fn(...args), ms);
+  };
+  debounced.flush = (...args) => {
+    clearTimeout(id);
+    fn(...args);
+  };
+  debounced.cancel = () => clearTimeout(id);
+  return debounced;
+}
+
 export function useExamSession(examId) {
-  const store = useExamStore();
+  // ── FIX P2-1: Atomični selektori s useShallow ─────────────────────────────
+  //
+  // PRIJE: `const store = useExamStore()` — pretplaćen na SVE promjene store-a.
+  //         Svaki setAnswer(), toggleFlag(), goToQuestion() → re-render cijelog
+  //         useExamSession + svih konsumera (ExamTaking, QuestionDisplay, itd.).
+  //
+  // SADA: useShallow kompilira plitku usporedbu — re-render samo kad se
+  //       neka od selektiranih vrijednosti zaista promijeni.
+  //
   const {
+    examId: storeExamId,
     questions,
     answers,
     flagged,
@@ -45,20 +71,50 @@ export function useExamSession(examId) {
     currentIndex,
     isPaused,
     attemptId,
+    examMeta,
+    submittedAt,
     setAnswer,
     toggleFlag,
     goToQuestion,
-  } = store;
+    submitExam: storeSubmitExam,
+  } = useExamStore(
+    useShallow((s) => ({
+      examId: s.examId,
+      questions: s.questions,
+      answers: s.answers,
+      flagged: s.flagged,
+      passages: s.passages,
+      currentIndex: s.currentIndex,
+      isPaused: s.isPaused,
+      attemptId: s.attemptId,
+      examMeta: s.examMeta,
+      submittedAt: s.submittedAt,
+      setAnswer: s.setAnswer,
+      toggleFlag: s.toggleFlag,
+      goToQuestion: s.goToQuestion,
+      submitExam: s.submitExam,
+    })),
+  );
 
-  // ── Elapsed clock (anchor-based, ne interval-based — FIX P2-3) ───────────
+  // ── Tab visibility tracking (P1-2) ────────────────────────────────────────
+  //
+  // Aktivno samo dok ispit traje (questions postoje i nije submittan).
+  // tabDataRef.current = { switchCount, totalHiddenMs }
+  // Koristi se u useExamSubmit → submitExam(rpcResult, tabData)
+  //
+  const isExamActive = questions.length > 0 && !submittedAt;
+  const tabDataRef = useTabVisibility({ enabled: isExamActive });
+
+  // ── Elapsed clock (anchor-based, ne interval-based) ───────────────────────
   const elapsedClockRef = useRef({
     syncedElapsed: 0,
     localTickStartedAt: null,
   });
 
-  const durationSeconds = store.examMeta?.duration_minutes
-    ? store.examMeta.duration_minutes * 60
-    : null;
+  const durationSeconds = useMemo(
+    () => (examMeta?.duration_minutes ? examMeta.duration_minutes * 60 : null),
+    [examMeta],
+  );
 
   const getElapsed = useCallback(() => {
     if (!durationSeconds) return 0;
@@ -71,7 +127,7 @@ export function useExamSession(examId) {
 
   // Definirano kao callback da ga timer može koristiti odmah pri init-u
   // eslint-disable-next-line prefer-const
-  let timer; // deklariramo unaprijed — init-ira se ispod s useTimer
+  let timer;
 
   const applyServerElapsed = useCallback(
     (elapsedSeconds, { running = true } = {}) => {
@@ -91,10 +147,7 @@ export function useExamSession(examId) {
     [durationSeconds],
   );
 
-  // Ref za timer — evita circular dependency (timer → applyServerElapsed → timer)
   const timerRef = useRef(null);
-
-  // ── handleSubmit ref — injektiran nakon useExamSubmit inicijalizacije ─────
   const handleSubmitRef = useRef(null);
 
   // ── Timer ─────────────────────────────────────────────────────────────────
@@ -103,12 +156,10 @@ export function useExamSession(examId) {
     onWarning: () => toast.warning("Ostaje manje od 10 minuta!"),
   });
 
-  // Drži timerRef ažurnim
   useEffect(() => {
     timerRef.current = timer;
   });
 
-  // Sync elapsed clock s running stanjem timera
   useEffect(() => {
     if (!durationSeconds) return;
     if (timer.running && !elapsedClockRef.current.localTickStartedAt) {
@@ -124,14 +175,49 @@ export function useExamSession(examId) {
     }
   }, [durationSeconds, timer.running, getElapsed]);
 
-  // ── saveDraft helper ──────────────────────────────────────────────────────
-  const saveDraft = useCallback(
+  // ── FIX P2-2: Debounced saveDraft (750ms) ────────────────────────────────
+  //
+  // PROBLEM: Prethodni handleAnswer pozivao je saveDraft() sinhrono na svaki
+  //          klik. Korisnik koji brzo pregledava opcije (A→B→C→D) generira
+  //          4 localStorage write-a u istoj sekundi.
+  //
+  // RJEŠENJE: debounce na 750ms za normalne odgovore.
+  //           Direktni pozivi (pauza, auto-save interval, submit) i dalje
+  //           koriste `debouncedSaveDraft.flush()` za instant zapis.
+  //
+  const saveDraftImmediate = useCallback(
     (nextAnswers) => {
       const currentAttemptId =
         attemptId ?? draftStorage.load(examId)?.attemptId ?? null;
       draftStorage.save(examId, nextAnswers, currentAttemptId);
     },
     [examId, attemptId],
+  );
+
+  // Kreiraj debounced verziju — stabilna ref da se ne rekreira na svakom renderu
+  const debouncedSaveDraftRef = useRef(null);
+  if (!debouncedSaveDraftRef.current) {
+    debouncedSaveDraftRef.current = debounce((answers) => {
+      // Čita attemptId direktno iz store-a (ne iz closure-a) da izbjegne stale
+      const aid =
+        useExamStore.getState().attemptId ??
+        draftStorage.load(examId)?.attemptId ??
+        null;
+      draftStorage.save(examId, answers, aid);
+    }, 750);
+  }
+
+  // Wrapper koji eksponira i flush
+  const saveDraft = useCallback(
+    (nextAnswers, { immediate = false } = {}) => {
+      if (immediate) {
+        debouncedSaveDraftRef.current.flush(nextAnswers);
+        saveDraftImmediate(nextAnswers);
+      } else {
+        debouncedSaveDraftRef.current(nextAnswers);
+      }
+    },
+    [saveDraftImmediate],
   );
 
   // ── Sub-hookovi ───────────────────────────────────────────────────────────
@@ -145,27 +231,40 @@ export function useExamSession(examId) {
     applyServerElapsed,
     durationSeconds,
     saveDraft,
+    tabDataRef, // ← proslijeđen da submit može uključiti tabData u lastResult
   });
 
-  // Injektaj handleSubmitRef za timer onExpire
   useEffect(() => {
     handleSubmitRef.current = submit.handleSubmitRef.current;
   });
 
-  // ── Auto-save svakih 30s ──────────────────────────────────────────────────
+  // ── Auto-save svakih 30s (immediate) ─────────────────────────────────────
   useEffect(() => {
     if (!examId || Object.keys(answers).length === 0) return;
-    const id = setInterval(() => saveDraft(answers), 30_000);
+    const id = setInterval(
+      () => saveDraft(answers, { immediate: true }),
+      30_000,
+    );
     return () => clearInterval(id);
   }, [examId, answers, saveDraft]);
 
+  // ── Cleanup debounce na unmount ───────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      debouncedSaveDraftRef.current?.cancel();
+    };
+  }, []);
+
   // ── Derived values ────────────────────────────────────────────────────────
-  const totalVisible = questions.filter(
-    (q) => q.questionType !== "fill_blank_mc",
-  ).length;
-  const answeredCount = Object.keys(answers).filter(
-    (k) => answers[k] != null,
-  ).length;
+  const totalVisible = useMemo(
+    () => questions.filter((q) => q.questionType !== "fill_blank_mc").length,
+    [questions],
+  );
+
+  const answeredCount = useMemo(
+    () => Object.keys(answers).filter((k) => answers[k] != null).length,
+    [answers],
+  );
 
   // ── Navigacija ────────────────────────────────────────────────────────────
   const [direction, setDirection] = useState(1);
@@ -186,6 +285,7 @@ export function useExamSession(examId) {
       const current = questions[currentIndex];
       if (!current) return;
       setAnswer(current.id, letter);
+      // Debounced draft save (P2-2)
       saveDraft(useExamStore.getState().answers);
     },
     [isPaused, questions, currentIndex, setAnswer, saveDraft],
@@ -197,7 +297,7 @@ export function useExamSession(examId) {
     toggleFlag(current.id);
   }, [questions, currentIndex, toggleFlag]);
 
-  // ── Keyboard shortcuts (FIX P2-8: ignoreFormElements) ────────────────────
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useKeyPress(
     {
       ArrowRight: () =>
@@ -210,16 +310,20 @@ export function useExamSession(examId) {
       b: () => handleAnswer("b"),
       c: () => handleAnswer("c"),
       d: () => handleAnswer("d"),
-      e: () => handleAnswer("e"),
       f: handleToggleFlag,
       p: submit.handlePause,
       "?": () =>
-        toast.info("Prečaci: ←→ navigacija · A–E odabir · F označi · P pauza"),
+        toast.info("Prečaci: ←→ navigacija · A–D odabir · F označi · P pauza"),
     },
     { ignoreFormElements: true },
   );
 
-  useBeforeUnload(questions.length > 0 && !store.submittedAt);
+  useBeforeUnload(questions.length > 0 && !submittedAt);
+
+  // ── FIX P2-3: Image preloading ────────────────────────────────────────────
+  // Preloada imageUrl za iduća 3 pitanja u pozadini.
+  // Nema vidljivog efekta na UI — čisto performance improvement.
+  useImagePreload(questions, currentIndex, { ahead: 3 });
 
   // ── Computed current question ─────────────────────────────────────────────
   const current = questions[currentIndex] ?? null;
@@ -229,7 +333,7 @@ export function useExamSession(examId) {
   const isCurrentFlagged = current ? flagged.has(current.id) : false;
 
   // ── Public API ────────────────────────────────────────────────────────────
-  // IDENTIČAN s prethodnom verzijom — ExamTaking.jsx ne treba izmjene.
+  // Identičan prethodnoj verziji — ExamTaking.jsx ne treba izmjene.
   return {
     questions,
     answers,
@@ -243,7 +347,7 @@ export function useExamSession(examId) {
     isCurrentFlagged,
     direction,
     isPaused,
-    examMeta: store.examMeta,
+    examMeta,
 
     isLoading: init.isLoading,
     isInitialized: init.isInitialized,
@@ -264,5 +368,8 @@ export function useExamSession(examId) {
     handlePause: submit.handlePause,
     handleResume: submit.handleResume,
     timer,
+
+    // Tab tracking data (za debug / future backend integration)
+    tabDataRef,
   };
 }
