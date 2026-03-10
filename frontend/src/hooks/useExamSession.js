@@ -187,33 +187,57 @@ export function useExamSession(examId) {
   // čekamo examMeta. Ako examMeta stigne prije syncа, čekamo sync.
   const timerAppliedRef = useRef(false);
 
+  // Maksimalno čekanje na timerSyncRef.ready (backup za useExamInit timeout)
+  const POLL_MAX_MS = 6000;
+
   useEffect(() => {
     if (!durationSeconds) return; // Čekaj examMeta
     if (timerAppliedRef.current) return; // Već primijenjeno
 
+    const pollStart = Date.now();
+
     const tryApply = () => {
       const syncData = init.timerSyncRef.current;
-      if (!syncData.ready) return false; // Sync još nije spreman
+
+      // BUG B backup: forsiraj ready=true ako je prošlo previše vremena
+      if (!syncData.ready && Date.now() - pollStart > POLL_MAX_MS) {
+        init.timerSyncRef.current = {
+          elapsedSeconds: 0,
+          isServerPaused: false,
+          ready: true,
+        };
+        console.warn(
+          "[useExamSession] Timer sync poll timeout — forcing elapsed=0",
+        );
+      }
+
+      if (!init.timerSyncRef.current.ready) return false;
 
       timerAppliedRef.current = true;
-      onResumeTimer(syncData.elapsedSeconds);
+      const { elapsedSeconds, isServerPaused } = init.timerSyncRef.current;
 
-      // Ako je server rekao da je pauziran → zaustavi timer
-      if (syncData.isServerPaused) {
+      if (isServerPaused) {
+        // BUG D FIX: Za pauzirani attempt — SAMO jedan resync poziv, bez onResumeTimer.
+        // onResumeTimer bi pokrenuo timer (running:true), a odmah bi ga re-stopali.
+        // Direktno postavljamo stopped timer na točan remaining.
         const dur = durationRef.current ?? 0;
-        const remaining = Math.max(0, dur - syncData.elapsedSeconds);
+        const remaining = Math.max(0, dur - elapsedSeconds);
         elapsedClockRef.current = {
-          syncedElapsed: syncData.elapsedSeconds,
-          startedAt: null,
+          syncedElapsed: elapsedSeconds,
+          startedAt: null, // Timer nije aktivan
         };
         timerRef.current?.resync(remaining, { running: false });
+      } else {
+        // In-progress: jedan resync poziv via onResumeTimer
+        onResumeTimer(elapsedSeconds);
       }
+
       return true;
     };
 
-    if (tryApply()) return; // Odmah gotovo
+    if (tryApply()) return;
 
-    // Polling dok sync ne bude spreman
+    // Polling dok sync ne bude spreman (useExamInit timeout jamči da će završiti)
     const id = setInterval(() => {
       if (tryApply()) clearInterval(id);
     }, 100);
