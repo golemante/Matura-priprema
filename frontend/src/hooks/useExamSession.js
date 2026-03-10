@@ -1,31 +1,24 @@
-// hooks/useExamSession.js — v7
+// hooks/useExamSession.js — v9
 // ─────────────────────────────────────────────────────────────────────────────
-// SVIH 5 BUGOVA RIJEŠENO:
+// ISPRAVCI v9:
 //
-//  BUG #1 — Timer sync race condition [KORJENSKI PROBLEM]:
-//    STARO: applyServerElapsed() callback s durationSeconds u closure.
-//           examMeta još nije učitan → durationSeconds=null → callback izlazi.
-//           syncedAttemptId guard blokira ponovni pokušaj. Timer NIKADA ne krene.
-//    NOVO:  timerSyncRef (iz useExamInit) drži elapsed podatke bez callbacka.
-//           useEffect čeka dok su OBOJE dostupni: durationSeconds + timerSyncRef.ready
-//           Polling svakih 100ms ako sync nije spreman. Timer uvijek krene točno.
+//  BUG E FIX (timer sync) — safeElapsed provjera:
+//    Dodana `safeElapsed` varijabla u timer sync effectu.
+//    Ako rawElapsed >= durationSeconds (stale attempt prošao kroz sve provjere),
+//    silom resetiramo na 0 → timer ne gasi odmah.
+//    Ovo je 3. linija obrane iza resolveAttemptId i timer sync u useExamInit.
 //
-//  BUG #2 — getElapsed() vraćala objekt umjesto broja:
-//    Riješeno u useExamInit.js → attemptApi.getStatus().elapsed_seconds (broj)
+//  BUG F FIX — Auto-save interval se resetirao na svaki setAnswer:
+//    PROBLEM: `answers` u deps arrayu auto-save effecta. Zustand vraća novi
+//             objekt na svaki setAnswer() → effect se re-run, interval resetira.
+//             30s auto-save se NIKAD nije izvršio ako je korisnik tipkao kontinuirano.
+//    FIX: Maknut `answers` iz deps, čitamo svježe odgovore iz Zustand store
+//         direktno unutar intervala (useExamStore.getState().answers).
+//         Interval je sada stabilan 30s, neovisno o promjenama odgovora.
 //
-//  BUG #3 — pauseExam() nije pozvan za pauziran attempt:
-//    Riješeno u useExamInit.js → pauseExam() odmah na status==='paused'
-//
-//  BUG #4 — Odgovori pauziranog attempta nisu obnovljeni:
-//    Riješeno u useExamInit.js → attemptApi.getAnswers() + restoreDraft()
-//
-//  BUG #5 — isSubmitting zauvijek true na grešci:
-//    Riješeno u useExamSubmit.js → finally blok
-//
-//  DODATNI ISPRAVCI:
-//  • let timer antipattern uklonjen → const timer = useTimer(...)
-//  • handleSubmitRef.current = submit.handleSubmit (ne .handleSubmitRef.current)
-//  • auto-save svakih 30s
+// Nasljeđeni ispravci iz v8:
+//   BUG #1 — Timer sync race condition (timerSyncRef bez callback-a)
+//   BUG D  — Dvostruki resync za pauzirane attemptove
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -56,7 +49,7 @@ function debounce(fn, ms) {
 }
 
 export function useExamSession(examId) {
-  // ── Store selektori (useShallow: re-render samo kad se zaista promijeni) ───
+  // ── Store selektori ───────────────────────────────────────────────────────
   const {
     questions,
     answers,
@@ -87,7 +80,7 @@ export function useExamSession(examId) {
     })),
   );
 
-  // ── Tab visibility tracking ────────────────────────────────────────────────
+  // ── Tab visibility tracking ───────────────────────────────────────────────
   const isExamActive = questions.length > 0 && !submittedAt;
   const tabDataRef = useTabVisibility({ enabled: isExamActive });
 
@@ -97,7 +90,6 @@ export function useExamSession(examId) {
     [examMeta],
   );
 
-  // Ref uvijek drži aktualnu vrijednost (za getElapsed koji se ne smije mjenjati)
   const durationRef = useRef(durationSeconds);
   useEffect(() => {
     durationRef.current = durationSeconds;
@@ -112,14 +104,11 @@ export function useExamSession(examId) {
     const { syncedElapsed, startedAt } = elapsedClockRef.current;
     const local = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
     return Math.min(dur, syncedElapsed + local);
-  }, []); // Stabilan — koristi samo refove
+  }, []);
 
   // ── Timer ─────────────────────────────────────────────────────────────────
-  // handleSubmitRef drži najnoviji handleSubmit za timer onExpire
   const handleSubmitRef = useRef(null);
 
-  // ISPRAVAK Rules of Hooks: useCallback MORA biti na top levelu,
-  // ne unutar objekta koji se prosljeđuje useTimer!
   const onTimerExpire = useCallback(() => handleSubmitRef.current?.(), []);
   const onTimerWarning = useCallback(
     () => toast.warning("Ostaje manje od 10 minuta!"),
@@ -131,7 +120,6 @@ export function useExamSession(examId) {
     onWarning: onTimerWarning,
   });
 
-  // Ref za timer objekt (dostupan submit/pause callbackima)
   const timerRef = useRef(timer);
   useEffect(() => {
     timerRef.current = timer;
@@ -153,7 +141,7 @@ export function useExamSession(examId) {
     }
   }, [durationSeconds, timer.running, getElapsed]);
 
-  // ── Timer control callbacks (prosljeđuju se useExamSubmit) ────────────────
+  // ── Timer control callbacks ───────────────────────────────────────────────
   const onPauseTimer = useCallback(
     (remaining) => {
       elapsedClockRef.current = {
@@ -177,29 +165,23 @@ export function useExamSession(examId) {
     timerRef.current?.resync(remaining, { running: true });
   }, []);
 
-  // ── useExamInit ────────────────────────────────────────────────────────────
-  // BUG #1 FIX: Nema applyServerElapsed callback. Init eksponira timerSyncRef.
+  // ── useExamInit ───────────────────────────────────────────────────────────
   const init = useExamInit(examId);
 
-  // ── BUG #1 FIX: Timer sync effect ─────────────────────────────────────────
+  // ── Timer sync effect ─────────────────────────────────────────────────────
   // Čeka dok su OBOJE dostupni: durationSeconds + timerSyncRef.ready.
-  // Polling interval rješava race condition — ako sync stigne prije examMeta,
-  // čekamo examMeta. Ako examMeta stigne prije syncа, čekamo sync.
   const timerAppliedRef = useRef(false);
-
-  // Maksimalno čekanje na timerSyncRef.ready (backup za useExamInit timeout)
   const POLL_MAX_MS = 6000;
 
   useEffect(() => {
-    if (!durationSeconds) return; // Čekaj examMeta
-    if (timerAppliedRef.current) return; // Već primijenjeno
+    if (!durationSeconds) return;
+    if (timerAppliedRef.current) return;
 
     const pollStart = Date.now();
 
     const tryApply = () => {
       const syncData = init.timerSyncRef.current;
 
-      // BUG B backup: forsiraj ready=true ako je prošlo previše vremena
       if (!syncData.ready && Date.now() - pollStart > POLL_MAX_MS) {
         init.timerSyncRef.current = {
           elapsedSeconds: 0,
@@ -214,22 +196,33 @@ export function useExamSession(examId) {
       if (!init.timerSyncRef.current.ready) return false;
 
       timerAppliedRef.current = true;
-      const { elapsedSeconds, isServerPaused } = init.timerSyncRef.current;
+      const { elapsedSeconds: rawElapsed, isServerPaused } =
+        init.timerSyncRef.current;
+
+      // BUG E FIX (3. linija obrane): Ako rawElapsed >= durationSeconds,
+      // stale in_progress attempt je nekako prošao sve provjere u useExamInit.
+      // Silom resetiramo na 0 — timer kreće od pune duljine.
+      const safeElapsed =
+        durationSeconds && rawElapsed >= durationSeconds ? 0 : rawElapsed;
+
+      if (safeElapsed !== rawElapsed) {
+        console.warn(
+          `[useExamSession] safeElapsed clamp: ${rawElapsed}s → 0 ` +
+            `(duration=${durationSeconds}s). Provjeriti useExamInit resolveAttemptId.`,
+        );
+      }
 
       if (isServerPaused) {
-        // BUG D FIX: Za pauzirani attempt — SAMO jedan resync poziv, bez onResumeTimer.
-        // onResumeTimer bi pokrenuo timer (running:true), a odmah bi ga re-stopali.
-        // Direktno postavljamo stopped timer na točan remaining.
+        // BUG D FIX: Za pauziran attempt — samo jedan resync poziv.
         const dur = durationRef.current ?? 0;
-        const remaining = Math.max(0, dur - elapsedSeconds);
+        const remaining = Math.max(0, dur - safeElapsed);
         elapsedClockRef.current = {
-          syncedElapsed: elapsedSeconds,
-          startedAt: null, // Timer nije aktivan
+          syncedElapsed: safeElapsed,
+          startedAt: null,
         };
         timerRef.current?.resync(remaining, { running: false });
       } else {
-        // In-progress: jedan resync poziv via onResumeTimer
-        onResumeTimer(elapsedSeconds);
+        onResumeTimer(safeElapsed);
       }
 
       return true;
@@ -237,14 +230,13 @@ export function useExamSession(examId) {
 
     if (tryApply()) return;
 
-    // Polling dok sync ne bude spreman (useExamInit timeout jamči da će završiti)
     const id = setInterval(() => {
       if (tryApply()) clearInterval(id);
     }, 100);
     return () => clearInterval(id);
   }, [durationSeconds, init.timerSyncRef, onResumeTimer]);
 
-  // ── Draft save (debounced 750ms) ───────────────────────────────────────────
+  // ── Draft save (debounced 750ms) ──────────────────────────────────────────
   const debouncedSaveDraftRef = useRef(null);
   if (!debouncedSaveDraftRef.current) {
     debouncedSaveDraftRef.current = debounce((nextAnswers) => {
@@ -265,7 +257,7 @@ export function useExamSession(examId) {
     }
   }, []);
 
-  // ── useExamSubmit ──────────────────────────────────────────────────────────
+  // ── useExamSubmit ─────────────────────────────────────────────────────────
   const submit = useExamSubmit(examId, {
     attemptIdRef: init.attemptIdRef,
     attemptCreationPromiseRef: init.attemptCreationPromiseRef,
@@ -277,21 +269,25 @@ export function useExamSession(examId) {
     tabDataRef,
   });
 
-  // BUG UKLONJEN: Direktna referenca, ne kopija .current!
-  // submit.handleSubmit je stabilan useCallback — ref je uvijek aktualan
   useEffect(() => {
     handleSubmitRef.current = submit.handleSubmit;
   }, [submit.handleSubmit]);
 
-  // ── Auto-save svakih 30s ───────────────────────────────────────────────────
+  // ── Auto-save svakih 30s ──────────────────────────────────────────────────
+  // BUG F FIX: Maknuli `answers` iz deps.
+  // Staro: answers u deps → novi objekt na svaki setAnswer → interval se resetira
+  //        → 30s auto-save se nikad nije izvršio pri kontinuiranom odgovaranju.
+  // Novo:  Stabilan interval, čita svježe odgovore iz Zustand store direktno.
   useEffect(() => {
-    if (!examId || !Object.keys(answers).length) return;
-    const id = setInterval(
-      () => saveDraft(answers, { immediate: true }),
-      30_000,
-    );
+    if (!examId) return;
+    const id = setInterval(() => {
+      const currentAnswers = useExamStore.getState().answers;
+      if (Object.keys(currentAnswers).length > 0) {
+        saveDraft(currentAnswers, { immediate: true });
+      }
+    }, 30_000);
     return () => clearInterval(id);
-  }, [examId, answers, saveDraft]);
+  }, [examId, saveDraft]); // Nema `answers` dep → stabilan interval
 
   // ── Derived values ────────────────────────────────────────────────────────
   const totalVisible = useMemo(
@@ -366,7 +362,6 @@ export function useExamSession(examId) {
 
   // ── Public API ────────────────────────────────────────────────────────────
   return {
-    // Init state
     isLoading: init.isLoading,
     isInitialized: init.isInitialized,
     fetchError: init.fetchError,
@@ -374,7 +369,6 @@ export function useExamSession(examId) {
     confirmRestoreDraft: init.confirmRestoreDraft,
     discardDraft: init.discardDraft,
 
-    // Store state
     questions,
     answers,
     flagged,
@@ -383,7 +377,6 @@ export function useExamSession(examId) {
     isPaused,
     examMeta,
 
-    // Derived
     current,
     currentPassage,
     isCurrentFlagged,
@@ -391,15 +384,12 @@ export function useExamSession(examId) {
     answeredCount,
     direction,
 
-    // Timer
     timer,
 
-    // Actions
     handleGoTo,
     handleAnswer,
     handleToggleFlag,
 
-    // Submit
     isSubmitting: submit.isSubmitting,
     showSubmitModal: submit.showSubmitModal,
     setShowSubmitModal: submit.setShowSubmitModal,
