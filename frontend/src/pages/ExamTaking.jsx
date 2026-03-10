@@ -1,32 +1,3 @@
-// pages/ExamTaking.jsx — v6
-// ═══════════════════════════════════════════════════════════════════════════
-// ISPRAVCI v6 (prihvaća useExamSession v10 + useExamSubmit v10):
-//
-//  BUG H FIX — isSyncing i isPauseSyncing konzumirani iz useExamSession:
-//    • Pause gumb: disabled dok god je isSyncing (sprječava dvostruki klik)
-//    • Submit gumb (TopBar): disabled dok god je isSyncing
-//    • Submit gumb (MobileNavDrawer): isti
-//    • Submit gumb (QuestionNav sidebar): isti
-//    • SubmitModal "Da, predaj": disabled dok god je isSyncing
-//    • SyncingIndicator: suptilan Loader2 animiran u TopBaru dok isPauseSyncing
-//    • Keyboard shortcut 'p': blokiran dok isSyncing (već u useExamSession)
-//
-//  UX POBOLJŠANJA v6:
-//    • Pause gumb vizualno odražava isPauseSyncing stanje (spinner + tekst)
-//    • Submit gumb u TopBaru prikazuje "Predaje se..." spinner dok isSubmitting
-//    • SubmitModal confirm gumb prikazuje spinner + tekst dok isSubmitting
-//    • MobileNavDrawer submit gumb blokiran uz loading feedback
-//    • Sve disabled stanje koriste isSyncing (ne samo isSubmitting) —
-//      osigurava da se ne može predati dok pause sync još traje
-//
-// Nasljeđeno iz v5 (nepromijenjeno):
-//   FIX #1  — parentQuestion proslijeđen QuestionDisplayu
-//   FIX #2  — Mobile nav drawer + bottom bar
-//   FIX #3  — Submit gumb uvijek vidljiv
-//   FIX #4  — Submit modal sa statistikama
-//   FIX #5  — Passage placeholder bez layout shifta
-//   UX #1-3 — Spring animacija, bottom bar, pb-20
-// ═══════════════════════════════════════════════════════════════════════════
 import { useParams, Link } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -62,7 +33,6 @@ const slideVariants = {
   exit: (dir) => ({ x: dir > 0 ? -28 : 28, opacity: 0 }),
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function buildExamTitle(examMeta) {
   if (!examMeta) return "Ispit";
   if (examMeta.title) return examMeta.title;
@@ -85,7 +55,6 @@ function parseExamError(error) {
   return "Greška pri učitavanju ispita. Pokušajte ponovo.";
 }
 
-// ── ExamTopBar ────────────────────────────────────────────────────────────────
 function ExamTopBar({
   backLink,
   examTitle,
@@ -105,7 +74,6 @@ function ExamTopBar({
     <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-warm-200 shadow-[0_1px_0_0_rgba(0,0,0,0.04)]">
       <div className="page-container">
         <div className="flex items-center h-14 gap-2 sm:gap-3">
-          {/* Back */}
           <Link
             to={backLink}
             className="flex-shrink-0 p-2 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition-colors"
@@ -114,12 +82,10 @@ function ExamTopBar({
             <ArrowLeft size={18} />
           </Link>
 
-          {/* Title — hidden on small screens */}
           <p className="text-sm font-semibold text-warm-700 truncate hidden sm:block flex-1 min-w-0">
             {examTitle}
           </p>
 
-          {/* Progress — desktop only */}
           <div className="hidden md:flex items-center gap-2.5 flex-1 max-w-[200px]">
             <ProgressBar value={answeredCount} max={totalVisible} />
             <span className="text-xs text-warm-400 tabular-nums whitespace-nowrap">
@@ -129,7 +95,6 @@ function ExamTopBar({
 
           <div className="flex-1 sm:hidden" />
 
-          {/* BUG H FIX: SyncingIndicator — vidljiv samo dok pause sync traje */}
           {isPauseSyncing && (
             <span className="hidden sm:flex items-center gap-1 text-xs text-warm-400 flex-shrink-0">
               <Loader2 size={11} className="animate-spin" />
@@ -137,10 +102,8 @@ function ExamTopBar({
             </span>
           )}
 
-          {/* Timer */}
           <ExamTimer {...timer} />
 
-          {/* BUG H FIX: Pause / Resume — disabled + vizualni feedback za isSyncing */}
           <button
             onClick={isPaused ? onResume : onPause}
             disabled={isSyncing}
@@ -161,7 +124,6 @@ function ExamTopBar({
                   : "bg-warm-100 text-warm-600",
             )}
           >
-            {/* Spinner za pause sync, inače ikona */}
             {isPauseSyncing ? (
               <Loader2 size={13} className="animate-spin" />
             ) : isPaused ? (
@@ -174,7 +136,6 @@ function ExamTopBar({
             </span>
           </button>
 
-          {/* BUG H FIX: Desktop Submit — disabled dok isSyncing */}
           <button
             onClick={onSubmit}
             disabled={isSyncing}
@@ -200,7 +161,6 @@ function ExamTopBar({
             <span>{isSubmitting ? "Predaje se..." : "Predaj ispit"}</span>
           </button>
 
-          {/* Mobile: Navigator toggle */}
           <button
             onClick={onOpenNav}
             className="flex-shrink-0 lg:hidden p-2 rounded-lg text-warm-500 hover:bg-warm-100 transition-colors relative"
@@ -214,7 +174,6 @@ function ExamTopBar({
   );
 }
 
-// ── Mobile Nav Drawer ─────────────────────────────────────────────────────────
 function MobileNavDrawer({
   show,
   onClose,
@@ -238,7 +197,6 @@ function MobileNavDrawer({
     <AnimatePresence>
       {show && (
         <>
-          {/* Backdrop */}
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
@@ -248,8 +206,6 @@ function MobileNavDrawer({
             className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] lg:hidden"
             onClick={onClose}
           />
-
-          {/* Sheet */}
           <motion.div
             key="sheet"
             initial={{ y: "100%" }}
@@ -258,12 +214,10 @@ function MobileNavDrawer({
             transition={{ type: "spring", damping: 32, stiffness: 320 }}
             className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl max-h-[82vh] flex flex-col lg:hidden"
           >
-            {/* Handle */}
             <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className="w-10 h-1 rounded-full bg-warm-300" />
             </div>
 
-            {/* Header */}
             <div className="flex items-center justify-between px-5 pb-3 flex-shrink-0">
               <div>
                 <h3 className="text-sm font-bold text-warm-900">Navigacija</h3>
@@ -280,12 +234,10 @@ function MobileNavDrawer({
               </button>
             </div>
 
-            {/* Progress bar */}
             <div className="px-5 pb-4 flex-shrink-0">
               <ProgressBar value={answeredCount} max={visibleCount} />
             </div>
 
-            {/* Question grid */}
             <div className="overflow-y-auto flex-1 px-5 pb-2">
               <div className="grid grid-cols-6 gap-2">
                 {questions.map((q, idx) => {
@@ -339,7 +291,6 @@ function MobileNavDrawer({
               </div>
             </div>
 
-            {/* BUG H FIX: Submit button — disabled + feedback za isSyncing */}
             <div className="p-5 flex-shrink-0 border-t border-warm-100">
               <button
                 onClick={() => {
@@ -382,7 +333,6 @@ function MobileNavDrawer({
   );
 }
 
-// ── Mobile Bottom Bar ─────────────────────────────────────────────────────────
 function MobileBottomBar({
   currentIndex,
   totalVisible,
@@ -397,7 +347,6 @@ function MobileBottomBar({
   return (
     <div className="fixed bottom-0 left-0 right-0 z-20 lg:hidden bg-white/95 backdrop-blur-sm border-t border-warm-200 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
       <div className="flex items-center h-14 px-3 gap-2 max-w-xl mx-auto">
-        {/* Previous */}
         <button
           onClick={onPrev}
           disabled={isFirst}
@@ -412,7 +361,6 @@ function MobileBottomBar({
           <span className="hidden xs:inline text-xs">Preth.</span>
         </button>
 
-        {/* Center: counter + grid toggle */}
         <button
           onClick={onOpenNav}
           className="flex-1 flex items-center justify-center gap-2.5 py-2 rounded-xl bg-warm-100 hover:bg-warm-200 active:bg-warm-300 transition-colors"
@@ -426,7 +374,6 @@ function MobileBottomBar({
           </span>
         </button>
 
-        {/* Next (otvori drawer na zadnjem) */}
         {isLast ? (
           <button
             onClick={onOpenNav}
@@ -449,7 +396,6 @@ function MobileBottomBar({
   );
 }
 
-// ── Submit Modal ──────────────────────────────────────────────────────────────
 function SubmitModal({
   open,
   onClose,
@@ -501,7 +447,6 @@ function SubmitModal({
                 </p>
               </div>
             </div>
-
             <div className="flex justify-between text-sm px-1">
               <span className="text-warm-500">Odgovoreno</span>
               <span className="font-bold text-warm-800">
@@ -511,14 +456,10 @@ function SubmitModal({
           </div>
         )}
       </ModalBody>
-
       <ModalFooter>
-        {/* BUG H FIX: Zatvori nije moguć dok je sync u tijeku */}
         <Button variant="secondary" onClick={onClose} disabled={isSyncing}>
           {allAnswered ? "Odustani" : "Još provjeri"}
         </Button>
-
-        {/* BUG H FIX: Potvrda blokirana dok isSyncing */}
         <Button
           variant="primary"
           onClick={onConfirm}
@@ -536,7 +477,6 @@ function SubmitModal({
   );
 }
 
-// ── Draft Modal ───────────────────────────────────────────────────────────────
 function DraftModal({ open, onConfirm, onDiscard }) {
   return (
     <Modal open={open} title="Nastaviti gdje ste stali?">
@@ -558,7 +498,6 @@ function DraftModal({ open, onConfirm, onDiscard }) {
   );
 }
 
-// ── Paused Overlay ────────────────────────────────────────────────────────────
 function PausedOverlay({ onResume, isSyncing }) {
   return (
     <motion.div
@@ -589,7 +528,6 @@ function PausedOverlay({ onResume, isSyncing }) {
             ? "Čekamo potvrdu poslužitelja. Trenutak..."
             : "Odgovori su sačuvani. Nastavi kad budeš spreman/a."}
         </p>
-        {/* BUG H FIX: Nastavi gumb blokiran dok sync traje */}
         <Button
           variant="primary"
           leftIcon={isSyncing ? undefined : Play}
@@ -605,7 +543,6 @@ function PausedOverlay({ onResume, isSyncing }) {
   );
 }
 
-// ── Error State ───────────────────────────────────────────────────────────────
 function ExamErrorState({ error, backLink }) {
   return (
     <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
@@ -633,7 +570,6 @@ function ExamErrorState({ error, backLink }) {
   );
 }
 
-// ── Empty State ───────────────────────────────────────────────────────────────
 function ExamEmptyState({ backLink, examMeta }) {
   return (
     <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
@@ -662,7 +598,6 @@ function ExamEmptyState({ backLink, examMeta }) {
   );
 }
 
-// ── Quiz Page ─────────────────────────────────────────────────────────────────
 export function QuizPage() {
   const { examId } = useParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -681,12 +616,9 @@ export function QuizPage() {
     direction,
     isPaused,
     examMeta,
-
-    // BUG H FIX: novi props iz useExamSession v10
     isSubmitting,
     isPauseSyncing,
     isSyncing,
-
     isLoading,
     isInitialized,
     fetchError,
@@ -719,7 +651,6 @@ export function QuizPage() {
     [questions],
   );
 
-  // ── Guard stanja ─────────────────────────────────────────────────────────
   if (fetchError)
     return <ExamErrorState error={fetchError} backLink={backLink} />;
   if (isLoading || !isInitialized) return <ExamSkeleton showPassage={false} />;
@@ -737,7 +668,6 @@ export function QuizPage() {
 
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
-      {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <ExamTopBar
         backLink={backLink}
         examTitle={buildExamTitle(examMeta)}
@@ -754,7 +684,6 @@ export function QuizPage() {
         onOpenNav={() => setMobileNavOpen(true)}
       />
 
-      {/* ── Modals ──────────────────────────────────────────────────────── */}
       <SubmitModal
         open={showSubmitModal}
         onClose={() => setShowSubmitModal(false)}
@@ -770,7 +699,6 @@ export function QuizPage() {
         onDiscard={discardDraft}
       />
 
-      {/* ── Mobile nav drawer ───────────────────────────────────────────── */}
       <MobileNavDrawer
         show={mobileNavOpen}
         onClose={() => setMobileNavOpen(false)}
@@ -785,7 +713,6 @@ export function QuizPage() {
         isSubmitting={isSubmitting}
       />
 
-      {/* ── Main content ────────────────────────────────────────────────── */}
       <div className="flex-1 page-container py-5 pb-20 lg:pb-5 flex flex-col gap-5">
         <AnimatePresence mode="wait">
           {isPaused ? (
@@ -801,7 +728,6 @@ export function QuizPage() {
               animate={{ opacity: 1 }}
               className="flex-1 flex flex-col lg:flex-row gap-5"
             >
-              {/* ── Passage panel ─────────────────────────────────────── */}
               {hasAnyPassage && (
                 <div className="lg:w-[42%] xl:w-[38%] flex-shrink-0">
                   {currentPassage ? (
@@ -816,7 +742,6 @@ export function QuizPage() {
                 </div>
               )}
 
-              {/* ── Question + Desktop bottom nav ─────────────────────── */}
               <div className="flex-1 min-w-0 flex flex-col gap-4">
                 <AnimatePresence custom={direction} mode="wait">
                   <motion.div
@@ -841,7 +766,6 @@ export function QuizPage() {
                   </motion.div>
                 </AnimatePresence>
 
-                {/* Desktop bottom nav */}
                 <div className="hidden lg:flex items-center justify-between gap-3 mt-auto pt-1">
                   <Button
                     variant="secondary"
@@ -854,7 +778,6 @@ export function QuizPage() {
 
                   <div className="flex items-center gap-2.5">
                     {isLastQuestion ? (
-                      // BUG H FIX: disabled + loading dok isSyncing
                       <Button
                         variant="primary"
                         leftIcon={isSubmitting ? undefined : Send}
@@ -877,9 +800,7 @@ export function QuizPage() {
                 </div>
               </div>
 
-              {/* ── Navigator sidebar — desktop only ──────────────────── */}
               <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
-                {/* BUG H FIX: onSubmit blokiran dok isSyncing */}
                 <QuestionNav
                   questions={questions}
                   currentIndex={currentIndex}
@@ -896,7 +817,6 @@ export function QuizPage() {
         </AnimatePresence>
       </div>
 
-      {/* ── Mobile bottom nav bar ──────────────────────────────────────── */}
       {!isPaused && (
         <MobileBottomBar
           currentIndex={currentIndex}

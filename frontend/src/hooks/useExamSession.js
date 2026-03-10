@@ -1,22 +1,3 @@
-// hooks/useExamSession.js — v10
-// ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI v10:
-//
-//  BUG I FIX — cancelDraft proslijeđen useExamSubmitu:
-//    useExamSubmit sada dobiva cancelDraft() funkciju koja cancelira
-//    pending debounced draft save. Poziva se na početku handleSubmit()
-//    da spriječi ghost draft koji ostaje nakon dovršenog ispita.
-//
-//  BUG H FIX — isSyncing izložen u public API:
-//    useExamSession.isSyncing = submit.isSyncing (isSubmitting || isPauseSyncing)
-//    UI (ExamTaking.jsx) ga koristi za disabled stanje gumba i tooltip.
-//
-// Nasljeđeni ispravci iz v9:
-//   BUG E — Stale in_progress attempt (overdue check)
-//   BUG F — Auto-save interval resetirao se na svaki setAnswer (answers dep)
-//   BUG D — Dvostruki resync za pauziran attempt
-//   BUG #1 — Timer sync race condition
-// ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useExamStore } from "@/store/examStore";
@@ -30,7 +11,6 @@ import { toast } from "@/store/toastStore";
 import { useExamInit } from "@/hooks/useExamInit";
 import { useExamSubmit } from "@/hooks/useExamSubmit";
 
-// ── Debounce helper ────────────────────────────────────────────────────────────
 function debounce(fn, ms) {
   let id;
   const d = (...args) => {
@@ -46,7 +26,6 @@ function debounce(fn, ms) {
 }
 
 export function useExamSession(examId) {
-  // ── Store selektori ───────────────────────────────────────────────────────
   const {
     questions,
     answers,
@@ -77,11 +56,9 @@ export function useExamSession(examId) {
     })),
   );
 
-  // ── Tab visibility tracking ───────────────────────────────────────────────
   const isExamActive = questions.length > 0 && !submittedAt;
   const tabDataRef = useTabVisibility({ enabled: isExamActive });
 
-  // ── Duration ──────────────────────────────────────────────────────────────
   const durationSeconds = useMemo(
     () => (examMeta?.duration_minutes ? examMeta.duration_minutes * 60 : null),
     [examMeta],
@@ -92,7 +69,6 @@ export function useExamSession(examId) {
     durationRef.current = durationSeconds;
   }, [durationSeconds]);
 
-  // ── Elapsed clock (anchor-based, bez drift-a) ─────────────────────────────
   const elapsedClockRef = useRef({ syncedElapsed: 0, startedAt: null });
 
   const getElapsed = useCallback(() => {
@@ -103,9 +79,7 @@ export function useExamSession(examId) {
     return Math.min(dur, syncedElapsed + local);
   }, []);
 
-  // ── Timer ─────────────────────────────────────────────────────────────────
   const handleSubmitRef = useRef(null);
-
   const onTimerExpire = useCallback(() => handleSubmitRef.current?.(), []);
   const onTimerWarning = useCallback(
     () => toast.warning("Ostaje manje od 10 minuta!"),
@@ -122,7 +96,6 @@ export function useExamSession(examId) {
     timerRef.current = timer;
   });
 
-  // Prati running stanje za elapsed clock
   useEffect(() => {
     if (!durationSeconds) return;
     if (timer.running && !elapsedClockRef.current.startedAt) {
@@ -138,7 +111,6 @@ export function useExamSession(examId) {
     }
   }, [durationSeconds, timer.running, getElapsed]);
 
-  // ── Timer control callbacks ───────────────────────────────────────────────
   const onPauseTimer = useCallback(
     (remaining) => {
       elapsedClockRef.current = {
@@ -162,10 +134,8 @@ export function useExamSession(examId) {
     timerRef.current?.resync(remaining, { running: true });
   }, []);
 
-  // ── useExamInit ───────────────────────────────────────────────────────────
   const init = useExamInit(examId);
 
-  // ── Timer sync effect ─────────────────────────────────────────────────────
   const timerAppliedRef = useRef(false);
   const POLL_MAX_MS = 6000;
 
@@ -195,7 +165,6 @@ export function useExamSession(examId) {
       const { elapsedSeconds: rawElapsed, isServerPaused } =
         init.timerSyncRef.current;
 
-      // BUG E FIX (3. linija obrane): Clamp stale elapsed
       const safeElapsed =
         durationSeconds && rawElapsed >= durationSeconds ? 0 : rawElapsed;
 
@@ -207,7 +176,6 @@ export function useExamSession(examId) {
       }
 
       if (isServerPaused) {
-        // BUG D FIX: Za pauziran attempt — samo jedan resync poziv.
         const dur = durationRef.current ?? 0;
         const remaining = Math.max(0, dur - safeElapsed);
         elapsedClockRef.current = {
@@ -230,7 +198,6 @@ export function useExamSession(examId) {
     return () => clearInterval(id);
   }, [durationSeconds, init.timerSyncRef, onResumeTimer]);
 
-  // ── Draft save (debounced 750ms) ──────────────────────────────────────────
   const debouncedSaveDraftRef = useRef(null);
   if (!debouncedSaveDraftRef.current) {
     debouncedSaveDraftRef.current = debounce((nextAnswers) => {
@@ -251,13 +218,10 @@ export function useExamSession(examId) {
     }
   }, []);
 
-  // BUG I FIX: cancelDraft — cancelira pending debounced save bez pisanja.
-  // Koristi se u handleSubmit() da spriječi ghost draft nakon predaje.
   const cancelDraft = useCallback(() => {
     debouncedSaveDraftRef.current?.cancel();
   }, []);
 
-  // ── useExamSubmit ─────────────────────────────────────────────────────────
   const submit = useExamSubmit(examId, {
     attemptIdRef: init.attemptIdRef,
     attemptCreationPromiseRef: init.attemptCreationPromiseRef,
@@ -266,7 +230,7 @@ export function useExamSession(examId) {
     onPauseTimer,
     onResumeTimer,
     saveDraft,
-    cancelDraft, // BUG I FIX: NOVO
+    cancelDraft,
     tabDataRef,
   });
 
@@ -274,8 +238,6 @@ export function useExamSession(examId) {
     handleSubmitRef.current = submit.handleSubmit;
   }, [submit.handleSubmit]);
 
-  // ── Auto-save svakih 30s ──────────────────────────────────────────────────
-  // BUG F FIX: Stabilan interval, nema `answers` u deps.
   useEffect(() => {
     if (!examId) return;
     const id = setInterval(() => {
@@ -287,7 +249,6 @@ export function useExamSession(examId) {
     return () => clearInterval(id);
   }, [examId, saveDraft]);
 
-  // ── Derived values ────────────────────────────────────────────────────────
   const totalVisible = useMemo(
     () => questions.filter((q) => q.questionType !== "fill_blank_mc").length,
     [questions],
@@ -298,7 +259,6 @@ export function useExamSession(examId) {
     [answers],
   );
 
-  // ── Navigacija ────────────────────────────────────────────────────────────
   const [direction, setDirection] = useState(1);
 
   const handleGoTo = useCallback(
@@ -310,7 +270,6 @@ export function useExamSession(examId) {
     [currentIndex, goToQuestion, totalVisible],
   );
 
-  // ── Odgovori + zastavice ──────────────────────────────────────────────────
   const handleAnswer = useCallback(
     (letter) => {
       if (isPaused) return;
@@ -327,7 +286,6 @@ export function useExamSession(examId) {
     if (q) toggleFlag(q.id);
   }, [questions, currentIndex, toggleFlag]);
 
-  // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useKeyPress(
     {
       ArrowRight: () =>
@@ -341,7 +299,6 @@ export function useExamSession(examId) {
       c: () => !isPaused && handleAnswer("c"),
       d: () => !isPaused && handleAnswer("d"),
       f: handleToggleFlag,
-      // BUG H FIX: p tipka ne pauzira dok je sync u tijeku
       p: () => !submit.isSyncing && submit.handlePause(),
       "?": () =>
         toast.info("Prečaci: ←→ navigacija · A–D odabir · F označi · P pauza"),
@@ -352,14 +309,12 @@ export function useExamSession(examId) {
   useBeforeUnload(questions.length > 0 && !submittedAt);
   useImagePreload(questions, currentIndex, { ahead: 3 });
 
-  // ── Computed current question ─────────────────────────────────────────────
   const current = questions[currentIndex] ?? null;
   const currentPassage = current?.passageId
     ? (passages[current.passageId] ?? null)
     : null;
   const isCurrentFlagged = current ? flagged.has(current.id) : false;
 
-  // ── Public API ────────────────────────────────────────────────────────────
   return {
     isLoading: init.isLoading,
     isInitialized: init.isInitialized,
@@ -390,8 +345,8 @@ export function useExamSession(examId) {
     handleToggleFlag,
 
     isSubmitting: submit.isSubmitting,
-    isPauseSyncing: submit.isPauseSyncing, // BUG H FIX: za granular UI
-    isSyncing: submit.isSyncing, // BUG H FIX: convenience za disabled stanja
+    isPauseSyncing: submit.isPauseSyncing,
+    isSyncing: submit.isSyncing,
     showSubmitModal: submit.showSubmitModal,
     setShowSubmitModal: submit.setShowSubmitModal,
     handlePause: submit.handlePause,
