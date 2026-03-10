@@ -1,24 +1,21 @@
-// hooks/useExamSession.js — v9
+// hooks/useExamSession.js — v10
 // ─────────────────────────────────────────────────────────────────────────────
-// ISPRAVCI v9:
+// ISPRAVCI v10:
 //
-//  BUG E FIX (timer sync) — safeElapsed provjera:
-//    Dodana `safeElapsed` varijabla u timer sync effectu.
-//    Ako rawElapsed >= durationSeconds (stale attempt prošao kroz sve provjere),
-//    silom resetiramo na 0 → timer ne gasi odmah.
-//    Ovo je 3. linija obrane iza resolveAttemptId i timer sync u useExamInit.
+//  BUG I FIX — cancelDraft proslijeđen useExamSubmitu:
+//    useExamSubmit sada dobiva cancelDraft() funkciju koja cancelira
+//    pending debounced draft save. Poziva se na početku handleSubmit()
+//    da spriječi ghost draft koji ostaje nakon dovršenog ispita.
 //
-//  BUG F FIX — Auto-save interval se resetirao na svaki setAnswer:
-//    PROBLEM: `answers` u deps arrayu auto-save effecta. Zustand vraća novi
-//             objekt na svaki setAnswer() → effect se re-run, interval resetira.
-//             30s auto-save se NIKAD nije izvršio ako je korisnik tipkao kontinuirano.
-//    FIX: Maknut `answers` iz deps, čitamo svježe odgovore iz Zustand store
-//         direktno unutar intervala (useExamStore.getState().answers).
-//         Interval je sada stabilan 30s, neovisno o promjenama odgovora.
+//  BUG H FIX — isSyncing izložen u public API:
+//    useExamSession.isSyncing = submit.isSyncing (isSubmitting || isPauseSyncing)
+//    UI (ExamTaking.jsx) ga koristi za disabled stanje gumba i tooltip.
 //
-// Nasljeđeni ispravci iz v8:
-//   BUG #1 — Timer sync race condition (timerSyncRef bez callback-a)
-//   BUG D  — Dvostruki resync za pauzirane attemptove
+// Nasljeđeni ispravci iz v9:
+//   BUG E — Stale in_progress attempt (overdue check)
+//   BUG F — Auto-save interval resetirao se na svaki setAnswer (answers dep)
+//   BUG D — Dvostruki resync za pauziran attempt
+//   BUG #1 — Timer sync race condition
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -169,7 +166,6 @@ export function useExamSession(examId) {
   const init = useExamInit(examId);
 
   // ── Timer sync effect ─────────────────────────────────────────────────────
-  // Čeka dok su OBOJE dostupni: durationSeconds + timerSyncRef.ready.
   const timerAppliedRef = useRef(false);
   const POLL_MAX_MS = 6000;
 
@@ -199,9 +195,7 @@ export function useExamSession(examId) {
       const { elapsedSeconds: rawElapsed, isServerPaused } =
         init.timerSyncRef.current;
 
-      // BUG E FIX (3. linija obrane): Ako rawElapsed >= durationSeconds,
-      // stale in_progress attempt je nekako prošao sve provjere u useExamInit.
-      // Silom resetiramo na 0 — timer kreće od pune duljine.
+      // BUG E FIX (3. linija obrane): Clamp stale elapsed
       const safeElapsed =
         durationSeconds && rawElapsed >= durationSeconds ? 0 : rawElapsed;
 
@@ -257,6 +251,12 @@ export function useExamSession(examId) {
     }
   }, []);
 
+  // BUG I FIX: cancelDraft — cancelira pending debounced save bez pisanja.
+  // Koristi se u handleSubmit() da spriječi ghost draft nakon predaje.
+  const cancelDraft = useCallback(() => {
+    debouncedSaveDraftRef.current?.cancel();
+  }, []);
+
   // ── useExamSubmit ─────────────────────────────────────────────────────────
   const submit = useExamSubmit(examId, {
     attemptIdRef: init.attemptIdRef,
@@ -266,6 +266,7 @@ export function useExamSession(examId) {
     onPauseTimer,
     onResumeTimer,
     saveDraft,
+    cancelDraft, // BUG I FIX: NOVO
     tabDataRef,
   });
 
@@ -274,10 +275,7 @@ export function useExamSession(examId) {
   }, [submit.handleSubmit]);
 
   // ── Auto-save svakih 30s ──────────────────────────────────────────────────
-  // BUG F FIX: Maknuli `answers` iz deps.
-  // Staro: answers u deps → novi objekt na svaki setAnswer → interval se resetira
-  //        → 30s auto-save se nikad nije izvršio pri kontinuiranom odgovaranju.
-  // Novo:  Stabilan interval, čita svježe odgovore iz Zustand store direktno.
+  // BUG F FIX: Stabilan interval, nema `answers` u deps.
   useEffect(() => {
     if (!examId) return;
     const id = setInterval(() => {
@@ -287,7 +285,7 @@ export function useExamSession(examId) {
       }
     }, 30_000);
     return () => clearInterval(id);
-  }, [examId, saveDraft]); // Nema `answers` dep → stabilan interval
+  }, [examId, saveDraft]);
 
   // ── Derived values ────────────────────────────────────────────────────────
   const totalVisible = useMemo(
@@ -343,7 +341,8 @@ export function useExamSession(examId) {
       c: () => !isPaused && handleAnswer("c"),
       d: () => !isPaused && handleAnswer("d"),
       f: handleToggleFlag,
-      p: submit.handlePause,
+      // BUG H FIX: p tipka ne pauzira dok je sync u tijeku
+      p: () => !submit.isSyncing && submit.handlePause(),
       "?": () =>
         toast.info("Prečaci: ←→ navigacija · A–D odabir · F označi · P pauza"),
     },
@@ -391,6 +390,8 @@ export function useExamSession(examId) {
     handleToggleFlag,
 
     isSubmitting: submit.isSubmitting,
+    isPauseSyncing: submit.isPauseSyncing, // BUG H FIX: za granular UI
+    isSyncing: submit.isSyncing, // BUG H FIX: convenience za disabled stanja
     showSubmitModal: submit.showSubmitModal,
     setShowSubmitModal: submit.setShowSubmitModal,
     handlePause: submit.handlePause,

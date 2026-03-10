@@ -1,17 +1,31 @@
-// pages/ExamTaking.jsx — v5 PREMIUM REDESIGN
+// pages/ExamTaking.jsx — v6
 // ═══════════════════════════════════════════════════════════════════════════
-// POPRAVCI I POBOLJŠANJA:
+// ISPRAVCI v6 (prihvaća useExamSession v10 + useExamSubmit v10):
 //
-//  FIX #1  — parentQuestion se sada prosljeđuje QuestionDisplayu
-//  FIX #2  — Mobile: QuestionNav sidebar sakriven, zamijenjen s:
-//             a) sticky bottom bar (prev/counter/next)
-//             b) slide-up drawer s kompletnom navigacijom i submit gumbom
-//  FIX #3  — Submit gumb uvijek vidljiv (top bar desktop + drawer mobile)
-//  FIX #4  — Bolji Submit modal (statistike odgovoreno/preskočeno)
-//  FIX #5  — Passage panel "no passage" placeholder ne zauzima prostor
-//  UX #1   — Smooth spring animacija za mobile drawer
-//  UX #2   — Bottom bar nestaje kad je ispit pauziran
-//  UX #3   — pb-20 na mobilnom da content ne ide ispod bottom bara
+//  BUG H FIX — isSyncing i isPauseSyncing konzumirani iz useExamSession:
+//    • Pause gumb: disabled dok god je isSyncing (sprječava dvostruki klik)
+//    • Submit gumb (TopBar): disabled dok god je isSyncing
+//    • Submit gumb (MobileNavDrawer): isti
+//    • Submit gumb (QuestionNav sidebar): isti
+//    • SubmitModal "Da, predaj": disabled dok god je isSyncing
+//    • SyncingIndicator: suptilan Loader2 animiran u TopBaru dok isPauseSyncing
+//    • Keyboard shortcut 'p': blokiran dok isSyncing (već u useExamSession)
+//
+//  UX POBOLJŠANJA v6:
+//    • Pause gumb vizualno odražava isPauseSyncing stanje (spinner + tekst)
+//    • Submit gumb u TopBaru prikazuje "Predaje se..." spinner dok isSubmitting
+//    • SubmitModal confirm gumb prikazuje spinner + tekst dok isSubmitting
+//    • MobileNavDrawer submit gumb blokiran uz loading feedback
+//    • Sve disabled stanje koriste isSyncing (ne samo isSubmitting) —
+//      osigurava da se ne može predati dok pause sync još traje
+//
+// Nasljeđeno iz v5 (nepromijenjeno):
+//   FIX #1  — parentQuestion proslijeđen QuestionDisplayu
+//   FIX #2  — Mobile nav drawer + bottom bar
+//   FIX #3  — Submit gumb uvijek vidljiv
+//   FIX #4  — Submit modal sa statistikama
+//   FIX #5  — Passage placeholder bez layout shifta
+//   UX #1-3 — Spring animacija, bottom bar, pb-20
 // ═══════════════════════════════════════════════════════════════════════════
 import { useParams, Link } from "react-router-dom";
 import { useMemo, useState } from "react";
@@ -27,6 +41,7 @@ import {
   LayoutGrid,
   X,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { Modal, ModalBody, ModalFooter } from "@/components/common/Modal";
@@ -76,6 +91,9 @@ function ExamTopBar({
   examTitle,
   timer,
   isPaused,
+  isPauseSyncing,
+  isSyncing,
+  isSubmitting,
   onPause,
   onResume,
   answeredCount,
@@ -111,32 +129,75 @@ function ExamTopBar({
 
           <div className="flex-1 sm:hidden" />
 
+          {/* BUG H FIX: SyncingIndicator — vidljiv samo dok pause sync traje */}
+          {isPauseSyncing && (
+            <span className="hidden sm:flex items-center gap-1 text-xs text-warm-400 flex-shrink-0">
+              <Loader2 size={11} className="animate-spin" />
+              <span className="hidden md:inline">Sinkronizacija...</span>
+            </span>
+          )}
+
           {/* Timer */}
           <ExamTimer {...timer} />
 
-          {/* Pause / Resume */}
+          {/* BUG H FIX: Pause / Resume — disabled + vizualni feedback za isSyncing */}
           <button
             onClick={isPaused ? onResume : onPause}
+            disabled={isSyncing}
+            title={
+              isPauseSyncing
+                ? "Čekaj sinkronizaciju s poslužiteljem..."
+                : isPaused
+                  ? "Nastavi ispit"
+                  : "Pauziraj ispit"
+            }
             className={cn(
               "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-              isPaused
+              isSyncing && "opacity-60 cursor-not-allowed",
+              !isSyncing && isPaused
                 ? "bg-primary-600 text-white hover:bg-primary-700"
-                : "bg-warm-100 text-warm-600 hover:bg-warm-200",
+                : !isSyncing
+                  ? "bg-warm-100 text-warm-600 hover:bg-warm-200"
+                  : "bg-warm-100 text-warm-600",
             )}
           >
-            {isPaused ? <Play size={13} /> : <Pause size={13} />}
+            {/* Spinner za pause sync, inače ikona */}
+            {isPauseSyncing ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : isPaused ? (
+              <Play size={13} />
+            ) : (
+              <Pause size={13} />
+            )}
             <span className="hidden sm:inline">
-              {isPaused ? "Nastavi" : "Pauziraj"}
+              {isPauseSyncing ? "Sinkr..." : isPaused ? "Nastavi" : "Pauziraj"}
             </span>
           </button>
 
-          {/* Desktop: Submit button */}
+          {/* BUG H FIX: Desktop Submit — disabled dok isSyncing */}
           <button
             onClick={onSubmit}
-            className="hidden lg:flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-warm-900 text-white hover:bg-black transition-colors"
+            disabled={isSyncing}
+            title={
+              isPauseSyncing
+                ? "Pričekaj završetak sinkronizacije..."
+                : "Predaj ispit"
+            }
+            className={cn(
+              "hidden lg:flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors",
+              isSyncing
+                ? "bg-warm-400 text-white cursor-not-allowed opacity-60"
+                : isSubmitting
+                  ? "bg-warm-700 text-white cursor-not-allowed"
+                  : "bg-warm-900 text-white hover:bg-black",
+            )}
           >
-            <Send size={13} />
-            <span>Predaj ispit</span>
+            {isSubmitting ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Send size={13} />
+            )}
+            <span>{isSubmitting ? "Predaje se..." : "Predaj ispit"}</span>
           </button>
 
           {/* Mobile: Navigator toggle */}
@@ -164,6 +225,8 @@ function MobileNavDrawer({
   onGoTo,
   onSubmit,
   answeredCount,
+  isSyncing,
+  isSubmitting,
 }) {
   const visibleCount = questions.filter(
     (q) => q.questionType !== "fill_blank_mc",
@@ -245,80 +308,70 @@ function MobileNavDrawer({
                   const isCurrent = idx === currentIndex;
 
                   return (
-                    <button
+                    <motion.button
                       key={q.id}
+                      whileTap={{ scale: 0.88 }}
                       onClick={() => {
                         onGoTo(idx);
                         onClose();
                       }}
+                      aria-current={isCurrent ? "step" : undefined}
                       className={cn(
-                        "aspect-square rounded-xl text-[11px] font-bold transition-all relative",
+                        "aspect-square rounded-xl text-[11px] font-bold transition-all duration-100 relative",
                         isCurrent
-                          ? "bg-primary-600 text-white shadow-sm scale-105"
+                          ? "bg-primary-600 text-white shadow-sm"
                           : isAnswered && isFlagged
                             ? "bg-amber-100 text-amber-800 border border-amber-300"
                             : isAnswered
                               ? "bg-primary-100 text-primary-700 border border-primary-200"
                               : isFlagged
                                 ? "bg-amber-50 text-amber-700 border border-amber-300"
-                                : "bg-warm-50 text-warm-500 border border-warm-200 active:bg-warm-100",
+                                : "bg-warm-50 text-warm-500 border border-warm-200",
                       )}
                     >
                       {label}
                       {isFlagged && !isCurrent && (
                         <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 border-2 border-white" />
                       )}
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
-
-              {/* Legend */}
-              <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
-                {[
-                  { color: "bg-primary-600", label: "Trenutno pitanje" },
-                  {
-                    color: "bg-primary-100 border border-primary-200",
-                    label: "Odgovoreno",
-                  },
-                  {
-                    color: "bg-amber-50 border border-amber-300",
-                    label: "Označeno zastavicom",
-                  },
-                  {
-                    color: "bg-warm-50 border border-warm-200",
-                    label: "Preskočeno",
-                  },
-                ].map(({ color, label }) => (
-                  <div key={label} className="flex items-center gap-2">
-                    <span
-                      className={cn("w-3.5 h-3.5 rounded flex-shrink-0", color)}
-                    />
-                    <span className="text-[11px] text-warm-500">{label}</span>
-                  </div>
-                ))}
-              </div>
             </div>
 
-            {/* Submit button */}
-            <div className="p-5 border-t border-warm-100 flex-shrink-0">
+            {/* BUG H FIX: Submit button — disabled + feedback za isSyncing */}
+            <div className="p-5 flex-shrink-0 border-t border-warm-100">
               <button
                 onClick={() => {
-                  onSubmit();
+                  if (isSyncing) return;
                   onClose();
+                  onSubmit();
                 }}
+                disabled={isSyncing}
                 className={cn(
-                  "w-full py-3.5 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2.5",
-                  unanswered > 0
-                    ? "bg-warm-900 text-white hover:bg-black active:scale-[0.98]"
-                    : "bg-primary-600 text-white hover:bg-primary-700 active:scale-[0.98]",
+                  "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-all",
+                  isSyncing
+                    ? "bg-warm-300 text-warm-500 cursor-not-allowed"
+                    : isSubmitting
+                      ? "bg-warm-700 text-white cursor-not-allowed"
+                      : unanswered > 0
+                        ? "bg-warm-900 text-white hover:bg-black active:scale-[0.98]"
+                        : "bg-primary-600 text-white hover:bg-primary-700 active:scale-[0.98]",
                 )}
               >
-                <Send size={15} />
+                {isSubmitting ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Send size={15} />
+                )}
                 <span>
-                  {unanswered > 0
-                    ? `Predaj ispit (${unanswered} bez odg.)`
-                    : "Predaj ispit"}
+                  {isSubmitting
+                    ? "Predaje se..."
+                    : isSyncing
+                      ? "Sinkronizacija..."
+                      : unanswered > 0
+                        ? `Predaj ispit (${unanswered} bez odg.)`
+                        : "Predaj ispit"}
                 </span>
               </button>
             </div>
@@ -373,7 +426,7 @@ function MobileBottomBar({
           </span>
         </button>
 
-        {/* Next / Submit */}
+        {/* Next (otvori drawer na zadnjem) */}
         {isLast ? (
           <button
             onClick={onOpenNav}
@@ -404,12 +457,17 @@ function SubmitModal({
   answeredCount,
   totalVisible,
   isSubmitting,
+  isSyncing,
 }) {
   const unanswered = totalVisible - answeredCount;
   const allAnswered = unanswered === 0;
 
   return (
-    <Modal open={open} onClose={onClose} title="Predaj ispit">
+    <Modal
+      open={open}
+      onClose={isSyncing ? undefined : onClose}
+      title="Predaj ispit"
+    >
       <ModalBody>
         {allAnswered ? (
           <div className="text-center py-3">
@@ -444,36 +502,34 @@ function SubmitModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center p-3.5 bg-primary-50 rounded-xl border border-primary-100">
-                <p className="text-2xl font-black text-primary-700 tabular-nums leading-none mb-1">
-                  {answeredCount}
-                </p>
-                <p className="text-xs text-primary-600 font-medium">
-                  Odgovoreno
-                </p>
-              </div>
-              <div className="text-center p-3.5 bg-warm-100 rounded-xl border border-warm-200">
-                <p className="text-2xl font-black text-warm-600 tabular-nums leading-none mb-1">
-                  {unanswered}
-                </p>
-                <p className="text-xs text-warm-500 font-medium">Preskočeno</p>
-              </div>
+            <div className="flex justify-between text-sm px-1">
+              <span className="text-warm-500">Odgovoreno</span>
+              <span className="font-bold text-warm-800">
+                {answeredCount}/{totalVisible}
+              </span>
             </div>
           </div>
         )}
       </ModalBody>
+
       <ModalFooter>
-        <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
-          {allAnswered ? "Pregledaj još jednom" : "Nastavi rješavati"}
+        {/* BUG H FIX: Zatvori nije moguć dok je sync u tijeku */}
+        <Button variant="secondary" onClick={onClose} disabled={isSyncing}>
+          {allAnswered ? "Odustani" : "Još provjeri"}
         </Button>
+
+        {/* BUG H FIX: Potvrda blokirana dok isSyncing */}
         <Button
           variant="primary"
           onClick={onConfirm}
+          disabled={isSyncing}
           loading={isSubmitting}
-          leftIcon={Send}
         >
-          {allAnswered ? "Predaj ispit" : "Svejedno predaj"}
+          {isSubmitting
+            ? "Predaje se..."
+            : allAnswered
+              ? "Predaj ispit"
+              : "Svejedno predaj"}
         </Button>
       </ModalFooter>
     </Modal>
@@ -499,6 +555,53 @@ function DraftModal({ open, onConfirm, onDiscard }) {
         </Button>
       </ModalFooter>
     </Modal>
+  );
+}
+
+// ── Paused Overlay ────────────────────────────────────────────────────────────
+function PausedOverlay({ onResume, isSyncing }) {
+  return (
+    <motion.div
+      key="paused"
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={{ duration: 0.2 }}
+      className="flex-1 flex items-center justify-center py-16"
+    >
+      <div className="bg-white rounded-2xl border border-warm-200 shadow-card p-10 max-w-sm w-full text-center">
+        <div className="w-16 h-16 bg-warm-100 rounded-full flex items-center justify-center mx-auto mb-5">
+          {isSyncing ? (
+            <Loader2
+              size={28}
+              className="text-warm-400 animate-spin"
+              strokeWidth={1.5}
+            />
+          ) : (
+            <Pause size={28} className="text-warm-400" strokeWidth={1.5} />
+          )}
+        </div>
+        <h2 className="text-xl font-bold text-warm-900 mb-2">
+          {isSyncing ? "Sinkronizacija..." : "Ispit je pauziran"}
+        </h2>
+        <p className="text-warm-500 text-sm mb-6 leading-relaxed">
+          {isSyncing
+            ? "Čekamo potvrdu poslužitelja. Trenutak..."
+            : "Odgovori su sačuvani. Nastavi kad budeš spreman/a."}
+        </p>
+        {/* BUG H FIX: Nastavi gumb blokiran dok sync traje */}
+        <Button
+          variant="primary"
+          leftIcon={isSyncing ? undefined : Play}
+          size="lg"
+          onClick={onResume}
+          disabled={isSyncing}
+          loading={isSyncing}
+        >
+          {isSyncing ? "Pričekaj..." : "Nastavi ispit"}
+        </Button>
+      </div>
+    </motion.div>
   );
 }
 
@@ -559,35 +662,6 @@ function ExamEmptyState({ backLink, examMeta }) {
   );
 }
 
-// ── Paused Overlay ────────────────────────────────────────────────────────────
-function PausedOverlay({ onResume }) {
-  return (
-    <motion.div
-      key="paused"
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ duration: 0.2 }}
-      className="flex-1 flex items-center justify-center py-16"
-    >
-      <div className="bg-white rounded-2xl border border-warm-200 shadow-card p-10 max-w-sm w-full text-center">
-        <div className="w-16 h-16 bg-warm-100 rounded-full flex items-center justify-center mx-auto mb-5">
-          <Pause size={28} className="text-warm-400" strokeWidth={1.5} />
-        </div>
-        <h2 className="text-xl font-bold text-warm-900 mb-2">
-          Ispit je pauziran
-        </h2>
-        <p className="text-warm-500 text-sm mb-6 leading-relaxed">
-          Odgovori su sačuvani. Nastavi kad budeš spreman/a.
-        </p>
-        <Button variant="primary" leftIcon={Play} size="lg" onClick={onResume}>
-          Nastavi ispit
-        </Button>
-      </div>
-    </motion.div>
-  );
-}
-
 // ── Quiz Page ─────────────────────────────────────────────────────────────────
 export function QuizPage() {
   const { examId } = useParams();
@@ -607,7 +681,12 @@ export function QuizPage() {
     direction,
     isPaused,
     examMeta,
+
+    // BUG H FIX: novi props iz useExamSession v10
     isSubmitting,
+    isPauseSyncing,
+    isSyncing,
+
     isLoading,
     isInitialized,
     fetchError,
@@ -630,19 +709,17 @@ export function QuizPage() {
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
 
-  // ── FIX: parentQuestion se mora proslijediti QuestionDisplayu ───────────
   const parentQuestion = useMemo(() => {
     if (!current || current.questionType !== "fill_blank_child") return null;
     return questions.find((q) => q.id === current.parentQuestionId) ?? null;
   }, [current, questions]);
 
-  // ── Je li uopće itko od pitanja ima passage (za stabilnost layouta) ─────
   const hasAnyPassage = useMemo(
     () => questions.some((q) => q.passageId),
     [questions],
   );
 
-  // ── Redosljed provjera ───────────────────────────────────────────────────
+  // ── Guard stanja ─────────────────────────────────────────────────────────
   if (fetchError)
     return <ExamErrorState error={fetchError} backLink={backLink} />;
   if (isLoading || !isInitialized) return <ExamSkeleton showPassage={false} />;
@@ -666,6 +743,9 @@ export function QuizPage() {
         examTitle={buildExamTitle(examMeta)}
         timer={timer}
         isPaused={isPaused}
+        isPauseSyncing={isPauseSyncing}
+        isSyncing={isSyncing}
+        isSubmitting={isSubmitting}
         onPause={handlePause}
         onResume={handleResume}
         answeredCount={answeredCount}
@@ -682,6 +762,7 @@ export function QuizPage() {
         answeredCount={answeredCount}
         totalVisible={totalVisible}
         isSubmitting={isSubmitting}
+        isSyncing={isSyncing}
       />
       <DraftModal
         open={showDraftModal}
@@ -700,14 +781,19 @@ export function QuizPage() {
         onGoTo={handleGoTo}
         onSubmit={() => setShowSubmitModal(true)}
         answeredCount={answeredCount}
+        isSyncing={isSyncing}
+        isSubmitting={isSubmitting}
       />
 
       {/* ── Main content ────────────────────────────────────────────────── */}
-      {/* pb-20 on mobile to avoid content hiding under bottom bar */}
       <div className="flex-1 page-container py-5 pb-20 lg:pb-5 flex flex-col gap-5">
         <AnimatePresence mode="wait">
           {isPaused ? (
-            <PausedOverlay key="paused" onResume={handleResume} />
+            <PausedOverlay
+              key="paused"
+              onResume={handleResume}
+              isSyncing={isSyncing}
+            />
           ) : (
             <motion.div
               key="exam-content"
@@ -721,7 +807,6 @@ export function QuizPage() {
                   {currentPassage ? (
                     <PassageDisplay passage={currentPassage} />
                   ) : (
-                    /* Placeholder za pitanja bez passage-a — čuva stabilnost layouta */
                     <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 h-full min-h-[180px]">
                       <p className="text-xs text-warm-400 font-medium text-center px-4">
                         Ovo pitanje nema polazni tekst
@@ -745,7 +830,7 @@ export function QuizPage() {
                   >
                     <QuestionDisplay
                       question={current}
-                      parentQuestion={parentQuestion} /* FIX: proslijeđen */
+                      parentQuestion={parentQuestion}
                       selectedAnswer={answers[current?.id] ?? null}
                       isFlagged={isCurrentFlagged}
                       onAnswer={handleAnswer}
@@ -769,13 +854,15 @@ export function QuizPage() {
 
                   <div className="flex items-center gap-2.5">
                     {isLastQuestion ? (
+                      // BUG H FIX: disabled + loading dok isSyncing
                       <Button
                         variant="primary"
-                        leftIcon={Send}
+                        leftIcon={isSubmitting ? undefined : Send}
                         onClick={() => setShowSubmitModal(true)}
+                        disabled={isSyncing}
                         loading={isSubmitting}
                       >
-                        Predaj ispit
+                        {isSubmitting ? "Predaje se..." : "Predaj ispit"}
                       </Button>
                     ) : (
                       <Button
@@ -792,14 +879,16 @@ export function QuizPage() {
 
               {/* ── Navigator sidebar — desktop only ──────────────────── */}
               <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
+                {/* BUG H FIX: onSubmit blokiran dok isSyncing */}
                 <QuestionNav
                   questions={questions}
                   currentIndex={currentIndex}
                   answers={answers}
                   flagged={flagged}
                   onGoTo={handleGoTo}
-                  onSubmit={() => setShowSubmitModal(true)}
+                  onSubmit={() => !isSyncing && setShowSubmitModal(true)}
                   answeredCount={answeredCount}
+                  isSyncing={isSyncing}
                 />
               </div>
             </motion.div>
