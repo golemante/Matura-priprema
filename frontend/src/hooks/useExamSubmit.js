@@ -1,16 +1,21 @@
-// hooks/useExamSubmit.js — v7
+// hooks/useExamSubmit.js — v8
 // ─────────────────────────────────────────────────────────────────────────────
-// BUG #5 RIJEŠEN:
-//   STARO: isSubmitting ostao true ako finish() baci grešku → gumb zauvijek disabled
-//   NOVO:  try/catch/finally → setIsSubmitting(false) uvijek na grešci
+// KRITIČAN FIX (error #185 — Maximum update depth exceeded):
 //
-// ČIŠĆE:
-//   • handleSubmitRef UKLONJEN — useExamSession direktno koristi handleSubmit fn
-//   • timer.resync() poziv zamijenjen s pauseTimer/resumeTimer callbacks
-//     → useExamSubmit ne treba pristup timer objektu direktno
+//   UZROK: useExamStore((s) => ({ isPaused, pauseExam, resumeExam, submitExam }))
+//          BEZ useShallow → selektor vraća novi objekt na svakom pozivu →
+//          Zustand's useSyncExternalStore vidi Object.is(prev, new) = false →
+//          zakazuje re-render → selektor opet novi objekt → beskonačna petlja.
+//
+//   FIX:   useShallow() obavija selektor — shallow usporedba vrijednosti,
+//          ne referenci objekta. Re-render samo kad se isPaused zaista promijeni.
+//
+// Nasljeđeno iz v7:
+//   BUG #5 — isSubmitting finally blok (ostaje nepromijenjeno)
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useShallow } from "zustand/react/shallow";
 import { useExamStore } from "@/store/examStore";
 import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
@@ -44,12 +49,19 @@ export function useExamSubmit(
 ) {
   const navigate = useNavigate();
 
-  const { isPaused, pauseExam, resumeExam, submitExam } = useExamStore((s) => ({
-    isPaused: s.isPaused,
-    pauseExam: s.pauseExam,
-    resumeExam: s.resumeExam,
-    submitExam: s.submitExam,
-  }));
+  // ── FIX: useShallow sprječava beskonačnu petlju ───────────────────────────
+  // STARO: useExamStore((s) => ({ isPaused: s.isPaused, ... }))
+  //        → novi objekt svaki render → Object.is() = false → loop
+  // NOVO:  useShallow uspoređuje svaku vrijednost zasebno
+  //        → re-render samo kad se isPaused/pauseExam/... zaista promijeni
+  const { isPaused, pauseExam, resumeExam, submitExam } = useExamStore(
+    useShallow((s) => ({
+      isPaused: s.isPaused,
+      pauseExam: s.pauseExam,
+      resumeExam: s.resumeExam,
+      submitExam: s.submitExam,
+    })),
+  );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
