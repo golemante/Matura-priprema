@@ -75,7 +75,7 @@ export function useExamInit(examId) {
   }, [examData]);
 
   const isActiveInStore =
-    storeExamId === examId && storeQuestions.length > 0 && !storeSubmittedAt; // ← ključni uvjet
+    storeExamId === examId && storeQuestions.length > 0 && !storeSubmittedAt;
 
   const [isInitialized, setIsInitialized] = useState(isActiveInStore);
 
@@ -96,7 +96,7 @@ export function useExamInit(examId) {
               draftStorage.clear(examId);
             } else {
               setAttemptId(candidateId);
-              return candidateId;
+              return { id: candidateId, alreadyRestored: false };
             }
           } else if (status === "paused") {
             setAttemptId(candidateId);
@@ -115,7 +115,7 @@ export function useExamInit(examId) {
             } catch {
               toast.info("Pronađen pauziran ispit. Nastavljamo.");
             }
-            return candidateId;
+            return { id: candidateId, alreadyRestored: true };
           } else {
             console.info(
               `[useExamInit] Kandidat ${candidateId} ima status="${status}", odbacujem.`,
@@ -160,8 +160,10 @@ export function useExamInit(examId) {
             } catch {
               toast.info("Pronađen pauziran ispit. Nastavljamo.");
             }
+            return { id: existing.id, alreadyRestored: true };
           }
-          return existing.id;
+
+          return { id: existing.id, alreadyRestored: false };
         }
       }
 
@@ -169,10 +171,10 @@ export function useExamInit(examId) {
       if (created?.id) {
         setAttemptId(created.id);
         draftStorage.save(examId, {}, created.id);
-        return created.id;
+        return { id: created.id, alreadyRestored: false };
       }
 
-      return null;
+      return { id: null, alreadyRestored: false };
     },
     [examId, setAttemptId, pauseExam, restoreDraft],
   );
@@ -216,13 +218,26 @@ export function useExamInit(examId) {
       hasDraftAnswers,
       maxDurationSeconds,
     )
-      .then((resolvedId) => {
-        if (resolvedId && hasDraftAnswers && draft?.answers) {
+      .then((result) => {
+        const resolvedId =
+          result && typeof result === "object" ? result.id : result;
+        const alreadyRestored =
+          result && typeof result === "object"
+            ? (result.alreadyRestored ?? false)
+            : false;
+
+        if (
+          resolvedId &&
+          hasDraftAnswers &&
+          draft?.answers &&
+          !alreadyRestored
+        ) {
           if (resolvedId === candidateId) {
             setPendingDraft(draft);
             setShowDraftModal(true);
           }
         }
+
         return resolvedId;
       })
       .catch((err) => {

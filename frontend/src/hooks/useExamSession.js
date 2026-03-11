@@ -307,11 +307,53 @@ export function useExamSession(examId) {
 
   const handleGoTo = useCallback(
     (idx) => {
-      if (idx < 0 || idx >= totalVisible) return;
+      if (idx < 0 || idx >= questions.length) return;
       setDirection(idx > currentIndex ? 1 : -1);
       goToQuestion(idx);
     },
-    [currentIndex, goToQuestion, totalVisible],
+    [currentIndex, goToQuestion, questions.length],
+  );
+
+  const findNextNavIndex = useCallback(
+    (from) => {
+      for (let i = from + 1; i < questions.length; i++) {
+        if (questions[i]?.questionType !== "fill_blank_mc") return i;
+      }
+      return -1;
+    },
+    [questions],
+  );
+
+  const findPrevNavIndex = useCallback(
+    (from) => {
+      for (let i = from - 1; i >= 0; i--) {
+        if (questions[i]?.questionType !== "fill_blank_mc") return i;
+      }
+      return -1;
+    },
+    [questions],
+  );
+
+  const handleNext = useCallback(() => {
+    if (isPaused) return;
+    const next = findNextNavIndex(currentIndex);
+    if (next !== -1) handleGoTo(next);
+  }, [isPaused, currentIndex, findNextNavIndex, handleGoTo]);
+
+  const handlePrev = useCallback(() => {
+    if (isPaused) return;
+    const prev = findPrevNavIndex(currentIndex);
+    if (prev !== -1) handleGoTo(prev);
+  }, [isPaused, currentIndex, findPrevNavIndex, handleGoTo]);
+
+  const isLastVisible = useMemo(
+    () => findNextNavIndex(currentIndex) === -1,
+    [currentIndex, findNextNavIndex],
+  );
+
+  const hasPrev = useMemo(
+    () => findPrevNavIndex(currentIndex) !== -1,
+    [currentIndex, findPrevNavIndex],
   );
 
   const handleAnswer = useCallback(
@@ -332,12 +374,8 @@ export function useExamSession(examId) {
 
   useKeyPress(
     {
-      ArrowRight: () =>
-        !isPaused &&
-        currentIndex < totalVisible - 1 &&
-        handleGoTo(currentIndex + 1),
-      ArrowLeft: () =>
-        !isPaused && currentIndex > 0 && handleGoTo(currentIndex - 1),
+      ArrowRight: () => !isPaused && handleNext(),
+      ArrowLeft: () => !isPaused && handlePrev(),
       a: () => !isPaused && handleAnswer("a"),
       b: () => !isPaused && handleAnswer("b"),
       c: () => !isPaused && handleAnswer("c"),
@@ -382,9 +420,14 @@ export function useExamSession(examId) {
     answeredCount,
     direction,
 
+    handleGoTo,
+    handleNext,
+    handlePrev,
+    isLastVisible,
+    hasPrev,
+
     timer,
 
-    handleGoTo,
     handleAnswer,
     handleToggleFlag,
 

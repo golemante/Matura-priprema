@@ -336,23 +336,22 @@ function MobileNavDrawer({
 function MobileBottomBar({
   currentIndex,
   totalVisible,
+  hasPrev,
+  isLast,
   onPrev,
   onNext,
   onOpenNav,
   answeredCount,
 }) {
-  const isLast = currentIndex === totalVisible - 1;
-  const isFirst = currentIndex === 0;
-
   return (
     <div className="fixed bottom-0 left-0 right-0 z-20 lg:hidden bg-white/95 backdrop-blur-sm border-t border-warm-200 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
       <div className="flex items-center h-14 px-3 gap-2 max-w-xl mx-auto">
         <button
           onClick={onPrev}
-          disabled={isFirst}
+          disabled={!hasPrev}
           className={cn(
             "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors min-w-0 flex-shrink-0",
-            isFirst
+            !hasPrev
               ? "text-warm-300 cursor-not-allowed"
               : "text-warm-700 hover:bg-warm-100 active:bg-warm-200",
           )}
@@ -630,6 +629,10 @@ export function QuizPage() {
     handleAnswer,
     handleToggleFlag,
     handleGoTo,
+    handleNext,
+    handlePrev,
+    isLastVisible,
+    hasPrev,
     handleSubmit,
     handlePause,
     handleResume,
@@ -664,7 +667,7 @@ export function QuizPage() {
       />
     );
 
-  const isLastQuestion = currentIndex === totalVisible - 1;
+  const isLastQuestion = isLastVisible;
 
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
@@ -770,8 +773,8 @@ export function QuizPage() {
                   <Button
                     variant="secondary"
                     leftIcon={ArrowLeft}
-                    disabled={currentIndex === 0}
-                    onClick={() => handleGoTo(currentIndex - 1)}
+                    disabled={!hasPrev}
+                    onClick={handlePrev}
                   >
                     Prethodno
                   </Button>
@@ -791,7 +794,7 @@ export function QuizPage() {
                       <Button
                         variant="primary"
                         rightIcon={ArrowRight}
-                        onClick={() => handleGoTo(currentIndex + 1)}
+                        onClick={handleNext}
                       >
                         Sljedeće
                       </Button>
@@ -821,10 +824,10 @@ export function QuizPage() {
         <MobileBottomBar
           currentIndex={currentIndex}
           totalVisible={totalVisible}
-          onPrev={() => currentIndex > 0 && handleGoTo(currentIndex - 1)}
-          onNext={() =>
-            currentIndex < totalVisible - 1 && handleGoTo(currentIndex + 1)
-          }
+          hasPrev={hasPrev}
+          isLast={isLastVisible}
+          onPrev={handlePrev}
+          onNext={handleNext}
           onOpenNav={() => setMobileNavOpen(true)}
           answeredCount={answeredCount}
         />
