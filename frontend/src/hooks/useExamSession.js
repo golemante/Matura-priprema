@@ -1,3 +1,4 @@
+// hooks/useExamSession.js
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useExamStore } from "@/store/examStore";
@@ -139,6 +140,11 @@ export function useExamSession(examId) {
   const timerAppliedRef = useRef(false);
   const POLL_MAX_MS = 6000;
 
+  const isPausedRef = useRef(isPaused);
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
   useEffect(() => {
     if (!durationSeconds) return;
     if (timerAppliedRef.current) return;
@@ -175,7 +181,9 @@ export function useExamSession(examId) {
         );
       }
 
-      if (isServerPaused) {
+      const effectivelyPaused = isServerPaused || isPausedRef.current;
+
+      if (effectivelyPaused) {
         const dur = durationRef.current ?? 0;
         const remaining = Math.max(0, dur - safeElapsed);
         elapsedClockRef.current = {
@@ -237,6 +245,29 @@ export function useExamSession(examId) {
   useEffect(() => {
     handleSubmitRef.current = submit.handleSubmit;
   }, [submit.handleSubmit]);
+
+  const handlePauseRef = useRef(null);
+  useEffect(() => {
+    handlePauseRef.current = submit.handlePause;
+  }, [submit.handlePause]);
+
+  useEffect(() => {
+    if (!isExamActive) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        const currentIsPaused = useExamStore.getState().isPaused;
+        const currentSubmittedAt = useExamStore.getState().submittedAt;
+        if (!currentIsPaused && !currentSubmittedAt) {
+          handlePauseRef.current?.();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [isExamActive]);
 
   useEffect(() => {
     if (!examId) return;

@@ -1,7 +1,7 @@
 // hooks/useKeyPress.js
 import { useEffect, useRef } from "react";
 
-const FORM_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT", "BUTTON"]);
+const FORM_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
 function isEditableTarget(target) {
   if (!target) return false;

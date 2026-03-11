@@ -1,6 +1,6 @@
 // pages/ExamResults.jsx
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -16,6 +16,7 @@ import { SUBJECTS } from "@/utils/constants";
 import { useExamStore } from "@/store/examStore";
 import { examApi } from "@/api/examApi";
 import { attemptApi } from "@/api/attemptApi";
+import { draftStorage } from "@/utils/storage";
 import { ScoreHero } from "@/components/results/ScoreHero";
 import { SectionReview } from "@/components/results/SectionReview";
 import { FilterTabs } from "@/components/results/FilterTabs";
@@ -88,6 +89,8 @@ export function ResultsPage() {
 
   // ── Izvor podataka: Zustand store (svježi submit) ili API (permalink) ─────
   const lastResult = useExamStore((s) => s.lastResult);
+  const resetExam = useExamStore((s) => s.resetExam);
+
   const hasStoreResult =
     !!lastResult &&
     (!examIdParam || lastResult.examId === examIdParam) &&
@@ -248,24 +251,20 @@ export function ResultsPage() {
   const backLink = subject ? `/predmeti/${subject.id}` : "/";
 
   // Sekcije (npr. "Književnost", "Jezično izražavanje")
-  const sections = useMemo(
-    () => [...new Set(questions.map((q) => q.sectionLabel ?? "Ostalo"))],
-    [questions],
-  );
+  const sections = [
+    ...new Set(questions.map((q) => q.sectionLabel ?? "Ostalo")),
+  ];
 
   // Brojevi za filter tabove
   const scoreable = questions.filter((q) => q.questionType !== "fill_blank_mc");
-  const filterCounts = useMemo(
-    () => ({
-      all: scoreable.length,
-      wrong: scoreable.filter(
-        (q) => answers[q.id] && !answerKey?.[q.id]?.isCorrect,
-      ).length,
-      skipped: scoreable.filter((q) => !answers[q.id]).length,
-      flagged: scoreable.filter((q) => flagged?.has?.(q.id)).length,
-    }),
-    [scoreable, answers, answerKey, flagged],
-  );
+  const filterCounts = {
+    all: scoreable.length,
+    wrong: scoreable.filter(
+      (q) => answers[q.id] && !answerKey?.[q.id]?.isCorrect,
+    ).length,
+    skipped: scoreable.filter((q) => !answers[q.id]).length,
+    flagged: scoreable.filter((q) => flagged?.has?.(q.id)).length,
+  };
 
   // Je li "empty" za aktivan filter?
   const isFilterEmpty = sections.every((s) => {
@@ -277,6 +276,17 @@ export function ResultsPage() {
     if (filter === "flagged") return !sq.some((q) => flagged?.has?.(q.id));
     return false;
   });
+
+  const handleRetry = () => {
+    if (!examId) return;
+    resetExam();
+    draftStorage.clear(examId);
+    navigate(`/ispit/${examId}`);
+  };
+
+  const handleNewExam = () => {
+    navigate("/predmeti/" + (subject?.id ?? subjectId));
+  };
 
   return (
     <>
@@ -372,12 +382,12 @@ export function ResultsPage() {
             Natrag
           </Button>
           <div className="flex gap-2">
-            {effectiveAttemptId && (
+            {effectiveAttemptId && examId && (
               <Button
                 variant="outline"
                 size="sm"
                 leftIcon={RotateCcw}
-                onClick={() => examId && navigate(`/ispit/${examId}`)}
+                onClick={handleRetry}
               >
                 Pokušaj opet
               </Button>
@@ -386,9 +396,7 @@ export function ResultsPage() {
               variant="primary"
               size="sm"
               leftIcon={Send}
-              onClick={() =>
-                navigate("/predmeti/" + (subject?.id ?? subjectId))
-              }
+              onClick={handleNewExam}
             >
               Novi ispit
             </Button>

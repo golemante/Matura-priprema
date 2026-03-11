@@ -60,7 +60,11 @@ function FillBlankParentContext({ parentText, childText, childLabel }) {
 function OptionButton({ option, selected, onSelect, disabled }) {
   return (
     <motion.button
-      onClick={() => !disabled && onSelect(option.letter)}
+      onClick={(e) => {
+        if (disabled) return;
+        onSelect(option.letter);
+        e.currentTarget.blur();
+      }}
       whileHover={!disabled && !selected ? { y: -1 } : undefined}
       whileTap={disabled ? undefined : { scale: 0.992 }}
       disabled={disabled}
@@ -139,77 +143,49 @@ export function QuestionDisplay({
   const isChild = question.questionType === "fill_blank_child";
 
   const displayLabel = question.positionLabel ?? String((index ?? 0) + 1);
-  const points = pointsLabel(question.points);
 
   return (
-    <div className="relative">
-      {/* ── Pause overlay ─────────────────────────────────────────────── */}
-      {isPaused && (
-        <div className="absolute inset-0 z-10 bg-white/90 backdrop-blur-[3px] rounded-2xl flex items-center justify-center pointer-events-none">
-          <div className="flex flex-col items-center gap-2 text-warm-400">
-            <Lock size={26} strokeWidth={1.5} />
-            <p className="text-xs font-semibold tracking-wide">
-              Ispit pauziran
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Parent context za fill_blank_child ────────────────────────── */}
+    <div className="space-y-3">
+      {/* fill_blank_child — prikaži roditeljski kontekst */}
       {isChild && parentQuestion && (
         <FillBlankParentContext
           parentText={parentQuestion.text}
           childText={question.text}
-          childLabel={displayLabel}
+          childLabel={question.positionLabel}
         />
       )}
 
-      {/* ── Question card ─────────────────────────────────────────────── */}
+      {/* Kartica pitanja */}
       <div
         className={cn(
-          "bg-white rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.06),0_4px_16px_-4px_rgba(0,0,0,0.08)] p-5 mb-3",
-          isChild
-            ? "border-l-[3px] border-l-primary-400 border border-warm-200"
-            : isParent
-              ? "border border-warm-200 bg-warm-50/80"
-              : "border border-warm-200",
+          "bg-white rounded-2xl border border-warm-200",
+          "shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5",
+          isPaused && "opacity-60 pointer-events-none select-none",
         )}
       >
-        {/* Header: pitanje N · bodovi · flag */}
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2 flex-wrap min-w-0">
-            {/* Broj pitanja */}
-            <span
-              className={cn(
-                "inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap",
-                isParent
-                  ? "text-warm-500 bg-warm-100"
-                  : isChild
-                    ? "text-primary-700 bg-primary-50 border border-primary-200"
-                    : "text-primary-700 bg-primary-50 border border-primary-200",
-              )}
-            >
-              {isParent ? `Zadatak ${displayLabel}` : `Pitanje ${displayLabel}`}
-            </span>
-
-            {/* Sekcija — ako postoji */}
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
             {question.sectionLabel && (
-              <span className="hidden sm:inline text-xs text-warm-400 font-medium truncate max-w-[160px]">
+              <span className="text-[10px] font-bold text-warm-400 uppercase tracking-widest">
                 {question.sectionLabel}
               </span>
             )}
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-warm-100 text-warm-700 text-xs font-bold">
+              {isParent ? <Lock size={10} className="text-warm-400" /> : null}
+              Pitanje {displayLabel}
+            </span>
           </div>
 
-          {/* Bodovi + flag */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {!isParent && points && (
-              <span className="text-xs text-warm-400 font-medium tabular-nums">
-                {points}
+          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+            {question.points != null && (
+              <span className="text-xs text-warm-400 font-medium">
+                {pointsLabel(question.points)}
               </span>
             )}
-            {!isParent && (
+            {onFlag && (
               <button
-                onClick={!isPaused ? onFlag : undefined}
+                onClick={onFlag ? onFlag : undefined}
                 disabled={isPaused}
                 aria-label={
                   isFlagged ? "Ukloni zastavicu" : "Označi pitanje zastavicom"
