@@ -1,6 +1,6 @@
 // pages/ExamResults.jsx
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -87,7 +87,6 @@ export function ResultsPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState("all");
 
-  // ── Izvor podataka: Zustand store (svježi submit) ili API (permalink) ─────
   const lastResult = useExamStore((s) => s.lastResult);
   const resetExam = useExamStore((s) => s.resetExam);
 
@@ -96,7 +95,6 @@ export function ResultsPage() {
     (!examIdParam || lastResult.examId === examIdParam) &&
     (!attemptIdParam || lastResult.attemptId === attemptIdParam);
 
-  // ── API fallback (permalink: /rezultati/pokusaj/:attemptId) ───────────────
   const {
     data: attemptData,
     isLoading: loadingAttempt,
@@ -119,7 +117,6 @@ export function ResultsPage() {
     staleTime: Infinity,
   });
 
-  // ── Answer key (uvijek, za oba izvora) ────────────────────────────────────
   const effectiveAttemptId = hasStoreResult
     ? lastResult?.attemptId
     : (attemptData?.id ?? attemptIdParam);
@@ -137,7 +134,6 @@ export function ResultsPage() {
     retry: 2,
   });
 
-  // ── Rješavanje podataka (store vs. API) ───────────────────────────────────
   const resolvedData = useMemo(() => {
     if (hasStoreResult && lastResult) {
       return {
@@ -155,7 +151,6 @@ export function ResultsPage() {
 
     if (!attemptData || !examContent) return null;
 
-    // Rekonstruiraj answers iz attempt_answers (API path)
     const restoredAnswers = (attemptData.attempt_answers ?? []).reduce(
       (acc, row) => {
         acc[row.question_id] = row.chosen_option ?? null;
@@ -188,7 +183,6 @@ export function ResultsPage() {
     };
   }, [hasStoreResult, lastResult, attemptData, examContent]);
 
-  // ── Guard stanja ──────────────────────────────────────────────────────────
   if (!hasStoreResult && !attemptIdParam) {
     return (
       <PageWrapper className="max-w-2xl mx-auto py-10">
@@ -228,7 +222,6 @@ export function ResultsPage() {
     );
   }
 
-  // ── Podaci ────────────────────────────────────────────────────────────────
   const {
     questions,
     answers,
@@ -250,12 +243,10 @@ export function ResultsPage() {
   const subject = SUBJECTS.find((s) => s.id === subjectId);
   const backLink = subject ? `/predmeti/${subject.id}` : "/";
 
-  // Sekcije (npr. "Književnost", "Jezično izražavanje")
   const sections = [
     ...new Set(questions.map((q) => q.sectionLabel ?? "Ostalo")),
   ];
 
-  // Brojevi za filter tabove
   const scoreable = questions.filter((q) => q.questionType !== "fill_blank_mc");
   const filterCounts = {
     all: scoreable.length,
@@ -266,7 +257,6 @@ export function ResultsPage() {
     flagged: scoreable.filter((q) => flagged?.has?.(q.id)).length,
   };
 
-  // Je li "empty" za aktivan filter?
   const isFilterEmpty = sections.every((s) => {
     const sq = scoreable.filter((q) => (q.sectionLabel ?? "Ostalo") === s);
     if (filter === "all") return sq.length === 0;
@@ -285,6 +275,7 @@ export function ResultsPage() {
   };
 
   const handleNewExam = () => {
+    resetExam();
     navigate("/predmeti/" + (subject?.id ?? subjectId));
   };
 
@@ -293,7 +284,6 @@ export function ResultsPage() {
       <PageWrapper className="max-w-2xl mx-auto pb-24">
         <Confetti active={pct !== null && pct >= 75} />
 
-        {/* Natrag link */}
         <Link
           to={backLink}
           className="inline-flex items-center gap-2 text-sm text-warm-500 hover:text-warm-800 mb-5 transition-colors font-medium"
@@ -302,7 +292,6 @@ export function ResultsPage() {
           Natrag na ispite
         </Link>
 
-        {/* Exam breadcrumb */}
         {examMeta && (
           <p className="text-xs text-warm-500 mb-3">
             {subject?.name ?? subjectId?.toUpperCase()} · {examMeta.year}. ·{" "}
@@ -310,7 +299,6 @@ export function ResultsPage() {
           </p>
         )}
 
-        {/* Score hero */}
         {pct !== null ? (
           <ScoreHero
             pct={pct}
@@ -333,10 +321,8 @@ export function ResultsPage() {
           </div>
         )}
 
-        {/* Answer key error */}
         {keyError && <AnswerKeyError onRetry={retryKey} />}
 
-        {/* Review sekcije */}
         <div className="mt-5">
           <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <h2 className="text-base font-bold text-warm-900 flex items-center gap-2">

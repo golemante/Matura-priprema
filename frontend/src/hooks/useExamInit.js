@@ -25,6 +25,7 @@ export function useExamInit(examId) {
   const {
     storeExamId,
     storeQuestions,
+    storeSubmittedAt,
     attemptId,
     startExam,
     restoreDraft,
@@ -35,6 +36,7 @@ export function useExamInit(examId) {
     useShallow((s) => ({
       storeExamId: s.examId,
       storeQuestions: s.questions,
+      storeSubmittedAt: s.submittedAt,
       attemptId: s.attemptId,
       startExam: s.startExam,
       restoreDraft: s.restoreDraft,
@@ -72,8 +74,10 @@ export function useExamInit(examId) {
     examDataRef.current = examData;
   }, [examData]);
 
-  const alreadyLoaded = storeExamId === examId && storeQuestions.length > 0;
-  const [isInitialized, setIsInitialized] = useState(alreadyLoaded);
+  const isActiveInStore =
+    storeExamId === examId && storeQuestions.length > 0 && !storeSubmittedAt; // ← ključni uvjet
+
+  const [isInitialized, setIsInitialized] = useState(isActiveInStore);
 
   const resolveAttemptId = useCallback(
     async (candidateId, hasDraftAnswers, maxDurationSeconds = 0) => {
@@ -170,17 +174,18 @@ export function useExamInit(examId) {
 
       return null;
     },
-    [examId],
+    [examId, setAttemptId, pauseExam, restoreDraft],
   );
 
   useEffect(() => {
     if (!examData) return;
-    if (initDoneRef.current === examId) {
+
+    if (initDoneRef.current === examId && isActiveInStore) {
       if (!isInitialized) setIsInitialized(true);
       return;
     }
 
-    if (storeExamId === examId && storeQuestions.length > 0) {
+    if (isActiveInStore && initDoneRef.current !== examId) {
       initDoneRef.current = examId;
       if (!isInitialized) setIsInitialized(true);
       return;
@@ -227,7 +232,7 @@ export function useExamInit(examId) {
 
     attemptCreationPromiseRef.current = promise;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examData, examId]);
+  }, [examData, examId, isActiveInStore]);
 
   const timerSyncedForRef = useRef(null);
 
@@ -275,9 +280,8 @@ export function useExamInit(examId) {
           const maxDuration =
             (examDataRef.current?.exam?.duration_minutes ?? 0) * 60;
           if (maxDuration > 0 && elapsedSeconds >= maxDuration) {
-            console.warn(
-              `[useExamInit] Safety clamp: elapsed ${elapsedSeconds}s >= ` +
-                `duration ${maxDuration}s. Reset na 0.`,
+            console.info(
+              `[useExamInit] Timer sync: elapsed=${elapsedSeconds}s >= duration=${maxDuration}s, clamp na 0`,
             );
             elapsedSeconds = 0;
           }
@@ -286,14 +290,12 @@ export function useExamInit(examId) {
         timerSyncRef.current = { elapsedSeconds, isServerPaused, ready: true };
         timerSyncedForRef.current = attemptId;
       } catch (err) {
-        if (cancelled) return;
-        console.warn("[useExamInit] timer sync failed:", err);
+        console.warn("[useExamInit] Timer sync getStatus pao:", err.message);
         timerSyncRef.current = {
           elapsedSeconds: 0,
           isServerPaused: false,
           ready: true,
         };
-        timerSyncedForRef.current = attemptId;
       }
     })();
 
@@ -305,7 +307,7 @@ export function useExamInit(examId) {
   const confirmRestoreDraft = useCallback(() => {
     if (pendingDraft?.answers) {
       restoreDraft(pendingDraft.answers);
-      toast.success("Prethodni odgovori su obnovljeni.");
+      toast.success("Prethodni odgovori su vraćeni.");
     }
     setShowDraftModal(false);
     setPendingDraft(null);
@@ -315,18 +317,18 @@ export function useExamInit(examId) {
     draftStorage.clear(examId);
     setShowDraftModal(false);
     setPendingDraft(null);
+    toast.info("Počinješ ispočetka.");
   }, [examId]);
 
   return {
     isLoading,
     isInitialized,
     fetchError,
-    examData,
-    attemptIdRef,
-    attemptCreationPromiseRef,
-    timerSyncRef,
     showDraftModal,
     confirmRestoreDraft,
     discardDraft,
+    attemptIdRef,
+    attemptCreationPromiseRef,
+    timerSyncRef,
   };
 }

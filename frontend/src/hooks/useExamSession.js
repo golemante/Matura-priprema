@@ -177,7 +177,7 @@ export function useExamSession(examId) {
       if (safeElapsed !== rawElapsed) {
         console.warn(
           `[useExamSession] safeElapsed clamp: ${rawElapsed}s → 0 ` +
-            `(duration=${durationSeconds}s). Provjeriti useExamInit resolveAttemptId.`,
+            `(duration=${durationSeconds}s).`,
         );
       }
 
@@ -256,9 +256,8 @@ export function useExamSession(examId) {
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        const currentIsPaused = useExamStore.getState().isPaused;
-        const currentSubmittedAt = useExamStore.getState().submittedAt;
-        if (!currentIsPaused && !currentSubmittedAt) {
+        const { isPaused: p, submittedAt: s } = useExamStore.getState();
+        if (!p && !s) {
           handlePauseRef.current?.();
         }
       }
@@ -268,6 +267,20 @@ export function useExamSession(examId) {
     return () =>
       document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [isExamActive]);
+
+  useEffect(() => {
+    return () => {
+      const {
+        isPaused: p,
+        submittedAt: s,
+        questions: q,
+      } = useExamStore.getState();
+      if (!p && !s && q.length > 0) {
+        handlePauseRef.current?.();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!examId) return;
