@@ -12,6 +12,7 @@ import { toast } from "@/store/toastStore";
 import { attemptApi } from "@/api/attemptApi";
 import { useExamInit } from "@/hooks/useExamInit";
 import { useExamSubmit } from "@/hooks/useExamSubmit";
+import { useSessionLock } from "@/hooks/useSessionLock";
 
 function debounce(fn, ms) {
   let id;
@@ -59,6 +60,7 @@ export function useExamSession(examId) {
   );
 
   const isExamActive = questions.length > 0 && !submittedAt;
+  const { isBlockedByOtherTab, isCheckingLock } = useSessionLock(examId);
   const tabDataRef = useTabVisibility({ enabled: isExamActive });
 
   const durationSeconds = useMemo(
@@ -454,5 +456,8 @@ export function useExamSession(examId) {
     handlePause: submit.handlePause,
     handleResume: submit.handleResume,
     handleSubmit: submit.handleSubmit,
+
+    isBlockedByOtherTab,
+    isCheckingLock,
   };
 }

@@ -55,6 +55,34 @@ function parseExamError(error) {
   return "Greška pri učitavanju ispita. Pokušajte ponovo.";
 }
 
+function BlockedByTabScreen({ backLink }) {
+  return (
+    <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
+      <div className="max-w-sm w-full bg-white rounded-2xl border border-warm-200 shadow-sm p-8 text-center space-y-4">
+        <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto">
+          <AlertCircle size={22} className="text-amber-500" />
+        </div>
+        <div>
+          <p className="font-semibold text-warm-900 text-base">
+            Ispit je otvoren u drugom tabu
+          </p>
+          <p className="text-sm text-warm-500 mt-1.5 leading-relaxed">
+            Ovaj ispit je aktivan u drugom prozoru ili tabu preglednika. Zatvori
+            drugi tab pa pokušaj ponovo.
+          </p>
+        </div>
+        <Link
+          to={backLink}
+          className="inline-flex items-center gap-2 bg-warm-100 text-warm-700 border border-warm-300 px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-warm-200 transition-colors"
+        >
+          <ArrowLeft size={15} />
+          Natrag
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function ExamTopBar({
   backLink,
   examTitle,
@@ -637,9 +665,15 @@ export function QuizPage() {
     handlePause,
     handleResume,
     timer,
+    isBlockedByOtherTab,
+    isCheckingLock,
   } = useExamSession(examId);
 
   usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
+
+  if (isCheckingLock) return <ExamSkeleton showPassage={false} />;
+  if (isBlockedByOtherTab)
+    return <BlockedByTabScreen backLink={`/predmeti/${subjectId}`} />;
 
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;

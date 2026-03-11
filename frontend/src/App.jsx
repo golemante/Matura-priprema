@@ -6,6 +6,7 @@ import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { ToastContainer } from "@/components/common/Toast";
 import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase";
+import { draftStorage } from "@/utils/storage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,20 +28,18 @@ function extractName(user) {
 }
 
 function App() {
+  useEffect(() => {
+    draftStorage.purgeExpired();
+  }, []);
+
   const [authReady, setAuthReady] = useState(false);
   const { setAuth, clearAuth } = useAuthStore();
 
   useEffect(() => {
-    // JEDINI onAuthStateChange listener u cijeloj aplikaciji.
-    // authStore.js više NEMA vlastiti listener — uklonjeno jer je uzrokovalo:
-    //   • race condition pri Google OAuth redirect-u
-    //   • dupli setAuth pozivi koji su se međusobno gazili
-    //   • memory leak (nije bio moguć unsubscribe)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "INITIAL_SESSION") {
-        // Uvijek se okine pri startu — sa sesijom ili bez nje
         if (session) {
           setAuth(
             { ...session.user, name: extractName(session.user) },
@@ -49,7 +48,6 @@ function App() {
         } else {
           clearAuth();
         }
-        // Bez obzira ima li sesije, authReady = true → renderaj app
         setAuthReady(true);
         return;
       }
@@ -68,7 +66,6 @@ function App() {
       }
 
       if (event === "TOKEN_REFRESHED" && session) {
-        // Tiho ažuriraj samo token — user objekt se nije promijenio
         useAuthStore.setState({ token: session.access_token });
         return;
       }
@@ -85,7 +82,6 @@ function App() {
     return () => subscription.unsubscribe();
   }, [setAuth, clearAuth]);
 
-  // Kratki loading dok Supabase ne vrati sesiju (obično <100ms)
   if (!authReady) {
     return (
       <div className="min-h-dvh bg-warm-100 flex items-center justify-center">

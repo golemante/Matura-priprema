@@ -1,5 +1,7 @@
 // utils/storage.js
+
 const PREFIX = "matura_";
+const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dana
 
 export const storage = {
   get: (key, fallback = null) => {
@@ -30,15 +32,51 @@ export const draftStorage = {
       answers,
       attemptId,
       savedAt: Date.now(),
+      expiresAt: Date.now() + DRAFT_TTL_MS,
     }),
 
-  load: (examId) => storage.get(`draft_${examId}`),
+  load: (examId) => {
+    const draft = storage.get(`draft_${examId}`);
+    if (!draft) return null;
+
+    const expiresAt = draft.expiresAt ?? 0;
+    if (Date.now() > expiresAt) {
+      storage.remove(`draft_${examId}`);
+      console.info(
+        `[draftStorage] Draft za examId="${examId}" je istekao i obrisan.`,
+      );
+      return null;
+    }
+
+    return draft;
+  },
 
   clear: (examId) => storage.remove(`draft_${examId}`),
 
-  // Ažuriraj samo attemptId bez mijenjanja answers
   setAttemptId: (examId, attemptId) => {
     const existing = storage.get(`draft_${examId}`) ?? {};
     storage.set(`draft_${examId}`, { ...existing, attemptId });
+  },
+
+  purgeExpired: () => {
+    const now = Date.now();
+    const draftPrefix = `${PREFIX}draft_`;
+    const expired = Object.keys(localStorage).filter((k) => {
+      if (!k.startsWith(draftPrefix)) return false;
+      try {
+        const item = JSON.parse(localStorage.getItem(k));
+        return !item?.expiresAt || now > item.expiresAt;
+      } catch {
+        return true;
+      }
+    });
+
+    expired.forEach((k) => localStorage.removeItem(k));
+
+    if (expired.length > 0) {
+      console.info(
+        `[draftStorage] Obrisano ${expired.length} isteklih draft(ova).`,
+      );
+    }
   },
 };
