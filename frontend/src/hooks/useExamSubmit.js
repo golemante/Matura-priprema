@@ -1,3 +1,4 @@
+// hooks/useExamSubmit.js
 import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useShallow } from "zustand/react/shallow";
@@ -138,6 +139,7 @@ export function useExamSubmit(
     pausePromiseRef.current = null;
 
     const currentAnswers = useExamStore.getState().answers;
+
     const elapsed = getElapsed();
 
     const creationRef = attemptCreationPromiseRef.current;
@@ -169,7 +171,8 @@ export function useExamSubmit(
         );
       }
 
-      submitExam(rpcResult);
+      submitExam(rpcResult, elapsed);
+
       draftStorage.clear(examId);
       navigate(aid ? `/rezultati/pokusaj/${aid}` : `/rezultati/${examId}`, {
         replace: true,
@@ -187,7 +190,7 @@ export function useExamSubmit(
           "Greška pri predaji. Odgovori su sačuvani. Pokušajte ponovo.",
         );
       }
-
+    } finally {
       setIsSubmitting(false);
     }
   }, [

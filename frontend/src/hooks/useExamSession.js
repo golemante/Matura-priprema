@@ -9,6 +9,7 @@ import { useTabVisibility } from "@/hooks/useTabVisibility";
 import { useImagePreload } from "@/hooks/useImagePreload";
 import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
+import { attemptApi } from "@/api/attemptApi";
 import { useExamInit } from "@/hooks/useExamInit";
 import { useExamSubmit } from "@/hooks/useExamSubmit";
 
@@ -270,13 +271,27 @@ export function useExamSession(examId) {
 
   useEffect(() => {
     return () => {
-      const {
-        isPaused: p,
-        submittedAt: s,
-        questions: q,
-      } = useExamStore.getState();
-      if (!p && !s && q.length > 0) {
-        handlePauseRef.current?.();
+      const state = useExamStore.getState();
+
+      if (state.isPaused || state.submittedAt || state.questions.length === 0) {
+        return;
+      }
+
+      const aid = state.attemptId;
+      const currentAnswers = state.answers;
+      const elapsed = getElapsed();
+
+      draftStorage.save(examId, currentAnswers, aid);
+
+      state.pauseExam();
+
+      if (aid) {
+        attemptApi.pause(aid, elapsed, currentAnswers).catch((err) => {
+          console.warn(
+            "[useExamSession cleanup] DB pause failed silently:",
+            err?.message,
+          );
+        });
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

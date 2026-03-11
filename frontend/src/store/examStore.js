@@ -56,7 +56,8 @@ export const useExamStore = create((set, get) => ({
   resumeExam: () => set({ isPaused: false, pausedAt: null }),
 
   // ── Predaja ───────────────────────────────────────────────────────────────
-  submitExam: (rpcResult = null) => {
+
+  submitExam: (rpcResult = null, trustedElapsed = null) => {
     const {
       examId,
       attemptId,
@@ -66,10 +67,14 @@ export const useExamStore = create((set, get) => ({
       startedAt,
       examMeta,
     } = get();
+
     const submittedAt = Date.now();
-    const elapsedSeconds = Math.round(
-      (submittedAt - (startedAt ?? submittedAt)) / 1000,
-    );
+
+    const elapsedSeconds =
+      trustedElapsed != null
+        ? Math.max(0, Math.round(trustedElapsed))
+        : Math.round((submittedAt - (startedAt ?? submittedAt)) / 1000);
+
     set({
       submittedAt,
       lastResult: {
