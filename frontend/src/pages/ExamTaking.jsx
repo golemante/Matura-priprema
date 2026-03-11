@@ -671,10 +671,6 @@ export function QuizPage() {
 
   usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
 
-  if (isCheckingLock) return <ExamSkeleton showPassage={false} />;
-  if (isBlockedByOtherTab)
-    return <BlockedByTabScreen backLink={`/predmeti/${subjectId}`} />;
-
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
 
@@ -688,11 +684,14 @@ export function QuizPage() {
     [questions],
   );
 
+  if (isCheckingLock) return <ExamSkeleton showPassage={false} />;
+  if (isBlockedByOtherTab) return <BlockedByTabScreen backLink={backLink} />;
   if (fetchError)
     return <ExamErrorState error={fetchError} backLink={backLink} />;
   if (isLoading || !isInitialized) return <ExamSkeleton showPassage={false} />;
   if (questions.length === 0)
     return <ExamEmptyState backLink={backLink} examMeta={examMeta} />;
+
   if (!current)
     return (
       <ExamErrorState
