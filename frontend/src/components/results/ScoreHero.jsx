@@ -1,17 +1,9 @@
 // components/results/ScoreHero.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Hero score kartica na vrhu stranice rezultata.
-// Sadrži:
-//   • AnimatedRing  — SVG prsten s count-up animacijom postotka
-//   • StackedBar    — vizualni prikaz točno/netočno/preskočeno
-//   • Stat pills    — bodovi, vrijeme, answered/skipped/correct counteri
-// ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useRef } from "react";
 import { motion, useSpring, useTransform, useMotionValue } from "framer-motion";
 import { Clock, TrendingUp } from "lucide-react";
 import { cn } from "@/utils/utils";
 
-// ── Score config ──────────────────────────────────────────────────────────────
 export function getScoreConfig(pct) {
   if (pct >= 90)
     return {
@@ -69,12 +61,10 @@ export function getScoreConfig(pct) {
   };
 }
 
-// ── Animated ring (SVG count-up) ──────────────────────────────────────────────
 function AnimatedRing({ pct, cfg }) {
   const r = 52;
   const circ = 2 * Math.PI * r;
 
-  // Framer Motion spring za smooth count-up
   const mv = useMotionValue(0);
   const spring = useSpring(mv, { stiffness: 60, damping: 20 });
   const displayed = useTransform(spring, (v) => `${Math.round(v)}%`);
@@ -129,7 +119,6 @@ function AnimatedRing({ pct, cfg }) {
   );
 }
 
-// ── Stacked progress bar (točno / netočno / preskočeno) ───────────────────────
 function StackedBar({ correct, wrong, skipped, total }) {
   const pCorrect = total > 0 ? (correct / total) * 100 : 0;
   const pWrong = total > 0 ? (wrong / total) * 100 : 0;
@@ -154,7 +143,6 @@ function StackedBar({ correct, wrong, skipped, total }) {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function formatElapsed(secs) {
   if (!secs) return null;
   const h = Math.floor(secs / 3600);
@@ -164,7 +152,6 @@ function formatElapsed(secs) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// ── ScoreHero ─────────────────────────────────────────────────────────────────
 /**
  * @param {object}  props
  * @param {number}  props.pct

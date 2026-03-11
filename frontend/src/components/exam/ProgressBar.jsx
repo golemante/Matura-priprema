@@ -1,11 +1,4 @@
-// components/exam/ProgressBar.jsx — v5
-// ─────────────────────────────────────────────────────────────────────────────
-// POBOLJŠANJA:
-//   • Tanja linija (h-1.5) — elegantnija
-//   • Green kada je 100%
-//   • Smooth motion.div animacija širine
-//   • showLabel prop — skrivena po defaultu (koristiti gdje treba)
-// ─────────────────────────────────────────────────────────────────────────────
+// components/exam/ProgressBar.jsx
 import { motion } from "framer-motion";
 import { cn } from "@/utils/utils";
 

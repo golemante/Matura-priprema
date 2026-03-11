@@ -1,7 +1,4 @@
 // components/results/FilterTabs.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Filter tabovi na stranici rezultata: Sva | Netočna | Preskočena | Označena
-// ─────────────────────────────────────────────────────────────────────────────
 import { Filter, XCircle, Minus, Flag } from "lucide-react";
 import { cn } from "@/utils/utils";
 

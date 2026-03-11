@@ -1,21 +1,7 @@
 // api/examApi.js
-// ─────────────────────────────────────────────────────────────────────────────
-// FIX: Dodan fallback za questions_full VIEW grešku
-//
-// PROBLEM: Ako GRANT SELECT ON questions_full nije primijenjen (ili VIEW ima
-// problem), `questionsRes.error` je postavljen i odmah se baca iznimka.
-// Korisnik vidi grešku iako exams, questions i options tablice rade normalno.
-//
-// RJEŠENJE: Ako questions_full VIEW ne radi, pokušaj direktni query na
-// `questions` + `options` tablicama (bez passage podataka u flat formatu).
-// Passages se dohvaćaju zasebno ako pitanja imaju passage_id.
-//
-// FIX P2-2: Svi `throw error` zamijenjeni s `throwNormalized(error)`
-// ─────────────────────────────────────────────────────────────────────────────
 import { supabase } from "@/lib/supabase";
 import { throwNormalized } from "@/lib/normalizeError";
 
-// ── Interna helper funkcija: mapiranje redaka u questions array ───────────────
 function mapQuestionRows(rows) {
   return rows
     .filter((row) => row?.id)
@@ -36,7 +22,6 @@ function mapQuestionRows(rows) {
     }));
 }
 
-// ── Interna helper: dedupliciraj passages iz flat question_full redaka ────────
 function extractPassagesMap(rows) {
   const passagesMap = {};
   rows.forEach((row) => {
@@ -58,7 +43,6 @@ function extractPassagesMap(rows) {
 }
 
 export const examApi = {
-  // ── Ispiti s community statistikama (SubjectSelect stranica) ──────────────
   getBySubjectWithStats: async (subjectId) => {
     const { data, error } = await supabase
       .from("exams_with_stats")
@@ -75,7 +59,6 @@ export const examApi = {
     return data ?? [];
   },
 
-  // ── Metapodaci jednog ispita ───────────────────────────────────────────────
   getById: async (examId) => {
     const { data, error } = await supabase
       .from("exams")
@@ -89,7 +72,6 @@ export const examApi = {
     return data;
   },
 
-  // ── Ispit + pitanja + passages (ExamTaking) ───────────────────────────────
   getWithQuestions: async (examId) => {
     const [examRes, questionsRes] = await Promise.all([
       supabase
@@ -109,9 +91,6 @@ export const examApi = {
 
     let examData = examRes.data;
 
-    // ── Fallback #1: exams tablica → exams_with_stats VIEW ────────────────
-    // Neki anon setupi dopuštaju čitanje preko exams_with_stats view-a
-    // ali ne i direktno iz `exams` tablice.
     if (examRes.error) {
       const { data: examFromView, error: viewError } = await supabase
         .from("exams_with_stats")
@@ -125,16 +104,6 @@ export const examApi = {
       examData = examFromView;
     }
 
-    // ── Fallback #2: questions_full VIEW → direktni questions + options ────
-    //
-    // ZAŠTO: questions_full VIEW zahtijeva GRANT SELECT koji možda nije
-    // primijenjen (schema v4 sekcija 8). Direktne tablice imaju zasebne
-    // GRANT-ove i mogu raditi čak i kad VIEW ne radi.
-    //
-    // KOMPROMIS: Ovaj fallback ne vraća passage podatke u flat formatu
-    // jer questions_full VIEW joinuje passages. Umjesto toga, passages
-    // se dohvaćaju zasebno ako postoje passage_id-ovi u pitanjima.
-    //
     if (questionsRes.error) {
       console.warn(
         "[examApi] questions_full VIEW failed, trying direct query:",
@@ -153,8 +122,6 @@ export const examApi = {
         .order("position", { ascending: true });
 
       if (directError) {
-        // Ni direktni query ne radi — baci originalnu grešku (questions_full)
-        // jer je vjerojatno informativnija (npr. 42501 permission denied)
         throwNormalized(questionsRes.error);
       }
 
@@ -162,7 +129,6 @@ export const examApi = {
         ? directQuestions
         : [];
 
-      // Dohvati passages zasebno ako postoje passage_id-ovi
       const passageIds = [
         ...new Set(questionRows.map((q) => q.passage_id).filter(Boolean)),
       ];
@@ -196,7 +162,6 @@ export const examApi = {
       };
     }
 
-    // ── Normalan put: questions_full VIEW je radio ─────────────────────────
     const questionRows = Array.isArray(questionsRes.data)
       ? questionsRes.data
       : [];
@@ -208,7 +173,6 @@ export const examApi = {
     };
   },
 
-  // ── Answer Key (točni odgovori — samo za completed attempts) ─────────────
   getAnswerKey: async (attemptId) => {
     const { data, error } = await supabase
       .from("attempt_details")

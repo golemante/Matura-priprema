@@ -1,20 +1,4 @@
 // pages/ExamResults.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// P3-2: REFAKTOR — ExamResults je sada tanki page (~150 LOC).
-//
-// PRETHODNO: ~700 LOC "God page" — sav UI, sve komponente, sva logika unutar.
-//
-// SADA: Ovaj fajl odgovoran SAMO za:
-//   1. Data fetching (TanStack Query + examStore lastResult)
-//   2. Rješavanje "koji izvor podataka koristiti" (store vs. API)
-//   3. Kompozicija UI komponenti iz components/results/
-//
-// UI komponente su premještene u:
-//   components/results/ScoreHero.jsx      — hero kartica s ring i stats
-//   components/results/QuestionReview.jsx — expand/collapse kartica pitanja
-//   components/results/SectionReview.jsx  — sklopiva sekcija s pitanjima
-//   components/results/FilterTabs.jsx     — filter tabovi
-// ─────────────────────────────────────────────────────────────────────────────
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -38,7 +22,6 @@ import { FilterTabs } from "@/components/results/FilterTabs";
 import { cn } from "@/utils/utils";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
-// ── Confetti (lazy import canvas-confetti samo kad treba) ─────────────────────
 function Confetti({ active }) {
   useEffect(() => {
     if (!active) return;
@@ -54,7 +37,6 @@ function Confetti({ active }) {
   return null;
 }
 
-// ── AnswerKeyError banner ─────────────────────────────────────────────────────
 function AnswerKeyError({ onRetry }) {
   return (
     <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4">
@@ -77,7 +59,6 @@ function AnswerKeyError({ onRetry }) {
   );
 }
 
-// ── Empty filter state ────────────────────────────────────────────────────────
 function EmptyFilter({ filter }) {
   const messages = {
     wrong: "Nema netočnih odgovora! 🎉",
@@ -98,9 +79,6 @@ function EmptyFilter({ filter }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN PAGE
-// ─────────────────────────────────────────────────────────────────────────────
 export function ResultsPage() {
   usePageTitle(PAGE_TITLES.examResults ?? "Rezultati");
 

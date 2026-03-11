@@ -1,18 +1,4 @@
-// pages/Statistics.jsx — v2 PREMIUM REDESIGN
-// ═══════════════════════════════════════════════════════════════════════════
-// PROMJENE vs v1:
-//
-//  STATS #1  — Summary bar: ukupno vr. učenja + pass rate + streak umjesto
-//              duplikata Dashboard kartica
-//  HISTORY   — Grupiranje po mjesecu, filter chips po predmetu,
-//              sort (Najnovije / Najstarije / Najbolji / Najlošiji),
-//              AttemptRow: dvije akcije (Ponovi / Pregled rezultata)
-//  SUBJECTS  — Rich SubjectCard: pass rate pill, rekord badge,
-//              mini sparkline zadnjih 5 pokušaja tog predmeta,
-//              "Vježbaj" CTA
-//  UX        — URL param ?tab=subjects za deep link iz Dashboarda
-//  SKELETON  — Skeleton koji odgovara strukturi (ne random rect-ovi)
-// ═══════════════════════════════════════════════════════════════════════════
+// pages/Statistics.jsx
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -791,9 +777,7 @@ function HistoryTab({ completed }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // SUBJECTS TAB
-// ─────────────────────────────────────────────────────────────────────────────
 function SubjectsTab({ subjectStats, attempts }) {
   if (!subjectStats?.length) {
     return (
@@ -819,9 +803,7 @@ function SubjectsTab({ subjectStats, attempts }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // MAIN PAGE
-// ─────────────────────────────────────────────────────────────────────────────
 export function StatisticsPage() {
   usePageTitle(PAGE_TITLES.statistics);
   const navigate = useNavigate();

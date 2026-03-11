@@ -1,15 +1,6 @@
 // lib/normalizeError.js
-// ─────────────────────────────────────────────────────────────────────────────
-// Pretvara Supabase PostgrestError / AuthError / plain Error u
-// konzistentan oblik { message, code, isNetworkError } koji se
-// može direktno prikazati korisniku.
-//
-// KORISTITI: u svim catch blokovima i onError handlerima.
-// NIKAD ne prikazivati raw error.message korisniku bez ovog passthrouga.
-// ─────────────────────────────────────────────────────────────────────────────
 
 const KNOWN_CODES = {
-  // Auth
   invalid_credentials: "Pogrešan email ili lozinka.",
   user_already_exists: "Korisnik s tim emailom već postoji.",
   email_not_confirmed: "Potvrdi email adresu prije prijave.",
@@ -18,13 +9,11 @@ const KNOWN_CODES = {
   weak_password: "Lozinka je preslaba. Koristi najmanje 8 znakova.",
   over_email_send_rate_limit: "Previše zahtjeva. Pokušaj za nekoliko minuta.",
 
-  // Postgrest / DB
   PGRST116: "Traženi zapis ne postoji.", // 0 rows returned on .single()
   42501: "Nemate dozvolu za ovu radnju.", // RLS violation
   23505: "Taj zapis već postoji.", // unique constraint
   23503: "Referencirani zapis ne postoji.", // FK violation
 
-  // Network
   NETWORK_ERROR: "Nema internetske veze. Provjeri spojivost.",
 };
 
@@ -39,7 +28,6 @@ export function normalizeError(err) {
     return { message: FALLBACK_MESSAGE, code: null, isNetworkError: false };
   }
 
-  // Mrežna greška (fetch fail, offline)
   if (
     err instanceof TypeError &&
     (err.message?.includes("fetch") || err.message?.includes("network"))
@@ -51,17 +39,13 @@ export function normalizeError(err) {
     };
   }
 
-  // Supabase AuthError: { name: "AuthApiError", code: "...", message: "..." }
-  // Supabase PostgrestError: { code: "...", message: "...", details: "...", hint: "..." }
   const code = err?.code ?? err?.error_code ?? null;
   const message = err?.message ?? err?.error_description ?? null;
 
-  // Provjeri poznati code
   if (code && KNOWN_CODES[code]) {
     return { message: KNOWN_CODES[code], code, isNetworkError: false };
   }
 
-  // JWT expired dolazi kao message string, ne code
   if (typeof message === "string") {
     if (message.toLowerCase().includes("jwt expired")) {
       return {
@@ -86,7 +70,6 @@ export function normalizeError(err) {
     }
   }
 
-  // Vraćamo originalnu message ako je čitljiva, inače fallback
   const userFacingMessage =
     typeof message === "string" && message.length < 200
       ? message
@@ -95,10 +78,6 @@ export function normalizeError(err) {
   return { message: userFacingMessage, code, isNetworkError: false };
 }
 
-/**
- * Helper za direktno bacanje normaliziranog errora.
- * Koristi se u API sloju: throwNormalized(error)
- */
 export function throwNormalized(err) {
   const normalized = normalizeError(err);
   const wrapped = new Error(normalized.message);

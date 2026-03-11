@@ -1,8 +1,4 @@
 // components/results/SectionReview.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Sklopiva sekcija ispita (npr. "Književnost", "Jezično izražavanje").
-// Prikazuje mini progress bar u headeru i listu QuestionReview kartica.
-// ─────────────────────────────────────────────────────────────────────────────
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, ChevronUp } from "lucide-react";
@@ -32,7 +28,6 @@ export function SectionReview({
 }) {
   const [open, setOpen] = useState(true);
 
-  // Sva scoreable pitanja u ovoj sekciji
   const allScoreable = useMemo(
     () =>
       questions.filter(
@@ -43,7 +38,6 @@ export function SectionReview({
     [questions, sectionLabel],
   );
 
-  // Filtrirano po aktivnom filteru
   const filtered = useMemo(() => {
     if (filter === "all") return allScoreable;
     if (filter === "wrong")
@@ -56,10 +50,8 @@ export function SectionReview({
     return allScoreable;
   }, [allScoreable, filter, answers, answerKey, flagged]);
 
-  // Ne prikazuj sekciju ako nema pitanja u trenutnom filteru
   if (filtered.length === 0) return null;
 
-  // Statistike za section header (uvijek na svim pitanjima, ne filtriranim)
   const correctInSection = allScoreable.filter(
     (q) => answerKey?.[q.id]?.isCorrect,
   ).length;

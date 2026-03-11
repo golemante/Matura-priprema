@@ -15,15 +15,12 @@ export class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error("ErrorBoundary caught an error:", error, info.componentStack);
-    // Ovdje ide Sentry.captureException(error) kad se doda monitoring
   }
 
   handleReset = () => {
-    // Prvo pozivamo opcionalni callback iz propsa (npr. za čišćenje store-a)
     if (this.props.onReset) {
       this.props.onReset();
     }
-    // Resetiramo lokalno stanje da pokušamo ponovno renderirati djecu
     this.setState({ hasError: false, error: null });
   };
 

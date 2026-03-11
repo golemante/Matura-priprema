@@ -1,14 +1,3 @@
-/* styles/exam-content.css — v5 DOPUNE
- * ──────────────────────────────────────────────────────────────────────────
- * Dodaci na postojeći exam-content.css:
- *   • passage-poem: stihovi zadržavaju whitespace, centrirani tekst
- *   • passage-drama: govornici u bold, didaskalije italic
- *   • Bolji spacing za passage-content paragrafe
- *   • xs breakpoint za mobilni bottom bar
- * ──────────────────────────────────────────────────────────────────────────
- */
-
-/* ── passage-content: stilovi za HTML polaznih tekstova ─────────────────── */
 .passage-content {
   font-size: 0.875rem;
   line-height: 1.8;

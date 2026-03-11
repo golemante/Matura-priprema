@@ -1,15 +1,4 @@
 // components/results/QuestionReview.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Expand/collapse kartica za jedno pitanje u pregledu rezultata.
-//
-// Props:
-//   question    — { id, text, options, positionLabel, position, questionType }
-//   chosenLetter — korisnikov odabir ('a'|'b'|...|null)
-//   answerInfo  — { isCorrect, correctOption, explanation } iz answerKey
-//   passage     — { title } | null — badge za polazni tekst
-//   loadingKey  — bool — prikazuje skeleton dok se answer key učitava
-//   index       — za staggered entrance animaciju
-// ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -23,7 +12,6 @@ import {
 import { SafeHtml } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/utils";
 
-// ── Option skeleton dok se učitava answerKey ──────────────────────────────────
 function OptionSkeleton({ count = 4 }) {
   return (
     <div className="space-y-2">
@@ -51,7 +39,6 @@ function OptionSkeleton({ count = 4 }) {
   );
 }
 
-// ── QuestionReview ────────────────────────────────────────────────────────────
 export function QuestionReview({
   question,
   chosenLetter,
@@ -67,7 +54,6 @@ export function QuestionReview({
   const correctLetter = answerInfo?.correctOption ?? null;
   const explanation = answerInfo?.explanation ?? null;
 
-  // Automatski otvori netočna pitanja (kad answer key stigane)
   useEffect(() => {
     if (!isCorrect && !isSkipped && !loadingKey) {
       setExpanded(true);

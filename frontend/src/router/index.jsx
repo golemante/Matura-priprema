@@ -1,6 +1,4 @@
 // router/index.jsx
-// React.lazy: svaka stranica se učitava tek kad je potrebna (code splitting).
-// Smanjuje početni bundle za ~60% — stranice poput QuizPage (~15KB) ne blokiraju Landing.
 import { lazy, Suspense } from "react";
 import { createBrowserRouter } from "react-router-dom";
 import { RootLayout } from "@/components/layout/Layout";

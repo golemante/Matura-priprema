@@ -1,19 +1,4 @@
 // store/toastStore.js
-// ─────────────────────────────────────────────────────────────────────────────
-// FIX P2-7: Timeout leak pri ručnom brisanju toast-a
-//
-// PROBLEM (stari kod):
-//   add() registrira setTimeout koji nakon N ms briše toast po id-u.
-//   remove(id) odmah briše toast iz niza.
-//   Ali setTimeout i dalje "gori" i pokušava filtrirati niz za toast koji
-//   više ne postoji → beskorisni re-render Zustand stora, curenje memorije
-//   u dugim sesijama s puno toast-ova.
-//
-// RJEŠENJE:
-//   timeoutIds Map prati svaki setTimeout id po toast id-u.
-//   remove() cancela timeout + uklanja toast iz niza u jednom koraku.
-//   Nema više "mrtvih" timeouta.
-// ─────────────────────────────────────────────────────────────────────────────
 import { create } from "zustand";
 
 // Timeout map živi VAN stora da ne trigerira reaktivnost Zustand-a

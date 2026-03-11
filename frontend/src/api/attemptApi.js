@@ -1,21 +1,8 @@
-// api/attemptApi.js — v7
-// ─────────────────────────────────────────────────────────────────────────────
-// IZMJENE vs. v5/v6:
-//
-//  ✅ ISPRAVAK: getElapsed() vraćalo je { elapsed_seconds, status } OBJEKT ali
-//     se koristio kao broj → NaN → timer se resetirao na puno trajanje.
-//     NOVO: getStatus() vraća sve timing podatke. Staro getElapsed() uklonjeno.
-//
-//  ✅ NOVO: getAnswers(attemptId) — dohvaća snimljene odgovore iz DB.
-//     Koristi se za obnavljanje odgovora pauziranog attempta na drugom uređaju.
-//
-//  ✅ checkActive() — dodan total_paused_seconds za točan elapsed izračun.
-// ─────────────────────────────────────────────────────────────────────────────
+// api/attemptApi.js
 import { supabase } from "@/lib/supabase";
 import { throwNormalized } from "@/lib/normalizeError";
 
 export const attemptApi = {
-  // ── Provjeri aktivan attempt ───────────────────────────────────────────────
   checkActive: async (examId) => {
     const {
       data: { user },
@@ -38,7 +25,6 @@ export const attemptApi = {
     return data ?? null;
   },
 
-  // ── Kreiraj attempt ────────────────────────────────────────────────────────
   create: async (examId) => {
     const {
       data: { user },
@@ -52,10 +38,9 @@ export const attemptApi = {
       .single();
 
     if (error) throwNormalized(error);
-    return data; // { id, started_at }
+    return data;
   },
 
-  // ── Završi ispit ──────────────────────────────────────────────────────────
   finish: async (attemptId, answers, elapsedSeconds) => {
     const answersObj = Object.fromEntries(
       Object.entries(answers).map(([k, v]) => [k, v ?? null]),
@@ -69,7 +54,6 @@ export const attemptApi = {
     return data;
   },
 
-  // ── Pauziraj ──────────────────────────────────────────────────────────────
   pause: async (attemptId, elapsedSeconds, answers = null) => {
     const answersObj = answers
       ? Object.fromEntries(
@@ -84,18 +68,14 @@ export const attemptApi = {
     if (error) throwNormalized(error);
   },
 
-  // ── Nastavi ───────────────────────────────────────────────────────────────
   resume: async (attemptId) => {
     const { data, error } = await supabase.rpc("resume_attempt", {
       p_attempt_id: attemptId,
     });
     if (error) throwNormalized(error);
-    return data; // { elapsed_seconds, total_paused_seconds }
+    return data;
   },
 
-  // ── Dohvati timing status ─────────────────────────────────────────────────
-  // ISPRAVAK: stara getElapsed() vraćala objekt a ne broj!
-  // Ova funkcija vraća sve timing podatke potrebne za točan sync.
   getStatus: async (attemptId) => {
     const { data, error } = await supabase
       .from("attempts")
@@ -106,11 +86,8 @@ export const attemptApi = {
       .single();
     if (error) throwNormalized(error);
     return data;
-    // { status, started_at, elapsed_seconds, total_paused_seconds, paused_at }
   },
 
-  // ── Dohvati snimljene odgovore ────────────────────────────────────────────
-  // Koristi se za restore pauziranog attempta (drugi uređaj / refresh).
   getAnswers: async (attemptId) => {
     const { data, error } = await supabase
       .from("attempt_answers")
@@ -124,7 +101,6 @@ export const attemptApi = {
     );
   },
 
-  // ── Svi pokušaji korisnika ────────────────────────────────────────────────
   getAll: async () => {
     const { data, error } = await supabase
       .from("attempts")
@@ -141,7 +117,6 @@ export const attemptApi = {
     return data ?? [];
   },
 
-  // ── Jedan pokušaj s detaljima ─────────────────────────────────────────────
   getById: async (id) => {
     const { data, error } = await supabase
       .from("attempts")

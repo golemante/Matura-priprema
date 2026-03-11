@@ -36,7 +36,7 @@ export const authApi = {
       email,
       password,
       options: {
-        data: { name }, // ovo se sprema u raw_user_meta_data → trigger kreira profile
+        data: { name },
       },
     });
     if (error) throw { message: error.message };

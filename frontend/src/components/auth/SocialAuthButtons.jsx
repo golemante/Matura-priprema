@@ -52,7 +52,6 @@ export function SocialAuthButtons({ mode = "login" }) {
         },
       });
       if (error) throw error;
-      // Ne resetiramo loadingGoogle — browser radi redirect odmah
     } catch (err) {
       toast.error(err.message ?? "Greška s Google prijavom");
       setLoadingGoogle(false);
@@ -60,7 +59,6 @@ export function SocialAuthButtons({ mode = "login" }) {
   }
 
   async function handleApple() {
-    // FIX: bio je setLoadingApple(false) — dugme nikad nije pokazivalo loading state
     setLoadingApple(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -68,7 +66,6 @@ export function SocialAuthButtons({ mode = "login" }) {
         options: { redirectTo: `${window.location.origin}/auth/callback` },
       });
       if (error) throw error;
-      // Ne resetiramo loadingApple — browser radi redirect odmah
     } catch (err) {
       toast.error(err.message ?? "Greška s Apple prijavom");
       setLoadingApple(false);

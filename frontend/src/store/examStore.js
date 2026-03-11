@@ -1,5 +1,4 @@
-// store/examStore.js — v7
-// ─────────────────────────────────────────────────────────────────────────────
+// store/examStore.js
 import { create } from "zustand";
 
 const INITIAL_STATE = {

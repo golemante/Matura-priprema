@@ -1,13 +1,4 @@
 // components/exam/ExamCard.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// PROMJENE:
-//   • questionCount sada dolazi iz DB (exam.questionCount) — ne hardkodirano
-//   • Prikazuje totalPoints ako postoji (npr. 62 za HRV)
-//   • Prikazuje communityScore (% prosječan rezultat zajednice)
-//   • component badge: prikazuje 'K1', 'K2'... za višekomponentne predmete (HRV)
-//   • title iz DB ako postoji, inače se generira iz meta
-//   • communityAttempts badge: "X rješavanja" — social proof
-// ─────────────────────────────────────────────────────────────────────────────
 import { motion } from "framer-motion";
 import {
   Clock,

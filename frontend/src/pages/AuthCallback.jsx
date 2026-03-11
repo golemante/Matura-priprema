@@ -1,16 +1,4 @@
 // src/pages/AuthCallback.jsx
-// Prima Google/Apple OAuth redirect.
-//
-// ARHITEKTURA (zašto ovako):
-// App.jsx je jedini Supabase onAuthStateChange listener u cijeloj aplikaciji.
-// Kada Supabase procesira OAuth token iz URL-a, App.jsx poziva setAuth() →
-// Zustand store dobiva token. Ova stranica SAMO čeka da token postane dostupan
-// u storeu, a onda redirecta.
-//
-// Prethodni pristup (vlastiti onAuthStateChange ovdje) uzrokovao je:
-//  • Race condition: navigate("/") se okidao prije nego App.jsx postavio authReady=true
-//  • Korisnik bi bio redirectan na "/" ali stranica se renderala bez prijavljenog usera
-//  • React StrictMode duplo montiranje remetilo je handled.current logiku
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
@@ -24,8 +12,6 @@ export function AuthCallbackPage() {
   useEffect(() => {
     if (!token) return;
 
-    // Token je dostupan → App.jsx je već obradio OAuth event i pozvao setAuth()
-    // Sada je sigurno navigirati jer je cijeli auth state konzistentan
     if (!toastShown.current) {
       toastShown.current = true;
       toast.success("Uspješna prijava!");
@@ -33,7 +19,6 @@ export function AuthCallbackPage() {
     navigate("/", { replace: true });
   }, [token, navigate]);
 
-  // Timeout fallback: ako za 10s nema tokena → nešto je krenulo krivo
   useEffect(() => {
     const timeout = setTimeout(() => {
       const currentToken = useAuthStore.getState().token;

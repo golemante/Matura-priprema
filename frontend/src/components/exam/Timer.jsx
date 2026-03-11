@@ -1,13 +1,4 @@
-// components/exam/Timer.jsx — v5 REDESIGN
-// ─────────────────────────────────────────────────────────────────────────────
-// POBOLJŠANJA:
-//   • Koristi Clock ikonu (lakša za čitanje od Timer ikone)
-//   • isDanger: pulsira + crvena boja s blagim shadow
-//   • isWarning: amber sa statičnom pulse ikonom
-//   • Minimalna širina za stabilan layout (tabular-nums)
-//   • min-w-[3.5rem] sprječava skakanje kad se broj mijenja
-//   • motion.div za smooth scale animaciju u danger modu
-// ─────────────────────────────────────────────────────────────────────────────
+// components/exam/Timer.jsx
 import { Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/utils/utils";

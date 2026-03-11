@@ -1,19 +1,4 @@
-// pages/Dashboard.jsx — v3 PREMIUM REDESIGN
-// ═══════════════════════════════════════════════════════════════════════════
-// POBOLJŠANJA vs v2:
-//
-//  VIZUAL #1  — HeroBanner: gradient mesh pozadina, personalizirani pozdrav,
-//               streak badge s animacijom, 7-dan activity grid
-//  VIZUAL #2  — StatCards: animirani count-up brojevi, trend ikone
-//  VIZUAL #3  — Sparkline SVG trend graf zadnjih 10 ispita (bez recharts)
-//  VIZUAL #4  — AttemptItem: score pill u boji, datum, predmet ikona
-//  VIZUAL #5  — SubjectCard: horizontal score bar, badge s brojem pokušaja,
-//               "Best" badge ako je to predmet s najvišim best_score_pct
-//  VIZUAL #6  — EmptyState: motivacijski onboarding za novog korisnika
-//  UX #1      — "Nastavi od zadnjeg" quick action ako ima in_progress attempt
-//  UX #2      — Skeleton koji odgovara stvarnoj strukturi (ne random rect)
-//  UX #3      — Grad tjedna aktivnosti (color intensity po broju ispita/dan)
-// ═══════════════════════════════════════════════════════════════════════════
+// pages/Dashboard.jsx
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo, useEffect } from "react";
@@ -47,10 +32,6 @@ import { attemptApi } from "@/api/attemptApi";
 import { cn } from "@/utils/utils";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// API HOOKS
-// ─────────────────────────────────────────────────────────────────────────────
-
 function useAttempts() {
   return useQuery({
     queryKey: ["user-attempts"],
@@ -74,10 +55,6 @@ function useSubjectStats() {
     staleTime: 1000 * 60 * 3,
   });
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
 
 function getPctColor(pct) {
   if (pct == null) return "text-warm-400";
@@ -172,9 +149,6 @@ function useCountUp(target, duration = 900) {
   return val;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SKELETON
-// ─────────────────────────────────────────────────────────────────────────────
 function Bone({ className }) {
   return (
     <div className={cn("bg-warm-200 rounded-xl animate-pulse", className)} />
@@ -227,7 +201,6 @@ function HeroBanner({ user, streak, weekActivity, avgPct }) {
     hour < 12 ? "Dobro jutro" : hour < 18 ? "Dobar dan" : "Dobra večer";
   const DAYS = ["Po", "Ut", "Sr", "Čet", "Pet", "Sub", "Ned"];
 
-  // Intensity za activity dots
   const maxCount = Math.max(...weekActivity, 1);
   const intensity = (count) => {
     if (count === 0) return "bg-white/10";
@@ -305,9 +278,6 @@ function HeroBanner({ user, streak, weekActivity, avgPct }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STAT CARD (s count-up animacijom)
-// ─────────────────────────────────────────────────────────────────────────────
 function StatCard({
   icon: Icon,
   value,
@@ -608,9 +578,6 @@ function EmptyState({ onStart }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN DASHBOARD
-// ─────────────────────────────────────────────────────────────────────────────
 export function Dashboard() {
   usePageTitle(PAGE_TITLES.dashboard);
   const user = useCurrentUser();
@@ -649,7 +616,6 @@ export function Dashboard() {
       </PageWrapper>
     );
 
-  // ── Izračunati vrijednosti ──────────────────────────────────────────────
   const completed = (attempts ?? []).filter((a) => a.status === "completed");
   const totalExams = completed.length;
   const avgPct = totalExams
@@ -669,10 +635,8 @@ export function Dashboard() {
     .sort((a, b) => new Date(b.finished_at) - new Date(a.finished_at))
     .slice(0, 6);
 
-  // In-progress attempt za "Nastavi" quick action
   const inProgress = (attempts ?? []).find((a) => a.status === "in_progress");
 
-  // Best subject za star badge
   const bestSubjectId = subjectStats?.length
     ? [...subjectStats].sort(
         (a, b) => (b.best_score_pct ?? 0) - (a.best_score_pct ?? 0),

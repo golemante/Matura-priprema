@@ -1,14 +1,4 @@
-// components/exam/PassageDisplay.jsx — v5 REDESIGN
-// ─────────────────────────────────────────────────────────────────────────────
-// POBOLJŠANJA:
-//   • Sticky header: title + autor + type badge + collapse toggle (mobile)
-//   • Sticky na lg: top-20, max-h-[calc(100vh-7rem)]
-//   • Overflow-y-auto: dugi tekstovi se mogu scrollati unutar panela
-//   • Bolje boje po tipu sadržaja (poem=purple, drama=blue, prose=amber...)
-//   • Fusnote: poboljšan prikaz
-//   • Kompaktniji header na mobilnom
-//   • Koristit PassageSafeHtml + FootnoteSafeHtml (DOMPurify)
-// ─────────────────────────────────────────────────────────────────────────────
+// components/exam/PassageDisplay.jsx
 import { useState } from "react";
 import { ChevronDown, BookOpen } from "lucide-react";
 import {

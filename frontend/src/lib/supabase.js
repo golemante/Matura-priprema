@@ -1,5 +1,4 @@
 // lib/supabase.js
-// Singleton Supabase klijent — importaj svugdje gdje trebaš bazu ili auth
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -13,9 +12,8 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    // Supabase će sam čuvati sesiju u localStorage — ne treba nam više authStore za token
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true, // za magic link / OAuth redirect
+    detectSessionInUrl: true,
   },
 });

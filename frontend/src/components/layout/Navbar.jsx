@@ -331,7 +331,6 @@ export function Header() {
   );
 }
 
-// Odvojena komponenta da bi useLogout hook bio unutar Router contexta
 function MobileLogoutButton({ onClose }) {
   const { logout, isPending } = useLogout();
   return (

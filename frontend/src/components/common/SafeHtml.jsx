@@ -1,31 +1,4 @@
 // components/common/SafeHtml.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Zamjena za MathText u kontekstu gdje sadržaj sadrži HTML tagove.
-//
-// PROBLEM koji rješava:
-//   MathText renderira tekst kao plain string — HTML tagovi poput <em>,
-//   <strong>, <u>, <sup> prikazuju se doslovno, ne kao formatiranje.
-//   Primjeri iz ispita: pitanje 3 (<em>Zlatna metoda!</em>), opcije s <u>...
-//
-// RJEŠENJE:
-//   SafeHtml prvo sanitizira HTML pomoću DOMPurify, potom ga renderira
-//   s dangerouslySetInnerHTML. Ako tekst sadrži LaTeX ($...$), parse-ira
-//   ga i renderira KaTeX inline.
-//
-// KORIŠTENJE:
-//   // Tekst pitanja (može imati HTML + LaTeX)
-//   <SafeHtml html={question.text} className="..." />
-//
-//   // Tekst opcije
-//   <SafeHtml html={option.text} inline />
-//
-//   // Samo plain text (bez HTML, bez LaTeX)
-//   <SafeHtml html="Obični tekst" />
-//
-// SIGURNOST:
-//   DOMPurify uklanja sve potencijalno opasne tagove/atribute.
-//   Bez DOMPurify: prikazuje samo tekst bez renderiranja (safe fallback).
-// ─────────────────────────────────────────────────────────────────────────────
 import { useMemo } from "react";
 import { sanitizeInline, containsHtml } from "@/utils/sanitize";
 import { cn } from "@/utils/utils";
@@ -102,7 +75,6 @@ export function SafeHtml({
 
   const Tag = inline ? "span" : "div";
 
-  // Plain text path (bez HTML/LaTeX) — nema dangerouslySetInnerHTML
   if (sanitized === null) {
     return <Tag className={className}>{html}</Tag>;
   }
@@ -115,7 +87,6 @@ export function SafeHtml({
   );
 }
 
-// ── PassageSafeHtml — za passage.content (bogatiji HTML) ─────────────────────
 import { sanitizePassage } from "@/utils/sanitize";
 
 export function PassageSafeHtml({ html, className }) {
@@ -133,7 +104,6 @@ export function PassageSafeHtml({ html, className }) {
   );
 }
 
-// ── FootnoteSafeHtml ──────────────────────────────────────────────────────────
 import { sanitizeFootnote } from "@/utils/sanitize";
 
 export function FootnoteSafeHtml({ html, className }) {

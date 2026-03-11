@@ -1,26 +1,10 @@
 // components/math/MathRenderer.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// FIX P3-3: Dodano `useMemo` za `parts` computation u MathText.
-//
-// PROBLEM: `text.split(regex)` je O(n) regex operacija koja se izvršavala
-// na SVAKOM renderu roditeljske komponente, bez obzira je li se `text` promijenio.
-// U ExamTaking: QuestionDisplay se re-renderira svaki put kad korisnik odabere
-// odgovor (answers state update) → svako pitanje s LaTeX-om re-računalo parts.
-//
-// Na ispitu s 40 pitanja i prosječno 3 LaTeX izraza po pitanju:
-//   Bez mema:   40 × split() regex pri svakom odgovoru = ~120 regex executions
-//   S memom:    samo pitanja čiji se `text` mijenja (praktički nikad = 0)
-//
-// DODANO: React.memo na MathText i MathRenderer za potpunu memoizaciju.
-// ─────────────────────────────────────────────────────────────────────────────
 import "katex/dist/katex.min.css";
 import { memo, useMemo } from "react";
 import { InlineMath, BlockMath } from "react-katex";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { cn } from "@/utils/utils";
 
-// Regex koji odvaja $$...$$ (block) i $...$ (inline) LaTeX od običnog teksta.
-// Definiran VAN komponente — ne re-kreira se na svakom renderu.
 const MATH_SPLIT_REGEX = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g;
 
 /**

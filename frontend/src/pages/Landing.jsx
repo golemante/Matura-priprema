@@ -18,8 +18,6 @@ import {
 import { SUBJECTS } from "@/utils/constants";
 import { cn } from "@/utils/utils";
 
-// ─── Animation Variants ───────────────────────────────────────────────────────
-
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   show: (delay = 0) => ({
@@ -43,8 +41,6 @@ const cardReveal = {
     transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] },
   },
 };
-
-// ─── Reusable InView wrapper ──────────────────────────────────────────────────
 
 function InViewSection({ children, className, delay = 0, threshold = 0.15 }) {
   const ref = useRef(null);
@@ -236,7 +232,6 @@ function StatsBar() {
 }
 
 // ─── How It Works ─────────────────────────────────────────────────────────────
-
 const STEPS = [
   {
     step: "01",
@@ -501,7 +496,6 @@ function CTASection() {
 }
 
 // ─── Section Heading ──────────────────────────────────────────────────────────
-
 function SectionHeading({ label, title, subtitle }) {
   return (
     <div className="mb-8">
@@ -523,7 +517,6 @@ function SectionHeading({ label, title, subtitle }) {
 }
 
 // ─── HomePage ─────────────────────────────────────────────────────────────────
-
 export function HomePage() {
   const navigate = useNavigate();
   const popularSubjects = SUBJECTS.filter((s) => s.isPopular);

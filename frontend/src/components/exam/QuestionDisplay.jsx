@@ -1,21 +1,10 @@
-// components/exam/QuestionDisplay.jsx — v5 PREMIUM REDESIGN
-// ─────────────────────────────────────────────────────────────────────────────
-// POBOLJŠANJA:
-//   • Option gumbi: veći, bolje vizualno stanje odabira (check ikona, plavo fill)
-//   • Hover animacija: blag lift (y: -1)
-//   • Selected state: plavo pozadinsko ispunjavanje + check ikona u slovu
-//   • Points: ispravan plural (bod/boda/bodova)
-//   • fill_blank context: poboljšan prikaz s bolim kontekstom
-//   • Question card: bez teškog bordera, samo shadow — čišći izgled
-//   • isPaused overlay: bolje (samo blur i lock ikona, bez tvrdog okvira)
-// ─────────────────────────────────────────────────────────────────────────────
+// components/exam/QuestionDisplay.jsx
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Flag, Lock, Check } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/utils";
 
-// ── Pluralni oblik za bodove ──────────────────────────────────────────────────
 function pointsLabel(n) {
   if (!n && n !== 0) return null;
   if (n === 1) return "1 bod";
@@ -23,7 +12,6 @@ function pointsLabel(n) {
   return `${n} bodova`;
 }
 
-// ── InlineTextBlock — citat / fragment iznad pitanja ─────────────────────────
 function InlineTextBlock({ html }) {
   if (!html) return null;
   return (
@@ -36,8 +24,6 @@ function InlineTextBlock({ html }) {
   );
 }
 
-// ── FillBlankParentContext ────────────────────────────────────────────────────
-// Prikazuje parent tekst za fill_blank_child pitanja s istaknutom prazninom
 function FillBlankParentContext({ parentText, childText, childLabel }) {
   if (!parentText) return null;
 
@@ -71,7 +57,6 @@ function FillBlankParentContext({ parentText, childText, childLabel }) {
   );
 }
 
-// ── Option Button ─────────────────────────────────────────────────────────────
 function OptionButton({ option, selected, onSelect, disabled }) {
   return (
     <motion.button
@@ -138,7 +123,6 @@ function OptionButton({ option, selected, onSelect, disabled }) {
   );
 }
 
-// ── Glavni QuestionDisplay ────────────────────────────────────────────────────
 export function QuestionDisplay({
   question,
   parentQuestion, // fill_blank_mc parent — za kontekst kod child pitanja
@@ -154,7 +138,6 @@ export function QuestionDisplay({
   const isParent = question.questionType === "fill_blank_mc";
   const isChild = question.questionType === "fill_blank_child";
 
-  // Label iz baze (npr. "58.1") ili fallback na index+1
   const displayLabel = question.positionLabel ?? String((index ?? 0) + 1);
   const points = pointsLabel(question.points);
 

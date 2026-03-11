@@ -1,22 +1,6 @@
-// components/exam/ExamSkeleton.jsx — v5 REBUILD
-// ─────────────────────────────────────────────────────────────────────────────
-// PROBLEMA S PRIJAŠNJIM SKELETONOM:
-//   • Nije odgovarao stvarnom layoutu (bg boja, visine, grid)
-//   • Koristio bg-warm-200 bez shimmer animacije
-//   • NavSkeleton nije imao submit gumb (koji postoji u stvarnom NavPanel)
-//   • PassageSkeleton nije odgovarao dimenzijama PassageDisplay komponente
-//
-// ISPRAVCI:
-//   • Koristi skeleton-shimmer CSS klasu iz index.css
-//   • TopBarSkeleton: točna visina h-14, isti raspored elemenata
-//   • QuestionSkeleton: točno odgovara QuestionDisplay strukturi
-//   • OptionsSkeleton: točno odgovara OptionButton visini i razmacima
-//   • NavSkeleton: uključuje progress bar + submit button shape
-//   • PassageSkeleton: uključuje header, content, footnote area
-// ─────────────────────────────────────────────────────────────────────────────
+// components/exam/ExamSkeleton.jsx
 import { cn } from "@/utils/utils";
 
-// ── Generički skeleton blok sa shimmer animacijom ─────────────────────────────
 function Bone({ className }) {
   return <div className={cn("skeleton-shimmer rounded-lg", className)} />;
 }

@@ -1,12 +1,4 @@
 // pages/SubjectSelect.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// PROMJENE:
-//   • transformExam koristi dbExam.question_count (iz DB trigger-a, ne hardkodirano)
-//   • transformExam koristi EXAM_SESSIONS koji sada pokriva 'ljeto'/'ljetni'/'jesen'/'jesenski'
-//   • transformExam uključuje title, total_points, component, community stats
-//   • ExamCard prima prošireni exam objekt s community statistikama
-//   • Filtriranje normalizira session za usporedbu (ljeto === ljetni)
-// ─────────────────────────────────────────────────────────────────────────────
 import { useState, useMemo, useRef, use } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -22,14 +14,6 @@ import { useExams } from "@/hooks/useExam";
 import { cn } from "@/utils/utils";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
-// ── Transformacija DB → ExamCard format ──────────────────────────────────────
-//
-// Ključne popravke:
-//  1. session: pretražuje EXAM_SESSIONS koji ima SVE aliase ('ljeto', 'ljetni', itd.)
-//  2. questionCount: dolazi iz DB question_count (trigger ga ažurira automatski)
-//  3. totalPoints: iz DB total_points
-//  4. community stats: avg_community_score_pct, community_attempts_count
-//
 function transformExam(dbExam) {
   const session = EXAM_SESSIONS.find((s) => s.id === dbExam.session) ?? {
     id: dbExam.session,

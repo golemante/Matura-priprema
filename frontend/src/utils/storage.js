@@ -1,8 +1,4 @@
 // utils/storage.js
-// ─────────────────────────────────────────────────────────────────────────────
-// PROMJENE: draftStorage.save sada prima i attemptId
-//   → bez njega ne možemo nastaviti prekinutu sesiju u bazi
-// ─────────────────────────────────────────────────────────────────────────────
 const PREFIX = "matura_";
 
 export const storage = {
@@ -28,13 +24,6 @@ export const storage = {
       .forEach((k) => localStorage.removeItem(k)),
 };
 
-// ── Draft odgovora (LocalStorage backup za pad interneta) ─────────────────────
-//
-// Čuva: { answers, attemptId, savedAt }
-//   answers   — { questionId: letter } — duplikat Zustand persista, ali za LocalStorage
-//   attemptId — UUID iz Supabase (potreban za finish_attempt nakon refresh-a)
-//   savedAt   — timestamp za UI prikaz ("Snimljeno u 14:32")
-//
 export const draftStorage = {
   save: (examId, answers = {}, attemptId = null) =>
     storage.set(`draft_${examId}`, {

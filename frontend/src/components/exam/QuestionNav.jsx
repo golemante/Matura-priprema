@@ -1,18 +1,8 @@
-// components/exam/QuestionNav.jsx — v5 PREMIUM REDESIGN
-// ─────────────────────────────────────────────────────────────────────────────
-// POBOLJŠANJA:
-//   • Submit gumb uvijek vidljiv na dnu — istaknut, s brojem preskočenih
-//   • Progress sekcija: postotak + bar u panelu
-//   • fill_blank_mc: prikazuje se kao separator/zadatak (ne klikabilno)
-//   • Bolji legend s 4 stanja
-//   • max-h + overflow-y-auto za duge ispite
-//   • onGoTo prop (usklađeno s ExamTaking)
-// ─────────────────────────────────────────────────────────────────────────────
+// components/exam/QuestionNav.jsx
 import { motion } from "framer-motion";
 import { Send, Flag } from "lucide-react";
 import { cn } from "@/utils/utils";
 
-// ── NavButton ─────────────────────────────────────────────────────────────────
 function NavButton({
   question,
   idx,
@@ -72,7 +62,6 @@ function NavButton({
   );
 }
 
-// ── Glavni QuestionNav ────────────────────────────────────────────────────────
 export function QuestionNav({
   questions,
   answers,

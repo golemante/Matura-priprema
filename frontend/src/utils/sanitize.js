@@ -1,24 +1,4 @@
 // utils/sanitize.js
-// ─────────────────────────────────────────────────────────────────────────────
-// Centralizirani sanitizer za sav HTML koji dolazi iz baze.
-//
-// INSTALACIJA (pokrenuti jedanput):
-//   npm install dompurify
-//   npm install -D @types/dompurify   (opcionalno, za TypeScript)
-//
-// ZAŠTO DOMPurify:
-//   Sadržaj pitanja, opcija i polaznih tekstova sadrži HTML tagove
-//   (<em>, <strong>, <u>, <sup>, <br>, <h3>, <p> itd.) koji MORAJU biti
-//   renderirani — ali ne smiju dozvoliti XSS napade.
-//   DOMPurify uklanja potencijalno opasne tagove/atribute (script, onerror…)
-//   dok dopušta sigurne formatacijske tagove.
-//
-// ALLOWED_TAGS za exam sadržaj:
-//   Pitanja: em, strong, u, sup, sub, span, br, s
-//   Passages: sve gore + p, h3, ol, ul, li, blockquote, hr
-//   Opcije: em, strong, u, sup, sub, span, br
-// ─────────────────────────────────────────────────────────────────────────────
-
 let DOMPurify = null;
 
 // Lazy init — DOMPurify treba window koji nije dostupan u SSR
