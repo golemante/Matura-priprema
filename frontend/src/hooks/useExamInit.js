@@ -167,16 +167,14 @@ export function useExamInit(examId) {
             return { id: candidateId, alreadyRestored: true };
           } else {
             console.info(
-              `[useExamInit] Kandidat ${candidateId} ima status="${status}", odbacujem.`,
+              `[useExamInit] Kandidat ${candidateId} ima status="${status}", tražim novi attempt.`,
             );
-            draftStorage.clear(examId);
           }
         } catch (err) {
           console.warn(
-            "[useExamInit] getStatus() za kandidata je pao:",
+            "[useExamInit] getStatus() za kandidata je pao, nastavljam bez njega:",
             err.message,
           );
-          draftStorage.clear(examId);
         }
       }
 
@@ -192,7 +190,11 @@ export function useExamInit(examId) {
           abandonAttemptSilently(existing.id);
         } else {
           setAttemptId(existing.id);
-          draftStorage.save(examId, {}, existing.id);
+          draftStorage.save(
+            examId,
+            draftStorage.load(examId)?.answers ?? {},
+            existing.id,
+          );
 
           if (existing.status === "paused") {
             pauseExam();
@@ -220,7 +222,11 @@ export function useExamInit(examId) {
       const created = await attemptApi.create(examId);
       if (created?.id) {
         setAttemptId(created.id);
-        draftStorage.save(examId, {}, created.id);
+        draftStorage.save(
+          examId,
+          draftStorage.load(examId)?.answers ?? {},
+          created.id,
+        );
         return { id: created.id, alreadyRestored: false };
       }
 
@@ -282,10 +288,8 @@ export function useExamInit(examId) {
           draft?.answers &&
           !alreadyRestored
         ) {
-          if (resolvedId === candidateId) {
-            setPendingDraft(draft);
-            setShowDraftModal(true);
-          }
+          setPendingDraft(draft);
+          setShowDraftModal(true);
         }
       })
       .catch((err) => {
