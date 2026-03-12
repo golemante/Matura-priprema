@@ -129,4 +129,46 @@ export const attemptApi = {
     if (error) throwNormalized(error);
     return data;
   },
+
+  getServerTime: async () => {
+    try {
+      const { data, error } = await supabase.rpc("server_now");
+      if (error) {
+        console.warn(
+          "[attemptApi.getServerTime] RPC server_now pao:",
+          error.message,
+        );
+        return null;
+      }
+      return new Date(data).getTime(); // → ms
+    } catch (err) {
+      console.warn(
+        "[attemptApi.getServerTime] Neočekivana greška:",
+        err?.message,
+      );
+      return null;
+    }
+  },
+
+  abandon: async (attemptId) => {
+    try {
+      const { data, error } = await supabase.rpc("abandon_attempt", {
+        p_attempt_id: attemptId,
+      });
+      if (error) {
+        console.warn(
+          `[attemptApi.abandon] RPC abandon_attempt pao za ${attemptId}:`,
+          error.message,
+        );
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.warn(
+        `[attemptApi.abandon] Neočekivana greška za ${attemptId}:`,
+        err?.message,
+      );
+      return null;
+    }
+  },
 };

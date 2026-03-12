@@ -9,16 +9,47 @@ import { attemptApi } from "@/api/attemptApi";
 
 const SYNC_TIMEOUT_MS = 5000;
 
-function calcElapsedFromStatus(data) {
+let cachedSkewMs = null;
+
+async function getServerTimeSkewMs() {
+  if (cachedSkewMs !== null) return cachedSkewMs;
+
+  const clientBefore = Date.now();
+  const serverNowMs = await attemptApi.getServerTime(); // može vratiti null
+  const clientAfter = Date.now();
+
+  if (serverNowMs == null) {
+    cachedSkewMs = 0;
+    return 0;
+  }
+
+  const rttHalf = Math.round((clientAfter - clientBefore) / 2);
+  const adjustedServerMs = serverNowMs - rttHalf;
+  const skew = adjustedServerMs - clientBefore;
+
+  cachedSkewMs = Math.abs(skew) > 5000 ? skew : 0;
+
+  if (Math.abs(cachedSkewMs) > 0) {
+    console.info(
+      `[useExamInit] Clock skew detektiran: ${cachedSkewMs > 0 ? "+" : ""}${(cachedSkewMs / 1000).toFixed(1)}s ` +
+        `(klijent je ${cachedSkewMs > 0 ? "iza" : "ispred"} servera).`,
+    );
+  }
+
+  return cachedSkewMs;
+}
+
+function calcElapsedFromStatus(data, skewMs = 0) {
   if (!data?.started_at) return Number(data?.elapsed_seconds) || 0;
   const startMs = new Date(data.started_at).getTime();
   const pausedMs = (data.total_paused_seconds ?? 0) * 1000;
-  return Math.max(0, Math.floor((Date.now() - startMs - pausedMs) / 1000));
+  const clientNow = Date.now() + skewMs;
+  return Math.max(0, Math.floor((clientNow - startMs - pausedMs) / 1000));
 }
 
-function isAttemptOverdue(statusData, maxDurationSeconds) {
+function isAttemptOverdue(statusData, maxDurationSeconds, skewMs = 0) {
   if (!maxDurationSeconds || maxDurationSeconds <= 0) return false;
-  return calcElapsedFromStatus(statusData) >= maxDurationSeconds;
+  return calcElapsedFromStatus(statusData, skewMs) >= maxDurationSeconds;
 }
 
 export function useExamInit(examId) {
@@ -79,20 +110,38 @@ export function useExamInit(examId) {
 
   const [isInitialized, setIsInitialized] = useState(isActiveInStore);
 
+  const abandonAttemptSilently = useCallback(async (oldAttemptId) => {
+    if (!oldAttemptId) return;
+    try {
+      const newStatus = await attemptApi.abandon(oldAttemptId);
+      console.info(
+        `[useExamInit] Attempt ${oldAttemptId} abandoniran (novi status: ${newStatus ?? "unknown"}).`,
+      );
+    } catch (err) {
+      console.warn(
+        `[useExamInit] abandonAttemptSilently pao za ${oldAttemptId}:`,
+        err?.message,
+      );
+    }
+  }, []);
+
   const resolveAttemptId = useCallback(
     async (candidateId, hasDraftAnswers, maxDurationSeconds = 0) => {
+      const skewMs = await getServerTimeSkewMs();
+
       if (candidateId) {
         try {
           const statusData = await attemptApi.getStatus(candidateId);
           const status = statusData?.status;
 
           if (status === "in_progress") {
-            if (isAttemptOverdue(statusData, maxDurationSeconds)) {
-              const elapsed = calcElapsedFromStatus(statusData);
+            if (isAttemptOverdue(statusData, maxDurationSeconds, skewMs)) {
+              const elapsed = calcElapsedFromStatus(statusData, skewMs);
               console.info(
                 `[useExamInit] Kandidat ${candidateId} je overdue ` +
-                  `(${elapsed}s >= ${maxDurationSeconds}s). Kreiram novi attempt.`,
+                  `(${elapsed}s >= ${maxDurationSeconds}s). Abandoniranje...`,
               );
+              abandonAttemptSilently(candidateId);
               draftStorage.clear(examId);
             } else {
               setAttemptId(candidateId);
@@ -135,11 +184,12 @@ export function useExamInit(examId) {
       if (existing) {
         if (
           existing.status === "in_progress" &&
-          isAttemptOverdue(existing, maxDurationSeconds)
+          isAttemptOverdue(existing, maxDurationSeconds, skewMs)
         ) {
           console.info(
-            `[useExamInit] checkActive attempt ${existing.id} je overdue, kreiram novi.`,
+            `[useExamInit] checkActive attempt ${existing.id} je overdue, abandoniranje + kreiranje novog.`,
           );
+          abandonAttemptSilently(existing.id);
         } else {
           setAttemptId(existing.id);
           draftStorage.save(examId, {}, existing.id);
@@ -176,7 +226,7 @@ export function useExamInit(examId) {
 
       return { id: null, alreadyRestored: false };
     },
-    [examId, setAttemptId, pauseExam, restoreDraft],
+    [examId, setAttemptId, pauseExam, restoreDraft, abandonAttemptSilently],
   );
 
   useEffect(() => {
@@ -237,37 +287,20 @@ export function useExamInit(examId) {
             setShowDraftModal(true);
           }
         }
-
-        return resolvedId;
       })
       .catch((err) => {
-        console.error("[useExamInit] attempt setup:", err);
-        return null;
+        console.error("[useExamInit] resolveAttemptId pao:", err);
+      })
+      .finally(() => {
+        if (attemptCreationPromiseRef.current === promise) {
+          attemptCreationPromiseRef.current = "done";
+        }
       });
 
     attemptCreationPromiseRef.current = promise;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examData, examId, isActiveInStore]);
+  }, [examData, examId, isActiveInStore]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const timerSyncedForRef = useRef(null);
-
-  useEffect(() => {
-    if (timerSyncRef.current.ready) return;
-
-    const timeoutId = setTimeout(() => {
-      if (!timerSyncRef.current.ready) {
-        console.info("[useExamInit] Timer sync timeout — fallback elapsed=0");
-        timerSyncRef.current = {
-          elapsedSeconds: 0,
-          isServerPaused: false,
-          ready: true,
-        };
-      }
-    }, SYNC_TIMEOUT_MS);
-
-    return () => clearTimeout(timeoutId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     if (!attemptId) return;
@@ -277,29 +310,23 @@ export function useExamInit(examId) {
 
     (async () => {
       try {
-        const data = await attemptApi.getStatus(attemptId);
+        const [statusData, skewMs] = await Promise.all([
+          attemptApi.getStatus(attemptId),
+          getServerTimeSkewMs(),
+        ]);
+
         if (cancelled) return;
 
-        const isServerPaused = data?.status === "paused";
-        let elapsedSeconds;
+        const isServerPaused = statusData?.status === "paused";
+        let elapsedSeconds = calcElapsedFromStatus(statusData, skewMs);
 
-        if (isServerPaused && data?.elapsed_seconds != null) {
-          elapsedSeconds = data.elapsed_seconds;
-        } else if (data?.started_at) {
-          elapsedSeconds = calcElapsedFromStatus(data);
-        } else {
-          elapsedSeconds = Number(data?.elapsed_seconds) || 0;
-        }
-
-        if (!isServerPaused) {
-          const maxDuration =
-            (examDataRef.current?.exam?.duration_minutes ?? 0) * 60;
-          if (maxDuration > 0 && elapsedSeconds >= maxDuration) {
-            console.info(
-              `[useExamInit] Timer sync: elapsed=${elapsedSeconds}s >= duration=${maxDuration}s, clamp na 0`,
-            );
-            elapsedSeconds = 0;
-          }
+        const maxDuration =
+          (examDataRef.current?.exam?.duration_minutes ?? 0) * 60;
+        if (maxDuration > 0 && elapsedSeconds >= maxDuration) {
+          console.info(
+            `[useExamInit] Timer sync: elapsed=${elapsedSeconds}s >= duration=${maxDuration}s, clamp na 0`,
+          );
+          elapsedSeconds = 0;
         }
 
         timerSyncRef.current = { elapsedSeconds, isServerPaused, ready: true };
