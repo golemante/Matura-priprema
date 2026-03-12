@@ -11,6 +11,11 @@ const SYNC_TIMEOUT_MS = 5000;
 
 let cachedSkewMs = null;
 
+export function resetServerTimeCache() {
+  cachedSkewMs = null;
+  console.info("[useExamInit] Server time cache resetiran (sign-out).");
+}
+
 async function getServerTimeSkewMs() {
   if (cachedSkewMs !== null) return cachedSkewMs;
 

@@ -17,12 +17,36 @@ export const attemptApi = {
       .eq("exam_id", examId)
       .eq("user_id", user.id)
       .in("status", ["in_progress", "paused"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
 
     if (error) throwNormalized(error);
-    return data ?? null;
+    if (!data?.length) return null;
+
+    const [latest, ...older] = data;
+
+    const ghostIds = older
+      .filter((a) => a.status === "in_progress")
+      .map((a) => a.id);
+
+    if (ghostIds.length > 0) {
+      console.info(
+        `[attemptApi.checkActive] Pronađeno ${ghostIds.length} ghost attempt(a) za examId="${examId}". Abandoniranje...`,
+      );
+      Promise.allSettled(ghostIds.map((id) => attemptApi.abandon(id))).then(
+        (results) => {
+          results.forEach((r, i) => {
+            if (r.status === "rejected") {
+              console.warn(
+                `[attemptApi.checkActive] Abandon ghost attempt ${ghostIds[i]} pao:`,
+                r.reason?.message,
+              );
+            }
+          });
+        },
+      );
+    }
+
+    return latest;
   },
 
   create: async (examId) => {
@@ -83,9 +107,9 @@ export const attemptApi = {
         "status, started_at, elapsed_seconds, total_paused_seconds, paused_at",
       )
       .eq("id", attemptId)
-      .single();
+      .maybeSingle();
     if (error) throwNormalized(error);
-    return data;
+    return data ?? null;
   },
 
   getAnswers: async (attemptId) => {

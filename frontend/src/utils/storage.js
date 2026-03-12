@@ -1,7 +1,12 @@
 // utils/storage.js
+import { useAuthStore } from "@/store/authStore";
 
 const PREFIX = "matura_";
 const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dana
+
+function getUserId() {
+  return useAuthStore.getState().user?.id ?? "anon";
+}
 
 export const storage = {
   get: (key, fallback = null) => {
@@ -27,8 +32,10 @@ export const storage = {
 };
 
 export const draftStorage = {
+  _key: (examId) => `draft_${getUserId()}_${examId}`,
+
   save: (examId, answers = {}, attemptId = null) =>
-    storage.set(`draft_${examId}`, {
+    storage.set(draftStorage._key(examId), {
       answers,
       attemptId,
       savedAt: Date.now(),
@@ -36,12 +43,12 @@ export const draftStorage = {
     }),
 
   load: (examId) => {
-    const draft = storage.get(`draft_${examId}`);
+    const draft = storage.get(draftStorage._key(examId));
     if (!draft) return null;
 
     const expiresAt = draft.expiresAt ?? 0;
     if (Date.now() > expiresAt) {
-      storage.remove(`draft_${examId}`);
+      storage.remove(draftStorage._key(examId));
       console.info(
         `[draftStorage] Draft za examId="${examId}" je istekao i obrisan.`,
       );
@@ -51,11 +58,12 @@ export const draftStorage = {
     return draft;
   },
 
-  clear: (examId) => storage.remove(`draft_${examId}`),
+  clear: (examId) => storage.remove(draftStorage._key(examId)),
 
   setAttemptId: (examId, attemptId) => {
-    const existing = storage.get(`draft_${examId}`) ?? {};
-    storage.set(`draft_${examId}`, { ...existing, attemptId });
+    const key = draftStorage._key(examId);
+    const existing = storage.get(key) ?? {};
+    storage.set(key, { ...existing, attemptId });
   },
 
   purgeExpired: () => {
@@ -75,7 +83,7 @@ export const draftStorage = {
 
     if (expired.length > 0) {
       console.info(
-        `[draftStorage] Obrisano ${expired.length} isteklih draft(ova).`,
+        `[draftStorage] Obrisano ${expired.length} isteklih/zastarjelih draft(ova).`,
       );
     }
   },

@@ -139,7 +139,6 @@ export function useExamSubmit(
     pausePromiseRef.current = null;
 
     const currentAnswers = useExamStore.getState().answers;
-
     const elapsed = getElapsed();
 
     const creationRef = attemptCreationPromiseRef.current;
@@ -147,17 +146,48 @@ export function useExamSubmit(
       try {
         await creationRef;
       } catch {
-        // nastavi bez attemptId
+        // nastavi — pokušat ćemo last-chance create ispod
       }
     }
 
-    const aid = attemptIdRef.current;
+    let aid = attemptIdRef.current;
+
+    if (!aid) {
+      console.warn(
+        "[handleSubmit] aid je null — attempt kreiranje nije uspjelo pri init-u. Pokušavam last-chance create...",
+      );
+      try {
+        const created = await attemptApi.create(examId);
+        if (created?.id) {
+          aid = created.id;
+          attemptIdRef.current = created.id;
+          console.info(
+            `[handleSubmit] Last-chance create uspio: aid=${created.id}`,
+          );
+        }
+      } catch (createErr) {
+        console.error(
+          "[handleSubmit] Last-chance create pao:",
+          createErr?.message,
+        );
+      }
+    }
+
+    if (!aid) {
+      setIsSubmitting(false);
+
+      saveDraft?.(currentAnswers, { immediate: true });
+
+      toast.error(
+        "Predaja nije moguća — problem s vezom. Odgovori su sačuvani lokalno. Provjeri internet i pokušaj ponovo.",
+        { duration: 8000 },
+      );
+      return;
+    }
 
     try {
       let rpcResult = null;
-      if (aid) {
-        rpcResult = await attemptApi.finish(aid, currentAnswers, elapsed);
-      }
+      rpcResult = await attemptApi.finish(aid, currentAnswers, elapsed);
 
       const tabData = tabDataRef?.current ?? {
         switchCount: 0,
@@ -174,15 +204,14 @@ export function useExamSubmit(
       submitExam(rpcResult, elapsed);
 
       draftStorage.clear(examId);
-      navigate(aid ? `/rezultati/pokusaj/${aid}` : `/rezultati/${examId}`, {
-        replace: true,
-      });
+      navigate(`/rezultati/pokusaj/${aid}`, { replace: true });
     } catch (err) {
       console.error("[handleSubmit]", err);
       const msg = err?.message ?? "";
 
       if (msg.includes("već završen")) {
         toast.error("Ovaj ispit je već završen.");
+        navigate(`/rezultati/pokusaj/${aid}`, { replace: true });
       } else if (msg.includes("Nemate") || msg.includes("dozvol")) {
         toast.error("Sesija je istekla. Molimo se prijavite ponovo.");
       } else {
@@ -196,6 +225,7 @@ export function useExamSubmit(
   }, [
     isSubmitting,
     cancelDraft,
+    saveDraft,
     getElapsed,
     attemptCreationPromiseRef,
     attemptIdRef,

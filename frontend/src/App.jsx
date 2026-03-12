@@ -7,6 +7,7 @@ import { ToastContainer } from "@/components/common/Toast";
 import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase";
 import { draftStorage } from "@/utils/storage";
+import { resetServerTimeCache } from "@/hooks/useExamInit";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,6 +63,7 @@ function App() {
 
       if (event === "SIGNED_OUT") {
         clearAuth();
+        resetServerTimeCache();
         return;
       }
 
