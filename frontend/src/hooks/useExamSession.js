@@ -138,7 +138,8 @@ export function useExamSession(examId) {
     timerRef.current?.resync(remaining, { running: true });
   }, []);
 
-  const init = useExamInit(examId);
+  const initEnabled = !isCheckingLock && !isBlockedByOtherTab;
+  const init = useExamInit(examId, { enabled: initEnabled });
 
   const timerAppliedRef = useRef(false);
   const POLL_MAX_MS = 6000;
@@ -163,9 +164,7 @@ export function useExamSession(examId) {
           isServerPaused: false,
           ready: true,
         };
-        console.warn(
-          "[useExamSession] Timer sync poll timeout — forcing elapsed=0",
-        );
+        console.warn("[useExamSession] Timer sync timeout — forcing elapsed=0");
       }
 
       if (!init.timerSyncRef.current.ready) return false;
@@ -279,20 +278,23 @@ export function useExamSession(examId) {
         return;
       }
 
+      if (submit.pauseInFlightRef?.current) {
+        console.info(
+          "[useExamSession cleanup] Pause već u tijeku, preskačem cleanup pause.",
+        );
+        return;
+      }
+
       const aid = state.attemptId;
       const currentAnswers = state.answers;
       const elapsed = getElapsed();
 
       draftStorage.save(examId, currentAnswers, aid);
-
       state.pauseExam();
 
       if (aid) {
         attemptApi.pause(aid, elapsed, currentAnswers).catch((err) => {
-          console.warn(
-            "[useExamSession cleanup] DB pause failed silently:",
-            err?.message,
-          );
+          console.warn("[useExamSession cleanup] DB pause pao:", err?.message);
         });
       }
     };
@@ -301,12 +303,14 @@ export function useExamSession(examId) {
 
   useEffect(() => {
     if (!examId) return;
+
     const id = setInterval(() => {
-      const currentAnswers = useExamStore.getState().answers;
-      if (Object.keys(currentAnswers).length > 0) {
-        saveDraft(currentAnswers, { immediate: true });
+      const state = useExamStore.getState();
+      if (state.questions.length > 0 && !state.submittedAt) {
+        saveDraft(state.answers, { immediate: true });
       }
     }, 30_000);
+
     return () => clearInterval(id);
   }, [examId, saveDraft]);
 

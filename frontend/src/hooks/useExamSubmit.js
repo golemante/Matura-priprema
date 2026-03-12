@@ -7,6 +7,8 @@ import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
 import { attemptApi } from "@/api/attemptApi";
 
+const RESUME_CORRECTION_THRESHOLD_S = 3;
+
 export function useExamSubmit(
   examId,
   {
@@ -38,6 +40,8 @@ export function useExamSubmit(
 
   const pausePromiseRef = useRef(null);
 
+  const pauseInFlightRef = useRef(false);
+
   const handlePause = useCallback(async () => {
     if (isPaused || isPauseSyncing) return;
 
@@ -51,6 +55,7 @@ export function useExamSubmit(
 
     const aid = attemptIdRef.current;
     if (aid) {
+      pauseInFlightRef.current = true;
       setIsPauseSyncing(true);
 
       const p = attemptApi
@@ -62,6 +67,7 @@ export function useExamSubmit(
           );
         })
         .finally(() => {
+          pauseInFlightRef.current = false;
           setIsPauseSyncing(false);
           if (pausePromiseRef.current === p) {
             pausePromiseRef.current = "done";
@@ -93,7 +99,7 @@ export function useExamSubmit(
       try {
         await pending;
       } catch {
-        // pause pao — nastavljamo, resume_attempt može baciti grešku ispod
+        // pause pao — resume_attempt prihvaća i in_progress status
       }
     }
     pausePromiseRef.current = null;
@@ -102,24 +108,32 @@ export function useExamSubmit(
     resumeExam();
     onResumeTimer(localElapsed);
 
-    const aid = attemptIdRef.current;
-    if (aid) {
-      attemptApi
-        .resume(aid)
-        .then((data) => {
-          if (data?.elapsed_seconds != null) {
-            onResumeTimer(data.elapsed_seconds);
-          }
-        })
-        .catch((err) => {
-          console.warn("[handleResume] DB sync failed:", err);
-          toast.warning(
-            "Nastavak nije sinkroniziran s poslužiteljem. Timer može biti minimalno netočan.",
-          );
-        });
-    }
-
     toast.success("Ispit nastavljen.");
+
+    const aid = attemptIdRef.current;
+    if (!aid) return;
+
+    attemptApi
+      .resume(aid)
+      .then((data) => {
+        const serverElapsed = data?.elapsed_seconds;
+        if (serverElapsed == null) return;
+
+        const drift = Math.abs(serverElapsed - localElapsed);
+        if (drift > RESUME_CORRECTION_THRESHOLD_S) {
+          console.info(
+            `[handleResume] Drift ${drift}s > threshold ${RESUME_CORRECTION_THRESHOLD_S}s ` +
+              `— korigiram timer: local=${localElapsed}s server=${serverElapsed}s`,
+          );
+          onResumeTimer(serverElapsed);
+        }
+      })
+      .catch((err) => {
+        console.warn("[handleResume] DB sync failed:", err);
+        toast.warning(
+          "Nastavak nije sinkroniziran s poslužiteljem. Timer može biti minimalno netočan.",
+        );
+      });
   }, [isPaused, resumeExam, onResumeTimer, getElapsed, attemptIdRef]);
 
   const handleSubmit = useCallback(async () => {
@@ -154,7 +168,7 @@ export function useExamSubmit(
 
     if (!aid) {
       console.warn(
-        "[handleSubmit] aid je null — attempt kreiranje nije uspjelo pri init-u. Pokušavam last-chance create...",
+        "[handleSubmit] aid je null — pokušavam last-chance create...",
       );
       try {
         const created = await attemptApi.create(examId);
@@ -175,9 +189,7 @@ export function useExamSubmit(
 
     if (!aid) {
       setIsSubmitting(false);
-
       saveDraft?.(currentAnswers, { immediate: true });
-
       toast.error(
         "Predaja nije moguća — problem s vezom. Odgovori su sačuvani lokalno. Provjeri internet i pokušaj ponovo.",
         { duration: 8000 },
@@ -186,8 +198,7 @@ export function useExamSubmit(
     }
 
     try {
-      let rpcResult = null;
-      rpcResult = await attemptApi.finish(aid, currentAnswers, elapsed);
+      const rpcResult = await attemptApi.finish(aid, currentAnswers, elapsed);
 
       const tabData = tabDataRef?.current ?? {
         switchCount: 0,
@@ -202,7 +213,6 @@ export function useExamSubmit(
       }
 
       submitExam(rpcResult, elapsed);
-
       draftStorage.clear(examId);
       navigate(`/rezultati/pokusaj/${aid}`, { replace: true });
     } catch (err) {
@@ -244,5 +254,6 @@ export function useExamSubmit(
     handlePause,
     handleResume,
     handleSubmit,
+    pauseInFlightRef,
   };
 }

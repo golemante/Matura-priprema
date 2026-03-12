@@ -7,8 +7,6 @@ import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
 import { attemptApi } from "@/api/attemptApi";
 
-const SYNC_TIMEOUT_MS = 5000;
-
 let cachedSkewMs = null;
 
 export function resetServerTimeCache() {
@@ -20,7 +18,7 @@ async function getServerTimeSkewMs() {
   if (cachedSkewMs !== null) return cachedSkewMs;
 
   const clientBefore = Date.now();
-  const serverNowMs = await attemptApi.getServerTime(); // može vratiti null
+  const serverNowMs = await attemptApi.getServerTime();
   const clientAfter = Date.now();
 
   if (serverNowMs == null) {
@@ -36,8 +34,7 @@ async function getServerTimeSkewMs() {
 
   if (Math.abs(cachedSkewMs) > 0) {
     console.info(
-      `[useExamInit] Clock skew detektiran: ${cachedSkewMs > 0 ? "+" : ""}${(cachedSkewMs / 1000).toFixed(1)}s ` +
-        `(klijent je ${cachedSkewMs > 0 ? "iza" : "ispred"} servera).`,
+      `[useExamInit] Clock skew: ${cachedSkewMs > 0 ? "+" : ""}${(cachedSkewMs / 1000).toFixed(1)}s`,
     );
   }
 
@@ -57,7 +54,7 @@ function isAttemptOverdue(statusData, maxDurationSeconds, skewMs = 0) {
   return calcElapsedFromStatus(statusData, skewMs) >= maxDurationSeconds;
 }
 
-export function useExamInit(examId) {
+export function useExamInit(examId, { enabled = true } = {}) {
   const {
     storeExamId,
     storeQuestions,
@@ -118,15 +115,9 @@ export function useExamInit(examId) {
   const abandonAttemptSilently = useCallback(async (oldAttemptId) => {
     if (!oldAttemptId) return;
     try {
-      const newStatus = await attemptApi.abandon(oldAttemptId);
-      console.info(
-        `[useExamInit] Attempt ${oldAttemptId} abandoniran (novi status: ${newStatus ?? "unknown"}).`,
-      );
+      await attemptApi.abandon(oldAttemptId);
     } catch (err) {
-      console.warn(
-        `[useExamInit] abandonAttemptSilently pao za ${oldAttemptId}:`,
-        err?.message,
-      );
+      console.warn(`[useExamInit] abandon ${oldAttemptId} pao:`, err?.message);
     }
   }, []);
 
@@ -141,11 +132,6 @@ export function useExamInit(examId) {
 
           if (status === "in_progress") {
             if (isAttemptOverdue(statusData, maxDurationSeconds, skewMs)) {
-              const elapsed = calcElapsedFromStatus(statusData, skewMs);
-              console.info(
-                `[useExamInit] Kandidat ${candidateId} je overdue ` +
-                  `(${elapsed}s >= ${maxDurationSeconds}s). Abandoniranje...`,
-              );
               abandonAttemptSilently(candidateId);
               draftStorage.clear(examId);
             } else {
@@ -170,16 +156,9 @@ export function useExamInit(examId) {
               toast.info("Pronađen pauziran ispit. Nastavljamo.");
             }
             return { id: candidateId, alreadyRestored: true };
-          } else {
-            console.info(
-              `[useExamInit] Kandidat ${candidateId} ima status="${status}", tražim novi attempt.`,
-            );
           }
         } catch (err) {
-          console.warn(
-            "[useExamInit] getStatus() za kandidata je pao, nastavljam bez njega:",
-            err.message,
-          );
+          console.warn("[useExamInit] getStatus pao:", err.message);
         }
       }
 
@@ -189,9 +168,6 @@ export function useExamInit(examId) {
           existing.status === "in_progress" &&
           isAttemptOverdue(existing, maxDurationSeconds, skewMs)
         ) {
-          console.info(
-            `[useExamInit] checkActive attempt ${existing.id} je overdue, abandoniranje + kreiranje novog.`,
-          );
           abandonAttemptSilently(existing.id);
         } else {
           setAttemptId(existing.id);
@@ -241,7 +217,7 @@ export function useExamInit(examId) {
   );
 
   useEffect(() => {
-    if (!examData) return;
+    if (!examData || !enabled) return;
 
     if (initDoneRef.current === examId && isActiveInStore) {
       if (!isInitialized) setIsInitialized(true);
@@ -307,7 +283,8 @@ export function useExamInit(examId) {
       });
 
     attemptCreationPromiseRef.current = promise;
-  }, [examData, examId, isActiveInStore]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examData, examId, isActiveInStore, enabled]);
 
   const timerSyncedForRef = useRef(null);
 
@@ -332,16 +309,13 @@ export function useExamInit(examId) {
         const maxDuration =
           (examDataRef.current?.exam?.duration_minutes ?? 0) * 60;
         if (maxDuration > 0 && elapsedSeconds >= maxDuration) {
-          console.info(
-            `[useExamInit] Timer sync: elapsed=${elapsedSeconds}s >= duration=${maxDuration}s, clamp na 0`,
-          );
           elapsedSeconds = 0;
         }
 
         timerSyncRef.current = { elapsedSeconds, isServerPaused, ready: true };
         timerSyncedForRef.current = attemptId;
       } catch (err) {
-        console.warn("[useExamInit] Timer sync getStatus pao:", err.message);
+        console.warn("[useExamInit] Timer sync pao:", err.message);
         timerSyncRef.current = {
           elapsedSeconds: 0,
           isServerPaused: false,
