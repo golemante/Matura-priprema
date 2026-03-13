@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Flag, Lock, Check } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/utils";
+import { AudioPlayer } from "@/components/exam/PassageDisplay";
 
 function pointsLabel(n) {
   if (!n && n !== 0) return null;
@@ -207,6 +208,12 @@ export function QuestionDisplay({
             )}
           </div>
         </div>
+
+        {question.audioUrl && (
+          <div className="mb-4">
+            <AudioPlayer audioUrl={question.audioUrl} maxPlays={2} compact />
+          </div>
+        )}
 
         {/* Tekst pitanja */}
         <SafeHtml

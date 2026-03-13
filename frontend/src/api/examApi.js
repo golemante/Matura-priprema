@@ -18,6 +18,8 @@ function mapQuestionRows(rows) {
       points: row.points ?? 1,
       passageId: row.passage_id ?? null,
       imageUrl: row.image_url ?? null,
+      audioUrl: row.question_audio_url ?? null,
+      audioDurationSeconds: row.question_audio_duration ?? null,
       options: Array.isArray(row.options) ? row.options : [],
     }));
 }
@@ -36,6 +38,9 @@ function extractPassagesMap(rows) {
         footnotes: Array.isArray(row.passage_footnotes)
           ? row.passage_footnotes
           : [],
+        audioUrl: row.passage_audio_url ?? null,
+        audioDurationSeconds: row.passage_audio_duration ?? null,
+        transcript: row.passage_transcript ?? null,
       };
     }
   });
@@ -137,7 +142,9 @@ export const examApi = {
       if (passageIds.length > 0) {
         const { data: passagesData } = await supabase
           .from("passages")
-          .select("id, title, author, source, content_type, content, footnotes")
+          .select(
+            "id, title, author, source, content_type, content, footnotes, audio_url, audio_duration_seconds, transcript",
+          )
           .in("id", passageIds);
 
         if (passagesData) {
@@ -150,6 +157,9 @@ export const examApi = {
               contentType: p.content_type ?? "prose",
               content: p.content ?? "",
               footnotes: Array.isArray(p.footnotes) ? p.footnotes : [],
+              audioUrl: p.audio_url ?? null,
+              audioDurationSeconds: p.audio_duration_seconds ?? null,
+              transcript: p.transcript ?? null,
             };
           });
         }
