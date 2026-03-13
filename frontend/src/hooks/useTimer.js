@@ -98,7 +98,13 @@ export function useTimer(initialSeconds, options = {}) {
       const normalized = Math.max(0, Number(nextSeconds) || 0);
 
       initialized.current = true;
-      warned.current = normalized <= warningAt;
+
+      if (nextRunning === true) {
+        warned.current = false;
+      } else {
+        warned.current = normalized <= warningAt;
+      }
+
       anchorSeconds.current = normalized;
       anchorTime.current =
         typeof nextRunning === "boolean" && nextRunning ? Date.now() : null;

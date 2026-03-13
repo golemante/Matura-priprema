@@ -320,7 +320,8 @@ export function useExamSession(examId) {
   );
 
   const answeredCount = useMemo(
-    () => Object.values(answers).filter((v) => v != null).length,
+    () =>
+      Object.values(answers).filter((v) => v != null && v !== "null").length,
     [answers],
   );
 

@@ -24,20 +24,18 @@ export const attemptApi = {
 
     const [latest, ...older] = data;
 
-    const ghostIds = older
-      .filter((a) => a.status === "in_progress")
-      .map((a) => a.id);
+    const ghostIds = older.map((a) => a.id);
 
     if (ghostIds.length > 0) {
       console.info(
-        `[attemptApi.checkActive] Pronađeno ${ghostIds.length} ghost attempt(a) za examId="${examId}". Abandoniranje...`,
+        `[attemptApi.checkActive] Pronađeno ${ghostIds.length} starijih attempt(a) za examId="${examId}". Abandoniranje...`,
       );
       Promise.allSettled(ghostIds.map((id) => attemptApi.abandon(id))).then(
         (results) => {
           results.forEach((r, i) => {
             if (r.status === "rejected") {
               console.warn(
-                `[attemptApi.checkActive] Abandon ghost attempt ${ghostIds[i]} pao:`,
+                `[attemptApi.checkActive] Abandon attempt ${ghostIds[i]} pao:`,
                 r.reason?.message,
               );
             }
