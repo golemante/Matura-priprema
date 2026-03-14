@@ -749,127 +749,142 @@ export function QuizPage() {
         isSubmitting={isSubmitting}
       />
 
-      <div className="flex-1 page-container py-5 pb-20 lg:pb-5 flex flex-col gap-5">
-        <AnimatePresence mode="wait">
-          {isPaused ? (
-            <PausedOverlay
-              key="paused"
-              onResume={handleResume}
-              isSyncing={isSyncing}
-            />
-          ) : (
-            <motion.div
-              key="exam-content"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex-1 flex flex-col lg:flex-row gap-5"
+      <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
+        <div className="flex flex-col lg:flex-row gap-5 h-full">
+          {/* ── Passage kolona: UVIJEK MOUNTANA ─────────────────────────── */}
+          {/* ⚠️ Ne stavlja se unutar AnimatePresence!                        */}
+          {/* Audio stanje (pozicija, playsUsed) preživljava pauzu/resume.    */}
+          {hasAnyPassage && (
+            <div
+              className={cn(
+                "lg:w-[42%] xl:w-[38%] flex-shrink-0",
+                // Desktop: sticky s ograničenom visinom
+                // PassageDisplay body ima overflow-y-auto pa tekst skrolira interno
+                "lg:sticky lg:top-[4.5rem] lg:self-start",
+                "lg:max-h-[calc(100dvh-5.5rem)]",
+              )}
             >
-              {hasAnyPassage && (
-                <div
-                  className={cn(
-                    "lg:w-[42%] xl:w-[38%] flex-shrink-0",
-                    "lg:sticky lg:top-[4.5rem] lg:self-start",
-                    "lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-hidden",
-                  )}
-                >
-                  {currentPassage ? (
-                    <PassageDisplay
-                      passage={currentPassage}
-                      activeGapPosition={
-                        current?.questionType === "fill_blank_child"
-                          ? current.position
-                          : null
-                      }
-                      selectedPersonLetter={
-                        current?.questionType === "multiple_choice"
-                          ? (answers[current?.id] ?? null)
-                          : null
-                      }
-                      isPaused={isPaused}
-                    />
-                  ) : (
-                    <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 h-full min-h-[180px]">
-                      <p className="text-xs text-warm-400 font-medium text-center px-4">
-                        Ovo pitanje nema polazni tekst
-                      </p>
-                    </div>
-                  )}
+              {currentPassage ? (
+                <PassageDisplay
+                  passage={currentPassage}
+                  activeGapPosition={
+                    current?.questionType === "fill_blank_child"
+                      ? current.position
+                      : null
+                  }
+                  selectedPersonLetter={
+                    current?.questionType === "multiple_choice"
+                      ? (answers[current?.id] ?? null)
+                      : null
+                  }
+                  isPaused={isPaused}
+                  className="lg:h-full"
+                />
+              ) : (
+                <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 min-h-[180px]">
+                  <p className="text-xs text-warm-400 font-medium text-center px-4">
+                    Ovo pitanje nema polazni tekst
+                  </p>
                 </div>
               )}
+            </div>
+          )}
 
-              <div className="flex-1 min-w-0 flex flex-col gap-4">
-                <AnimatePresence custom={direction} mode="wait">
-                  <motion.div
-                    key={current?.id}
-                    custom={direction}
-                    variants={slideVariants}
-                    initial="enter"
-                    animate="center"
-                    exit="exit"
-                    transition={{ duration: 0.16, ease: "easeInOut" }}
-                  >
-                    <QuestionDisplay
-                      question={current}
-                      parentQuestion={parentQuestion}
-                      selectedAnswer={answers[current?.id] ?? null}
-                      isFlagged={isCurrentFlagged}
-                      onAnswer={handleAnswer}
-                      onFlag={handleToggleFlag}
-                      index={currentIndex}
-                      isPaused={isPaused}
-                    />
-                  </motion.div>
-                </AnimatePresence>
-
-                <div className="hidden lg:flex items-center justify-between gap-3 mt-auto pt-1">
-                  <Button
-                    variant="secondary"
-                    leftIcon={ArrowLeft}
-                    disabled={!hasPrev}
-                    onClick={handlePrev}
-                  >
-                    Prethodno
-                  </Button>
-
-                  <div className="flex items-center gap-2.5">
-                    {isLastQuestion ? (
-                      <Button
-                        variant="primary"
-                        leftIcon={isSubmitting ? undefined : Send}
-                        onClick={() => setShowSubmitModal(true)}
-                        disabled={isSyncing}
-                        loading={isSubmitting}
-                      >
-                        {isSubmitting ? "Predaje se..." : "Predaj ispit"}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="primary"
-                        rightIcon={ArrowRight}
-                        onClick={handleNext}
-                      >
-                        Sljedeće
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
-                <QuestionNav
-                  questions={questions}
-                  currentIndex={currentIndex}
-                  answers={answers}
-                  flagged={flagged}
-                  onGoTo={handleGoTo}
-                  onSubmit={() => !isSyncing && setShowSubmitModal(true)}
-                  answeredCount={answeredCount}
+          {/* ── Desna kolona: pitanje + navigacija ───────────────────────── */}
+          <div className="flex-1 min-w-0 flex flex-col gap-4">
+            {/* AnimatePresence samo za pitanje / pauziranu poruku */}
+            <AnimatePresence mode="wait">
+              {isPaused ? (
+                <PausedOverlay
+                  key="paused"
+                  onResume={handleResume}
                   isSyncing={isSyncing}
                 />
-              </div>
-            </motion.div>
+              ) : (
+                <motion.div
+                  key="exam-question"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex flex-col gap-4 flex-1"
+                >
+                  <AnimatePresence custom={direction} mode="wait">
+                    <motion.div
+                      key={current?.id}
+                      custom={direction}
+                      variants={slideVariants}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                      transition={{ duration: 0.16, ease: "easeInOut" }}
+                    >
+                      <QuestionDisplay
+                        question={current}
+                        parentQuestion={parentQuestion}
+                        selectedAnswer={answers[current?.id] ?? null}
+                        isFlagged={isCurrentFlagged}
+                        onAnswer={handleAnswer}
+                        onFlag={handleToggleFlag}
+                        index={currentIndex}
+                        isPaused={isPaused}
+                      />
+                    </motion.div>
+                  </AnimatePresence>
+
+                  {/* Desktop navigacijski buttoni */}
+                  <div className="hidden lg:flex items-center justify-between gap-3 mt-auto pt-1">
+                    <Button
+                      variant="secondary"
+                      leftIcon={ArrowLeft}
+                      disabled={!hasPrev}
+                      onClick={handlePrev}
+                    >
+                      Prethodno
+                    </Button>
+
+                    <div className="flex items-center gap-2.5">
+                      {isLastQuestion ? (
+                        <Button
+                          variant="primary"
+                          leftIcon={isSubmitting ? undefined : Send}
+                          onClick={() => setShowSubmitModal(true)}
+                          disabled={isSyncing}
+                          loading={isSubmitting}
+                        >
+                          {isSubmitting ? "Predaje se..." : "Predaj ispit"}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          rightIcon={ArrowRight}
+                          onClick={handleNext}
+                        >
+                          Sljedeće
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* ── Nav sidebar (desno, samo desktop, samo kad nije pauziran) ── */}
+          {!isPaused && (
+            <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
+              <QuestionNav
+                questions={questions}
+                answers={answers}
+                flagged={flagged}
+                currentIndex={currentIndex}
+                onGoTo={handleGoTo}
+                onSubmit={() => setShowSubmitModal(true)}
+                answeredCount={answeredCount}
+              />
+            </div>
           )}
-        </AnimatePresence>
+        </div>
       </div>
 
       {!isPaused && (

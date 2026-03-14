@@ -60,12 +60,12 @@ function formatTime(s) {
 }
 
 export function SequentialAudioPlayer({
-  audioIntroUrl,
-  audioUrl,
+  introUrl,
+  contentUrl,
   maxPlays = 2,
   isPaused = false,
 }) {
-  const [phase, setPhase] = useState("idle"); // 'idle'|'intro'|'content'|'done'
+  const [phase, setPhase] = useState("pending");
   const [playsUsed, setPlaysUsed] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [introTime, setIntroTime] = useState(0);
@@ -76,113 +76,152 @@ export function SequentialAudioPlayer({
 
   const introRef = useRef(null);
   const contentRef = useRef(null);
-  const phaseRef = useRef("idle");
-  const hasAutoPlayedRef = useRef(false);
+  const phaseRef = useRef("pending");
 
   const playsLeft = maxPlays - playsUsed;
 
-  const startCycle = useCallback(() => {
-    if (playsLeft <= 0) return;
-    if (audioIntroUrl && introRef.current) {
-      setPhase("intro");
-      phaseRef.current = "intro";
-      introRef.current.currentTime = 0;
-      introRef.current.play().catch(() => setHasError(true));
-    } else if (contentRef.current) {
-      setPhase("content");
-      phaseRef.current = "content";
-      contentRef.current.currentTime = 0;
-      contentRef.current.play().catch(() => setHasError(true));
-    }
-  }, [audioIntroUrl, playsLeft]);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  const playIntro = useCallback(() => {
+    const el = introRef.current;
+    if (!el) return;
+    setPhase("intro");
+    phaseRef.current = "intro";
+    el.currentTime = 0;
+    el.play().catch((err) => {
+      console.warn("[SequentialAudioPlayer] Autoplay blocked:", err.message);
+    });
+  }, []);
+
+  const playContent = useCallback(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    setPhase("content");
+    phaseRef.current = "content";
+    el.currentTime = 0;
+    el.play().catch((err) => {
+      console.warn(
+        "[SequentialAudioPlayer] Content play blocked:",
+        err.message,
+      );
+    });
+  }, []);
 
   useEffect(() => {
-    if (hasAutoPlayedRef.current) return;
-    hasAutoPlayedRef.current = true;
-    const id = setTimeout(() => startCycle(), 400);
+    const id = setTimeout(() => {
+      if (introUrl) {
+        playIntro();
+      } else {
+        playContent();
+      }
+    }, 350);
+
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    const intro = introRef.current;
-    if (!intro || !audioIntroUrl) return;
+    const el = introRef.current;
+    if (!el || !introUrl) return;
 
-    const handlers = {
-      play: () => setIsPlaying(true),
-      pause: () => setIsPlaying(false),
-      timeupdate: () => setIntroTime(intro.currentTime),
-      loadedmetadata: () => setIntroDuration(intro.duration),
-      error: () => setHasError(true),
-      ended: () => {
-        setPhase("content");
-        phaseRef.current = "content";
-        const c = contentRef.current;
-        if (c) {
-          c.currentTime = 0;
-          c.play().catch(() => setHasError(true));
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onTime = () => setIntroTime(el.currentTime);
+    const onMeta = () => setIntroDuration(el.duration);
+    const onError = (e) => {
+      console.error("[SequentialAudioPlayer] Intro error:", e);
+      setHasError(true);
+    };
+    const onEnded = () => {
+      if (playsLeft > 0) {
+        playContent();
+      } else {
+        setPhase("done");
+        phaseRef.current = "done";
+      }
+    };
+
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
+    el.addEventListener("timeupdate", onTime);
+    el.addEventListener("loadedmetadata", onMeta);
+    el.addEventListener("error", onError);
+    el.addEventListener("ended", onEnded);
+
+    return () => {
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("error", onError);
+      el.removeEventListener("ended", onEnded);
+    };
+  }, [introUrl, playsLeft, playContent]);
+
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onTime = () => setContentTime(el.currentTime);
+    const onMeta = () => setContentDuration(el.duration);
+    const onError = (e) => {
+      console.error("[SequentialAudioPlayer] Content error:", e);
+      setHasError(true);
+    };
+    const onEnded = () => {
+      setIsPlaying(false);
+      const nextPlaysUsed = playsUsed + 1;
+      setPlaysUsed(nextPlaysUsed);
+
+      if (nextPlaysUsed >= maxPlays) {
+        setPhase("done");
+        phaseRef.current = "done";
+      } else {
+        setPhase("pending");
+        phaseRef.current = "pending";
+        if (introUrl) {
+          playIntro();
+        } else {
+          playContent();
         }
-      },
+      }
     };
 
-    Object.entries(handlers).forEach(([e, h]) => intro.addEventListener(e, h));
-    return () =>
-      Object.entries(handlers).forEach(([e, h]) =>
-        intro.removeEventListener(e, h),
-      );
-  }, [audioIntroUrl]);
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
+    el.addEventListener("timeupdate", onTime);
+    el.addEventListener("loadedmetadata", onMeta);
+    el.addEventListener("error", onError);
+    el.addEventListener("ended", onEnded);
 
-  useEffect(() => {
-    const content = contentRef.current;
-    if (!content) return;
-
-    const handlers = {
-      play: () => setIsPlaying(true),
-      pause: () => setIsPlaying(false),
-      timeupdate: () => setContentTime(content.currentTime),
-      loadedmetadata: () => setContentDuration(content.duration),
-      error: () => setHasError(true),
-      ended: () => {
-        setIsPlaying(false);
-        setPlaysUsed((n) => {
-          const next = n + 1;
-          if (next >= maxPlays) {
-            setPhase("done");
-            phaseRef.current = "done";
-          } else {
-            setPhase("idle");
-            phaseRef.current = "idle";
-          }
-          return next;
-        });
-      },
+    return () => {
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("error", onError);
+      el.removeEventListener("ended", onEnded);
     };
-
-    Object.entries(handlers).forEach(([e, h]) =>
-      content.addEventListener(e, h),
-    );
-    return () =>
-      Object.entries(handlers).forEach(([e, h]) =>
-        content.removeEventListener(e, h),
-      );
-  }, [maxPlays]);
+  }, [introUrl, playsUsed, maxPlays, playIntro, playContent]);
 
   useEffect(() => {
-    const intro = introRef.current;
-    const content = contentRef.current;
     const ph = phaseRef.current;
 
     if (isPaused) {
-      if (ph === "intro") intro?.pause();
-      if (ph === "content") content?.pause();
+      if (ph === "intro") introRef.current?.pause();
+      if (ph === "content") contentRef.current?.pause();
     } else {
-      if (ph === "intro" && intro?.paused && !intro?.ended)
-        intro.play().catch(() => {});
-      if (ph === "content" && content?.paused && !content?.ended)
-        content.play().catch(() => {});
-      if (ph === "idle" && playsLeft > 0) startCycle();
+      if (ph === "intro" && introRef.current?.paused) {
+        introRef.current.play().catch(() => {});
+      } else if (ph === "content" && contentRef.current?.paused) {
+        contentRef.current.play().catch(() => {});
+      }
     }
-  }, [isPaused, playsLeft, startCycle]);
+  }, [isPaused]);
 
   const progressPct = useMemo(() => {
     if (phase === "intro" && introDuration > 0)
@@ -193,8 +232,14 @@ export function SequentialAudioPlayer({
     return 0;
   }, [phase, introTime, introDuration, contentTime, contentDuration]);
 
-  const currentTimestamp = phase === "intro" ? introTime : contentTime;
-  const totalDuration = phase === "intro" ? introDuration : contentDuration;
+  const displayTime =
+    phase === "intro" ? introTime : phase === "content" ? contentTime : 0;
+  const displayDuration =
+    phase === "intro"
+      ? introDuration
+      : phase === "content"
+        ? contentDuration
+        : 0;
 
   const phaseLabel =
     phase === "intro"
@@ -203,7 +248,7 @@ export function SequentialAudioPlayer({
         ? "Snimka"
         : phase === "done"
           ? "Završeno"
-          : "Sprema se...";
+          : "Učitavanje...";
 
   const barColor =
     phase === "intro"
@@ -214,20 +259,19 @@ export function SequentialAudioPlayer({
 
   if (hasError) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600">
-        <span className="text-sm">Audio nije dostupan</span>
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
+        ⚠️ Audio nije dostupan
       </div>
     );
   }
 
   return (
     <div className="rounded-xl border border-sky-200 bg-white shadow-sm overflow-hidden">
-      {audioIntroUrl && (
-        <audio ref={introRef} src={audioIntroUrl} preload="auto" />
-      )}
-      <audio ref={contentRef} src={audioUrl} preload="auto" />
+      {/* Skriveni audio elementi — uvijek renderirani za stabilan DOM */}
+      {introUrl && <audio ref={introRef} src={introUrl} preload="auto" />}
+      <audio ref={contentRef} src={contentUrl} preload="auto" />
 
-      {/* Tanka progress traka na vrhu */}
+      {/* Progress traka na vrhu */}
       <div className="h-1 bg-sky-100">
         <div
           className={cn(
@@ -238,26 +282,25 @@ export function SequentialAudioPlayer({
         />
       </div>
 
-      <div className="px-4 py-3 space-y-2.5">
-        {/* Gornji red: status + counter */}
+      <div className="px-4 py-3 space-y-2">
+        {/* Status red */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Headphones
               size={13}
               className={cn(
+                "flex-shrink-0",
                 phase === "intro" && "text-amber-500",
-                phase === "content" && "text-sky-500",
+                (phase === "content" || phase === "pending") && "text-sky-500",
                 phase === "done" && "text-green-500",
-                phase === "idle" && "text-sky-400",
               )}
             />
             <span
               className={cn(
                 "text-xs font-semibold",
                 phase === "intro" && "text-amber-600",
-                phase === "content" && "text-sky-700",
+                (phase === "content" || phase === "pending") && "text-sky-700",
                 phase === "done" && "text-green-600",
-                phase === "idle" && "text-sky-500",
               )}
             >
               {phaseLabel}
@@ -265,22 +308,23 @@ export function SequentialAudioPlayer({
 
             {/* "pričekaj" badge za intro */}
             {phase === "intro" && (
-              <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-md font-medium">
+              <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-md font-medium leading-none">
                 pričekaj
               </span>
             )}
 
             {/* Animirani waveform za aktivnu snimku */}
-            {isPlaying && phase === "content" && (
+            {isPlaying && (phase === "content" || phase === "intro") && (
               <span className="flex gap-px items-end h-3 ml-0.5">
-                {[8, 12, 9, 12, 8].map((h, i) => (
+                {[7, 11, 8, 11, 7].map((h, i) => (
                   <span
                     key={i}
-                    className="w-0.5 bg-sky-400 rounded-full"
+                    className="w-0.5 rounded-full"
                     style={{
                       height: `${h}px`,
-                      animation: `waveform 0.8s ease-in-out infinite`,
-                      animationDelay: `${i * 0.12}s`,
+                      background: phase === "intro" ? "#f59e0b" : "#38bdf8",
+                      animation: "waveform 0.7s ease-in-out infinite",
+                      animationDelay: `${i * 0.1}s`,
                     }}
                   />
                 ))}
@@ -306,37 +350,38 @@ export function SequentialAudioPlayer({
         </div>
 
         {/* Progress bar + timestamp — samo kad svira */}
-        {(phase === "intro" || phase === "content") && (
-          <div className="space-y-1">
-            <div className="h-1.5 bg-sky-100 rounded-full overflow-hidden">
+        {(phase === "intro" || phase === "content") && displayDuration > 0 && (
+          <div className="space-y-0.5">
+            <div className="h-1 bg-sky-100 rounded-full overflow-hidden">
               <div
                 className={cn(
                   "h-full rounded-full transition-all duration-300",
-                  phase === "intro" ? "bg-amber-400" : "bg-sky-500",
+                  phase === "intro" ? "bg-amber-400" : "bg-sky-400",
                 )}
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-            <div className="flex justify-between text-[11px] text-sky-400 tabular-nums">
-              <span>{formatTime(currentTimestamp)}</span>
-              <span>{formatTime(totalDuration)}</span>
+            <div className="flex justify-between text-[10px] text-sky-400/80 tabular-nums">
+              <span>{formatTime(displayTime)}</span>
+              <span>{formatTime(displayDuration)}</span>
             </div>
           </div>
         )}
 
-        {/* Status poruke */}
+        {/* Statusi */}
         {phase === "done" && (
           <p className="text-[11px] text-green-600 text-center font-medium">
             Iskoristio/la si sva slušanja za ovaj zadatak.
           </p>
         )}
-        {phase === "idle" && playsLeft > 0 && playsUsed === 0 && (
+        {phase === "pending" && playsUsed === 0 && (
           <p className="text-[11px] text-sky-400 text-center">
             Audio se automatski reproducira ·{" "}
-            <strong className="font-semibold">{maxPlays}×</strong> ukupno
+            <strong className="font-semibold text-sky-500">{maxPlays}×</strong>{" "}
+            ukupno
           </p>
         )}
-        {phase === "idle" && playsLeft > 0 && playsUsed > 0 && (
+        {phase === "pending" && playsUsed > 0 && playsLeft > 0 && (
           <p className="text-[11px] text-sky-500 text-center">
             Preostalo: <strong className="font-semibold">{playsLeft}</strong>{" "}
             {playsLeft === 1 ? "reprodukcija" : "reprodukcije"}
@@ -368,7 +413,9 @@ export function AudioPlayer({
       audio.pause();
       return;
     }
-    if (audio.currentTime === 0 || audio.ended) setPlaysLeft((n) => n - 1);
+    if (audio.currentTime === 0 || audio.ended) {
+      setPlaysLeft((n) => n - 1);
+    }
     audio.play().catch(() => setError(true));
   }, [canPlay, isPlaying]);
 
@@ -389,14 +436,15 @@ export function AudioPlayer({
 
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  if (error)
+  if (error) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs">
         Audio nije dostupan
       </div>
     );
+  }
 
-  if (compact)
+  if (compact) {
     return (
       <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-sky-50 border border-sky-200">
         <audio ref={audioRef} src={audioUrl} preload="metadata" />
@@ -433,6 +481,7 @@ export function AudioPlayer({
         </span>
       </div>
     );
+  }
 
   return (
     <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 space-y-3">
@@ -566,13 +615,12 @@ export function PassageDisplay({
     <div
       className={cn(
         "rounded-2xl border overflow-hidden flex flex-col",
-        "lg:h-full",
         typeConfig.bg,
         typeConfig.border,
         className,
       )}
     >
-      {/* Header — ne skrolira */}
+      {/* ── Header — uvijek vidljiv, ne skrolira ───────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-inherit flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <BookOpen size={14} className="text-warm-500 flex-shrink-0" />
@@ -589,7 +637,7 @@ export function PassageDisplay({
           </span>
         </div>
 
-        {/* Collapse — samo na mobilnom, ne za audio-only */}
+        {/* Collapse — samo na mobilnom, nije za audio */}
         {!isAudioOnly && hasText && (
           <button
             onClick={() => setCollapsed((c) => !c)}
@@ -604,20 +652,27 @@ export function PassageDisplay({
         )}
       </div>
 
-      {/* Body — skrolira na desktopu */}
+      {/* ── Body — skrolabilan ─────────────────────────────────────────────── */}
       {!collapsed && (
-        <div className="px-4 py-3 space-y-3 overflow-y-auto flex-1">
-          {/* Audio player */}
+        <div
+          className={cn(
+            "px-4 py-3 space-y-3",
+            "max-h-64 overflow-y-auto",
+            "lg:max-h-none lg:flex-1 lg:overflow-y-auto",
+          )}
+        >
+          {/* Audio player — key=passage.id jamči stabilan mount kroz navigaciju */}
           {hasAudio && (
             <SequentialAudioPlayer
-              key={passage.audioUrl ?? passage.audioIntroUrl ?? passage.id}
-              audioIntroUrl={passage.audioIntroUrl ?? null}
-              audioUrl={passage.audioUrl ?? ""}
+              key={passage.id}
+              introUrl={passage.audioIntroUrl ?? null}
+              contentUrl={passage.audioUrl ?? ""}
               maxPlays={2}
               isPaused={isPaused}
             />
           )}
 
+          {/* Tekst */}
           {hasText && (
             <>
               {passage.author && (
