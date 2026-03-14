@@ -1,7 +1,7 @@
 // components/exam/QuestionDisplay.jsx
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Flag, Lock, Check } from "lucide-react";
+import { Flag, Check } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/utils";
 import { AudioPlayer } from "@/components/exam/PassageDisplay";
@@ -25,7 +25,7 @@ function InlineTextBlock({ html }) {
   );
 }
 
-function FillBlankParentContext({ parentText, childText, childLabel }) {
+function FillBlankParentContext({ parentText, childLabel }) {
   if (!parentText) return null;
 
   const highlightedText = useMemo(() => {
@@ -41,15 +41,7 @@ function FillBlankParentContext({ parentText, childText, childLabel }) {
   }, [parentText, childLabel]);
 
   return (
-    <div className="mb-4 p-4 bg-blue-50/80 border border-blue-200 rounded-xl">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
-          Polazni tekst zadatka
-        </span>
-        <span className="text-[10px] text-blue-400">
-          · popunite označenu prazninu
-        </span>
-      </div>
+    <div className="mb-3 px-3.5 py-3 bg-blue-50/70 border border-blue-200/80 rounded-xl">
       <SafeHtml
         html={highlightedText}
         className="text-sm text-blue-900 leading-relaxed fill-blank-context"
@@ -71,11 +63,9 @@ function OptionButton({ option, selected, onSelect, disabled }) {
       disabled={disabled}
       aria-pressed={selected}
       className={cn(
-        // Base
         "w-full text-left rounded-xl border-2 transition-all duration-150",
         "flex items-center gap-3 px-4 py-3.5 group select-none",
         disabled ? "cursor-default" : "cursor-pointer",
-        // States
         selected
           ? [
               "border-primary-500 bg-primary-50",
@@ -113,7 +103,6 @@ function OptionButton({ option, selected, onSelect, disabled }) {
         )}
       </div>
 
-      {/* Option text — SafeHtml renderira HTML + LaTeX */}
       <SafeHtml
         html={option.text}
         inline
@@ -130,13 +119,13 @@ function OptionButton({ option, selected, onSelect, disabled }) {
 
 export function QuestionDisplay({
   question,
-  parentQuestion, // fill_blank_mc parent — za kontekst kod child pitanja
-  selectedAnswer, // letter: 'a'|'b'|'c'|'d' ili null
-  onAnswer, // (letter: string) => void
-  onFlag, // () => void
-  isFlagged, // boolean
-  index, // 0-based index
-  isPaused, // boolean
+  parentQuestion,
+  selectedAnswer,
+  onAnswer,
+  onFlag,
+  isFlagged,
+  index,
+  isPaused,
 }) {
   if (!question) return null;
 
@@ -147,11 +136,10 @@ export function QuestionDisplay({
 
   return (
     <div className="space-y-3">
-      {/* fill_blank_child — prikaži roditeljski kontekst */}
+      {/* fill_blank_child — prikaži okolni kontekst bez labele */}
       {isChild && parentQuestion && (
         <FillBlankParentContext
           parentText={parentQuestion.text}
-          childText={question.text}
           childLabel={question.positionLabel}
         />
       )}
@@ -173,7 +161,6 @@ export function QuestionDisplay({
               </span>
             )}
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-warm-100 text-warm-700 text-xs font-bold">
-              {isParent ? <Lock size={10} className="text-warm-400" /> : null}
               Pitanje {displayLabel}
             </span>
           </div>
@@ -186,7 +173,7 @@ export function QuestionDisplay({
             )}
             {onFlag && (
               <button
-                onClick={onFlag ? onFlag : undefined}
+                onClick={onFlag}
                 disabled={isPaused}
                 aria-label={
                   isFlagged ? "Ukloni zastavicu" : "Označi pitanje zastavicom"
@@ -209,6 +196,7 @@ export function QuestionDisplay({
           </div>
         </div>
 
+        {/* Per-question audio (ako postoji) */}
         {question.audioUrl && (
           <div className="mb-4">
             <AudioPlayer audioUrl={question.audioUrl} maxPlays={2} compact />
@@ -219,38 +207,29 @@ export function QuestionDisplay({
         <SafeHtml
           html={question.text}
           className={cn(
-            "text-warm-900 leading-relaxed",
-            isParent
-              ? "text-sm font-semibold text-warm-700"
-              : "text-[15px] font-medium",
+            "text-warm-900 leading-relaxed mb-5",
+            isParent ? "text-base font-semibold" : "text-sm",
           )}
         />
 
-        {/* Inline tekst blok (citat, pjesma fragment...) */}
+        {/* Inline tekst (za fill_blank_child) */}
         <InlineTextBlock html={question.inlineText} />
 
-        {/* Napomena za fill_blank_mc parent */}
-        {isParent && (
-          <p className="mt-3 text-xs text-warm-400 italic">
-            Odaberite ispravan odgovor za svaku od sljedećih praznina:
-          </p>
+        {/* Opcije */}
+        {!isParent && question.options?.length > 0 && (
+          <div className="space-y-2 mt-4">
+            {question.options.map((option) => (
+              <OptionButton
+                key={option.id ?? option.letter}
+                option={option}
+                selected={selectedAnswer === option.letter}
+                onSelect={onAnswer}
+                disabled={isPaused || !onAnswer}
+              />
+            ))}
+          </div>
         )}
       </div>
-
-      {/* ── Opcije ────────────────────────────────────────────────────── */}
-      {!isParent && question.options?.length > 0 && (
-        <div className="space-y-2">
-          {question.options.map((opt) => (
-            <OptionButton
-              key={opt.id ?? opt.letter}
-              option={opt}
-              selected={selectedAnswer === opt.letter}
-              onSelect={onAnswer}
-              disabled={!!isPaused}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

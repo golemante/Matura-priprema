@@ -397,7 +397,6 @@ export function useExamSession(examId) {
   const optionKeyHandlers = useMemo(() => {
     const q = questions[currentIndex];
     const letters = q?.options?.map((o) => o.letter).filter(Boolean) ?? [];
-
     return letters.reduce((acc, letter) => {
       acc[letter] = () => {
         if (!isPaused) handleAnswer(letter);
@@ -415,7 +414,7 @@ export function useExamSession(examId) {
       p: () => !submit.isSyncing && submit.handlePause(),
       "?": () =>
         toast.info(
-          "Prečaci: ←→ navigacija · A–M odabir (ovisno o zadatku) · F označi · P pauza",
+          "Prečaci: ←→ navigacija · slova za odabir · F označi · P pauza",
         ),
     },
     { ignoreFormElements: true },

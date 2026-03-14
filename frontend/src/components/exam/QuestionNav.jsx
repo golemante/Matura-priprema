@@ -13,21 +13,8 @@ function NavButton({
 }) {
   const label = question.positionLabel ?? String(idx + 1);
 
-  // fill_blank_mc parent — nije klikabilno, samo marker
   if (question.questionType === "fill_blank_mc") {
-    return (
-      <div
-        className={cn(
-          "w-full aspect-square rounded-lg flex items-center justify-center",
-          "text-[9px] font-bold text-warm-400 bg-warm-50",
-          "border border-dashed border-warm-200",
-        )}
-        title={`Zadatak ${label}`}
-        aria-hidden="true"
-      >
-        {label}
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -51,7 +38,6 @@ function NavButton({
       )}
     >
       {label}
-      {/* Flag dot */}
       {isFlagged && !isCurrent && (
         <span
           className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 border-2 border-white"
@@ -65,10 +51,10 @@ function NavButton({
 export function QuestionNav({
   questions,
   answers,
-  flagged, // Set<string>
+  flagged,
   currentIndex,
-  onGoTo, // (idx: number) => void
-  onSubmit, // () => void
+  onGoTo,
+  onSubmit,
   answeredCount,
 }) {
   const visibleQuestions = questions.filter(
@@ -82,7 +68,7 @@ export function QuestionNav({
 
   return (
     <div className="bg-white rounded-2xl border border-warm-200 shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-4 sticky top-20 flex flex-col gap-3.5 max-h-[calc(100vh-7rem)]">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0">
         <h3 className="text-xs font-bold text-warm-600 uppercase tracking-wider">
           Navigacija
@@ -95,7 +81,7 @@ export function QuestionNav({
         )}
       </div>
 
-      {/* ── Progress ───────────────────────────────────────────────────── */}
+      {/* Progress */}
       <div className="flex-shrink-0">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs text-warm-500">Odgovoreno</span>
@@ -120,7 +106,7 @@ export function QuestionNav({
         </div>
       </div>
 
-      {/* ── Grid pitanja ───────────────────────────────────────────────── */}
+      {/* Grid pitanja — fill_blank_mc vraća null, ne zauzima grid ćeliju */}
       <div className="grid grid-cols-5 gap-1.5 overflow-y-auto flex-1 content-start pb-0.5 pr-0.5 -mr-0.5">
         {questions.map((q, idx) => (
           <NavButton
@@ -135,62 +121,56 @@ export function QuestionNav({
         ))}
       </div>
 
-      {/* ── Legend ─────────────────────────────────────────────────────── */}
+      {/* Legenda */}
       <div className="flex-shrink-0 pt-3 border-t border-warm-100">
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mb-3">
           {[
+            { cls: "bg-primary-600", label: "Trenutno" },
             {
-              swatch: "bg-primary-600",
-              label: "Trenutno",
-            },
-            {
-              swatch: "bg-primary-100 border border-primary-200",
+              cls: "bg-primary-100 border border-primary-200",
               label: "Odgovoreno",
             },
+            { cls: "bg-amber-50 border border-amber-300", label: "Označeno" },
             {
-              swatch: "bg-amber-50 border border-amber-300",
-              label: "Označeno",
+              cls: "bg-warm-50 border border-warm-200",
+              label: "Nije odgovoreno",
             },
-            {
-              swatch: "bg-warm-50 border border-warm-200",
-              label: "Preskočeno",
-            },
-          ].map(({ swatch, label }) => (
+          ].map(({ cls, label }) => (
             <div key={label} className="flex items-center gap-1.5">
-              <span className={cn("w-3 h-3 rounded flex-shrink-0", swatch)} />
-              <span className="text-[10px] text-warm-500 leading-none">
+              <span className={cn("w-3 h-3 rounded flex-shrink-0", cls)} />
+              <span className="text-[10px] text-warm-500 font-medium">
                 {label}
               </span>
             </div>
           ))}
         </div>
-      </div>
 
-      {/* ── Submit gumb — uvijek vidljiv ─────────────────────────────── */}
-      <button
-        onClick={onSubmit}
-        className={cn(
-          "flex-shrink-0 w-full flex items-center justify-center gap-2",
-          "py-2.5 rounded-xl text-sm font-bold transition-all duration-200",
-          "active:scale-[0.98]",
-          allDone
-            ? "bg-primary-600 text-white hover:bg-primary-700 shadow-[0_2px_8px_-2px_rgba(45,84,232,0.4)]"
-            : "bg-warm-800 text-white hover:bg-warm-900",
+        {unanswered > 0 && (
+          <p className="text-[10px] text-warm-400 mb-2 text-center">
+            {unanswered}{" "}
+            {unanswered === 1
+              ? "pitanje"
+              : unanswered < 5
+                ? "pitanja"
+                : "pitanja"}{" "}
+            bez odgovora
+          </p>
         )}
-      >
-        <Send size={13} />
-        <span>Predaj ispit</span>
-        {!allDone && unanswered > 0 && (
-          <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-white/20 text-[10px] font-bold leading-none">
-            {unanswered} bez odg.
-          </span>
-        )}
-        {allDone && (
-          <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-white/20 text-[10px] font-bold leading-none">
-            sve riješeno ✓
-          </span>
-        )}
-      </button>
+
+        <button
+          onClick={onSubmit}
+          className={cn(
+            "w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl",
+            "text-xs font-bold transition-colors",
+            allDone
+              ? "bg-green-600 text-white hover:bg-green-700"
+              : "bg-warm-900 text-white hover:bg-black",
+          )}
+        >
+          <Send size={12} />
+          Predaj ispit
+        </button>
+      </div>
     </div>
   );
 }

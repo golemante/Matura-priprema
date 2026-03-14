@@ -765,7 +765,13 @@ export function QuizPage() {
               className="flex-1 flex flex-col lg:flex-row gap-5"
             >
               {hasAnyPassage && (
-                <div className="lg:w-[42%] xl:w-[38%] flex-shrink-0">
+                <div
+                  className={cn(
+                    "lg:w-[42%] xl:w-[38%] flex-shrink-0",
+                    "lg:sticky lg:top-[4.5rem] lg:self-start",
+                    "lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-hidden",
+                  )}
+                >
                   {currentPassage ? (
                     <PassageDisplay
                       passage={currentPassage}
@@ -779,6 +785,7 @@ export function QuizPage() {
                           ? (answers[current?.id] ?? null)
                           : null
                       }
+                      isPaused={isPaused}
                     />
                   ) : (
                     <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 h-full min-h-[180px]">

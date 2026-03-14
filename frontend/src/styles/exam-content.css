@@ -1,4 +1,17 @@
-/* exam-content.css — stilovi za sadržaj unutar ispita                         */
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* exam-content.css                                                            */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Waveform animacija za audio player ─────────────────────────────────── */
+@keyframes waveform {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+  }
+  50% {
+    transform: scaleY(1.2);
+  }
+}
 
 /* ── passage-content: opći tekst pasaža ─────────────────────────────────── */
 .passage-content {
@@ -29,9 +42,16 @@
   color: #726e68;
 }
 
+/* ─── em/i GLOBALNI fix ─────────────────────────────────────────────────── */
+/* Tailwind preflight može resetirati font-style na nekim browsere/konfiguracijama.
+   Eksplicitno forsiramo italic za SVE kontekste ispita. */
 .passage-content em,
-.passage-content i {
-  font-style: italic;
+.passage-content i,
+.safe-html em,
+.safe-html i,
+.fill-blank-context em,
+.fill-blank-context i {
+  font-style: italic !important;
 }
 
 .passage-content strong,
@@ -93,22 +113,18 @@
   margin: 1rem 0;
 }
 
-/* ── passage-poem: pjesnički tekst ──────────────────────────────────────── */
-
+/* ── passage-poem ───────────────────────────────────────────────────────── */
 .passage-poem {
   font-style: italic;
   text-align: center;
 }
-
 .passage-poem p {
   margin-bottom: 0.5rem;
   white-space: pre-wrap;
 }
-
 .passage-poem p + p {
   margin-top: 0.25rem;
 }
-
 .passage-poem strong,
 .passage-poem b {
   display: block;
@@ -117,28 +133,27 @@
   margin-bottom: 0.75rem;
 }
 
-/* ── passage-drama: dramski tekst ───────────────────────────────────────── */
+/* ── passage-drama ──────────────────────────────────────────────────────── */
 .passage-drama p {
   margin-bottom: 0.625rem;
 }
 
-.passage-drama strong:first-child,
-.passage-drama b:first-child {
+/* Ime govornika — trazi strong/b koji je direktni child <p>,
+   ali ne koristi :first-child jer nije uvijek prvi (može biti ispred njega tekst) */
+.passage-drama strong,
+.passage-drama b {
   font-weight: 800;
-  text-transform: uppercase;
-  font-size: 0.8em;
-  letter-spacing: 0.04em;
   color: #1a1916;
-  display: inline;
 }
 
+/* Didaskalije — cursive gray, eksplicitno italic */
 .passage-drama em,
 .passage-drama i {
   color: #726e68;
-  font-style: italic;
+  font-style: italic !important;
 }
 
-/* ── passage-article: članak s osobama (Task 1 engleski, matching) ───────── */
+/* ── passage-article: matching zadaci (npr. Making Films) ────────────────── */
 .passage-article .task-instructions {
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;
@@ -146,24 +161,21 @@
   border: 1px solid #bbf7d0;
   border-radius: 10px;
 }
-
 .passage-article .task-instructions p {
   font-size: 0.8rem;
   color: #166534;
   margin-bottom: 0.25rem;
   line-height: 1.5;
 }
-
 .passage-article .task-instructions p:last-child {
   margin-bottom: 0;
 }
-
 .passage-article .task-instructions strong {
   font-weight: 700;
   color: #14532d;
 }
 
-/* ── person-block: blok jedne osobe u matching zadatku ───────────────────── */
+/* ── person-block ───────────────────────────────────────────────────────── */
 .person-block {
   margin-bottom: 1rem;
   padding: 0.875rem 1rem;
@@ -176,15 +188,12 @@
     box-shadow 0.2s ease;
   scroll-margin-top: 8px;
 }
-
 .person-block p {
   margin-bottom: 0;
   font-size: 0.825rem;
   line-height: 1.75;
   color: #4a4540;
 }
-
-/* Heading s inijalima */
 .person-heading {
   display: flex;
   align-items: center;
@@ -194,7 +203,6 @@
   font-weight: 700;
   color: #1a1916;
 }
-
 .person-letter {
   display: inline-flex;
   align-items: center;
@@ -212,63 +220,53 @@
     color 0.2s ease;
 }
 
-/* Stanje: odabrana osoba — zeleni highlight */
+/* Odabrana osoba — zeleni highlight */
 .person-block.person-selected {
   border-color: #22c55e;
   background: rgba(240, 253, 244, 0.9);
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
 }
-
 .person-block.person-selected .person-letter {
   background: #22c55e;
   color: #fff;
 }
-
 .person-block.person-selected p {
   color: #14532d;
 }
 
-/* ── Praznine (gap fill): Task 3, 4, 5 ──────────────────────────────────── */
+/* ── Gap fill: Task 3, 4, 5 ─────────────────────────────────────────────── */
 
-/* Upute za zadatak unutar pasaža */
-.passage-content .task-instructions,
-.passage-article .task-instructions {
+/* Upute unutar pasaža */
+.passage-content .task-instructions {
   margin-bottom: 1rem;
   padding: 0.625rem 0.875rem;
   background: #f0f9ff;
   border: 1px solid #bae6fd;
   border-radius: 8px;
 }
-
 .passage-content .task-instructions p {
   font-size: 0.8rem;
   color: #0c4a6e;
   margin-bottom: 0.25rem;
 }
-
 .passage-content .task-instructions .example-note {
   font-size: 0.75rem;
   color: #0369a1;
   font-style: italic;
 }
 
-.passage-content .task-instructions .audio-note {
-  font-size: 0.75rem;
-  color: #0369a1;
-}
-
-/* Primjer (0) — već popunjena praznina u tekstu */
+/* Primjer (0) — već popunjena praznina */
 .example-gap {
   display: inline;
   background: rgba(220, 252, 231, 0.7);
   color: #166534;
-  font-style: italic;
+  font-style: italic !important;
   padding: 0 3px;
   border-radius: 3px;
   border-bottom: 2px solid #86efac;
 }
 
-/* Prazna praznina (čeka unos) */
+/* Prazna praznina */
 .exam-gap {
   display: inline-flex;
   align-items: center;
@@ -307,44 +305,38 @@
   }
 }
 
-/* Inline gap passage — za Task 4 (Dogs) i Task 5 (Intuitive Design) */
+/* Inline gap passage — Task 4, 5 (tekst s ugrađenim prazninama) */
 .inline-gap-passage p {
   margin-bottom: 1rem;
   line-height: 2;
 }
 
-/* ── safe-html: stilovi za inline HTML u pitanjima i opcijama ───────────── */
+/* ── safe-html ───────────────────────────────────────────────────────────── */
 .safe-html em,
 .safe-html i {
-  font-style: italic;
+  font-style: italic !important;
 }
-
 .safe-html strong,
 .safe-html b {
   font-weight: 700;
 }
-
 .safe-html u {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-
 .safe-html sup {
   font-size: 0.7em;
   vertical-align: super;
   font-weight: 600;
 }
-
 .safe-html sub {
   font-size: 0.7em;
   vertical-align: sub;
 }
-
 .safe-html s {
   text-decoration: line-through;
   opacity: 0.65;
 }
-
 .safe-html code {
   font-family: ui-monospace, monospace;
   font-size: 0.85em;
@@ -353,7 +345,6 @@
   border-radius: 4px;
 }
 
-/* ── fill-blank: highlight aktualnih praznina ────────────────────────────── */
 mark.fill-blank-active {
   background: transparent;
   color: #2563eb;
@@ -362,16 +353,29 @@ mark.fill-blank-active {
   text-decoration-style: dashed;
   text-underline-offset: 3px;
 }
-
 .fill-blank-context strong {
   color: #1e40af;
 }
 
-/* ── KaTeX error fallback ────────────────────────────────────────────────── */
+/* ── KaTeX fallback ──────────────────────────────────────────────────────── */
 .katex-error {
   color: #dc2626;
   font-size: 0.8em;
   font-family: ui-monospace, monospace;
+}
+
+.overflow-y-auto::-webkit-scrollbar {
+  width: 4px;
+}
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #d6d3cc;
+  border-radius: 99px;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #a8a49e;
 }
 
 /* ── xs breakpoint helper ────────────────────────────────────────────────── */
