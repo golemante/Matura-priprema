@@ -394,18 +394,29 @@ export function useExamSession(examId) {
     if (q) toggleFlag(q.id);
   }, [questions, currentIndex, toggleFlag]);
 
+  const optionKeyHandlers = useMemo(() => {
+    const letters =
+      current?.options?.map((o) => o.letter).filter(Boolean) ?? [];
+
+    return letters.reduce((acc, letter) => {
+      acc[letter] = () => {
+        if (!isPaused) handleAnswer(letter);
+      };
+      return acc;
+    }, {});
+  }, [current?.options, isPaused, handleAnswer]);
+
   useKeyPress(
     {
       ArrowRight: () => !isPaused && handleNext(),
       ArrowLeft: () => !isPaused && handlePrev(),
-      a: () => !isPaused && handleAnswer("a"),
-      b: () => !isPaused && handleAnswer("b"),
-      c: () => !isPaused && handleAnswer("c"),
-      d: () => !isPaused && handleAnswer("d"),
+      ...optionKeyHandlers,
       f: handleToggleFlag,
       p: () => !submit.isSyncing && submit.handlePause(),
       "?": () =>
-        toast.info("Prečaci: ←→ navigacija · A–D odabir · F označi · P pauza"),
+        toast.info(
+          "Prečaci: ←→ navigacija · A–D (ili više) odabir · F označi · P pauza",
+        ),
     },
     { ignoreFormElements: true },
   );

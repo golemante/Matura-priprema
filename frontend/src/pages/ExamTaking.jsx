@@ -767,7 +767,19 @@ export function QuizPage() {
               {hasAnyPassage && (
                 <div className="lg:w-[42%] xl:w-[38%] flex-shrink-0">
                   {currentPassage ? (
-                    <PassageDisplay passage={currentPassage} />
+                    <PassageDisplay
+                      passage={currentPassage}
+                      activeGapPosition={
+                        current?.questionType === "fill_blank_child"
+                          ? current.position
+                          : null
+                      }
+                      selectedPersonLetter={
+                        current?.questionType === "multiple_choice"
+                          ? (answers[current?.id] ?? null)
+                          : null
+                      }
+                    />
                   ) : (
                     <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 h-full min-h-[180px]">
                       <p className="text-xs text-warm-400 font-medium text-center px-4">

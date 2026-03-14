@@ -1,3 +1,6 @@
+/* exam-content.css — stilovi za sadržaj unutar ispita                         */
+
+/* ── passage-content: opći tekst pasaža ─────────────────────────────────── */
 .passage-content {
   font-size: 0.875rem;
   line-height: 1.8;
@@ -91,7 +94,7 @@
 }
 
 /* ── passage-poem: pjesnički tekst ──────────────────────────────────────── */
-/* Sačuva whitespace/newlines, centrira kratke stihove */
+
 .passage-poem {
   font-style: italic;
   text-align: center;
@@ -99,15 +102,13 @@
 
 .passage-poem p {
   margin-bottom: 0.5rem;
-  white-space: pre-wrap; /* čuva uvlačenja i lomove redaka */
+  white-space: pre-wrap;
 }
 
-/* Strofa je odvojena praznim retkom — veći razmak */
 .passage-poem p + p {
   margin-top: 0.25rem;
 }
 
-/* Pjesnički naslovi — centrirani bold */
 .passage-poem strong,
 .passage-poem b {
   display: block;
@@ -117,12 +118,10 @@
 }
 
 /* ── passage-drama: dramski tekst ───────────────────────────────────────── */
-/* Govornici su u <strong>, didaskalije u <em> ili <i> */
 .passage-drama p {
   margin-bottom: 0.625rem;
 }
 
-/* Govornik (speaker name) */
 .passage-drama strong:first-child,
 .passage-drama b:first-child {
   font-weight: 800;
@@ -133,11 +132,185 @@
   display: inline;
 }
 
-/* Didaskalije (stage directions) */
 .passage-drama em,
 .passage-drama i {
   color: #726e68;
   font-style: italic;
+}
+
+/* ── passage-article: članak s osobama (Task 1 engleski, matching) ───────── */
+.passage-article .task-instructions {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+}
+
+.passage-article .task-instructions p {
+  font-size: 0.8rem;
+  color: #166534;
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
+}
+
+.passage-article .task-instructions p:last-child {
+  margin-bottom: 0;
+}
+
+.passage-article .task-instructions strong {
+  font-weight: 700;
+  color: #14532d;
+}
+
+/* ── person-block: blok jedne osobe u matching zadatku ───────────────────── */
+.person-block {
+  margin-bottom: 1rem;
+  padding: 0.875rem 1rem;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.6);
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+  scroll-margin-top: 8px;
+}
+
+.person-block p {
+  margin-bottom: 0;
+  font-size: 0.825rem;
+  line-height: 1.75;
+  color: #4a4540;
+}
+
+/* Heading s inijalima */
+.person-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1a1916;
+}
+
+.person-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: #e5e3dc;
+  color: #4a4540;
+  font-size: 0.75rem;
+  font-weight: 800;
+  flex-shrink: 0;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+/* Stanje: odabrana osoba — zeleni highlight */
+.person-block.person-selected {
+  border-color: #22c55e;
+  background: rgba(240, 253, 244, 0.9);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.person-block.person-selected .person-letter {
+  background: #22c55e;
+  color: #fff;
+}
+
+.person-block.person-selected p {
+  color: #14532d;
+}
+
+/* ── Praznine (gap fill): Task 3, 4, 5 ──────────────────────────────────── */
+
+/* Upute za zadatak unutar pasaža */
+.passage-content .task-instructions,
+.passage-article .task-instructions {
+  margin-bottom: 1rem;
+  padding: 0.625rem 0.875rem;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+}
+
+.passage-content .task-instructions p {
+  font-size: 0.8rem;
+  color: #0c4a6e;
+  margin-bottom: 0.25rem;
+}
+
+.passage-content .task-instructions .example-note {
+  font-size: 0.75rem;
+  color: #0369a1;
+  font-style: italic;
+}
+
+.passage-content .task-instructions .audio-note {
+  font-size: 0.75rem;
+  color: #0369a1;
+}
+
+/* Primjer (0) — već popunjena praznina u tekstu */
+.example-gap {
+  display: inline;
+  background: rgba(220, 252, 231, 0.7);
+  color: #166534;
+  font-style: italic;
+  padding: 0 3px;
+  border-radius: 3px;
+  border-bottom: 2px solid #86efac;
+}
+
+/* Prazna praznina (čeka unos) */
+.exam-gap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  padding: 0 4px;
+  font-weight: 700;
+  color: #64748b;
+  border-bottom: 2.5px dashed #94a3b8;
+  border-radius: 2px;
+  cursor: default;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+/* Aktivna praznina — trenutno pitanje */
+.exam-gap.active-gap {
+  color: #2563eb;
+  background: rgba(219, 234, 254, 0.6);
+  border-bottom-color: #3b82f6;
+  border-bottom-style: solid;
+  border-radius: 3px;
+  padding: 0 5px;
+  animation: gap-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes gap-pulse {
+  0%,
+  100% {
+    background: rgba(219, 234, 254, 0.6);
+  }
+  50% {
+    background: rgba(219, 234, 254, 1);
+  }
+}
+
+/* Inline gap passage — za Task 4 (Dogs) i Task 5 (Intuitive Design) */
+.inline-gap-passage p {
+  margin-bottom: 1rem;
+  line-height: 2;
 }
 
 /* ── safe-html: stilovi za inline HTML u pitanjima i opcijama ───────────── */
@@ -201,7 +374,7 @@ mark.fill-blank-active {
   font-family: ui-monospace, monospace;
 }
 
-/* ── xs breakpoint helper (za mobilni bottom bar) ────────────────────────── */
+/* ── xs breakpoint helper ────────────────────────────────────────────────── */
 @media (min-width: 475px) {
   .xs\:inline {
     display: inline;
