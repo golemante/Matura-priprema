@@ -395,8 +395,8 @@ export function useExamSession(examId) {
   }, [questions, currentIndex, toggleFlag]);
 
   const optionKeyHandlers = useMemo(() => {
-    const letters =
-      current?.options?.map((o) => o.letter).filter(Boolean) ?? [];
+    const q = questions[currentIndex];
+    const letters = q?.options?.map((o) => o.letter).filter(Boolean) ?? [];
 
     return letters.reduce((acc, letter) => {
       acc[letter] = () => {
@@ -404,7 +404,7 @@ export function useExamSession(examId) {
       };
       return acc;
     }, {});
-  }, [current?.options, isPaused, handleAnswer]);
+  }, [questions, currentIndex, isPaused, handleAnswer]);
 
   useKeyPress(
     {
@@ -415,7 +415,7 @@ export function useExamSession(examId) {
       p: () => !submit.isSyncing && submit.handlePause(),
       "?": () =>
         toast.info(
-          "Prečaci: ←→ navigacija · A–D (ili više) odabir · F označi · P pauza",
+          "Prečaci: ←→ navigacija · A–M odabir (ovisno o zadatku) · F označi · P pauza",
         ),
     },
     { ignoreFormElements: true },
