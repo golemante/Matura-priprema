@@ -86,7 +86,6 @@ export function LoginPage() {
         </p>
       </div>
 
-      {/* Social auth (Hick's Law: samo 2 opcije) */}
       <SocialAuthButtons mode="login" />
 
       <AuthDivider />

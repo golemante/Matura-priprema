@@ -66,28 +66,6 @@ export const draftStorage = {
     storage.set(key, { ...existing, attemptId });
   },
 
-  saveAudioState: (examId, passageId, state) => {
-    const key = draftStorage._key(examId);
-    const existing = storage.get(key) ?? {
-      answers: {},
-      attemptId: null,
-      savedAt: Date.now(),
-      expiresAt: Date.now() + DRAFT_TTL_MS,
-    };
-    storage.set(key, {
-      ...existing,
-      audioStates: {
-        ...(existing.audioStates ?? {}),
-        [passageId]: state,
-      },
-    });
-  },
-
-  loadAudioStates: (examId) => {
-    const draft = draftStorage.load(examId);
-    return draft?.audioStates ?? {};
-  },
-
   purgeExpired: () => {
     const now = Date.now();
     const draftPrefix = `${PREFIX}draft_`;
@@ -109,4 +87,32 @@ export const draftStorage = {
       );
     }
   },
+};
+
+export const audioProgressStorage = {
+  _key: (examId) => `audio_${getUserId()}_${examId}`,
+
+  save: (examId, { trackIndex, currentTime }) => {
+    storage.set(audioProgressStorage._key(examId), {
+      trackIndex,
+      currentTime,
+      savedAt: Date.now(),
+      expiresAt: Date.now() + DRAFT_TTL_MS,
+    });
+  },
+
+  load: (examId) => {
+    const data = storage.get(audioProgressStorage._key(examId));
+    if (!data) return null;
+    if (Date.now() > (data.expiresAt ?? 0)) {
+      storage.remove(audioProgressStorage._key(examId));
+      return null;
+    }
+    return {
+      trackIndex: data.trackIndex ?? 0,
+      currentTime: data.currentTime ?? 0,
+    };
+  },
+
+  clear: (examId) => storage.remove(audioProgressStorage._key(examId)),
 };

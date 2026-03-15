@@ -167,7 +167,6 @@ export function RegisterPage() {
         </p>
       </div>
 
-      {/* Social auth */}
       <SocialAuthButtons mode="register" />
 
       <AuthDivider />

@@ -1,6 +1,6 @@
 // pages/ExamTaking.jsx
 import { useParams, Link } from "react-router-dom";
-import { useMemo, useState, useRef, useCallback } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -12,8 +12,8 @@ import {
   Send,
   LayoutGrid,
   X,
-  CheckCircle2,
   Loader2,
+  Headphones,
 } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { Modal, ModalBody, ModalFooter } from "@/components/common/Modal";
@@ -24,7 +24,7 @@ import { QuestionNav } from "@/components/exam/QuestionNav";
 import { ProgressBar } from "@/components/exam/ProgressBar";
 import { ExamTimer } from "@/components/exam/Timer";
 import { useExamSession } from "@/hooks/useExamSession";
-import { draftStorage } from "@/utils/storage";
+import { useListeningAudio } from "@/hooks/useListeningAudio";
 import { EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 import { cn } from "@/utils/utils";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -55,6 +55,165 @@ function parseExamError(error) {
   if (msg.includes("403") || msg.includes("permission"))
     return "Nemate pristup ovom ispitu. Prijavite se.";
   return "Greška pri učitavanju ispita. Pokušajte ponovo.";
+}
+
+function GlobalAudioBar({ audio }) {
+  if (!audio.hasAudio) return null;
+
+  const track = audio.currentTrack;
+  const isIntro = track?.type === "intro";
+  const isDone = audio.isDone;
+  const isError = audio.hasError;
+
+  if (isError) {
+    return (
+      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
+        <AlertCircle size={13} className="flex-shrink-0" />
+        Audio nije dostupan
+      </div>
+    );
+  }
+
+  if (isDone) {
+    return (
+      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-green-50 border border-green-200">
+        <Headphones size={13} className="text-green-500 flex-shrink-0" />
+        <span className="text-xs text-green-700 font-semibold">
+          Sve snimke završene
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border overflow-hidden",
+        isIntro ? "bg-amber-50 border-amber-200" : "bg-sky-50 border-sky-200",
+      )}
+    >
+      {/* Progress traka */}
+      <div className={cn("h-1", isIntro ? "bg-amber-100" : "bg-sky-100")}>
+        <div
+          className={cn(
+            "h-full transition-all duration-500 ease-linear",
+            isIntro ? "bg-amber-400" : "bg-sky-500",
+          )}
+          style={{ width: `${audio.progressPct}%` }}
+        />
+      </div>
+
+      <div className="px-3.5 py-2.5 flex items-center gap-2.5">
+        <Headphones
+          size={13}
+          className={cn(
+            "flex-shrink-0",
+            isIntro ? "text-amber-500" : "text-sky-500",
+          )}
+        />
+
+        {/* Waveform animacija ako svira */}
+        {audio.isPlaying && (
+          <span className="flex gap-px items-end h-3 flex-shrink-0">
+            {[7, 11, 8, 11, 7].map((h, i) => (
+              <span
+                key={i}
+                className="w-0.5 rounded-full"
+                style={{
+                  height: `${h}px`,
+                  background: isIntro ? "#f59e0b" : "#0ea5e9",
+                  animation: `waveform ${0.6 + i * 0.1}s ease-in-out infinite alternate`,
+                }}
+              />
+            ))}
+          </span>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <p
+            className={cn(
+              "text-xs font-semibold truncate",
+              isIntro ? "text-amber-700" : "text-sky-700",
+            )}
+          >
+            {track?.label ?? (isIntro ? "Upute" : "Snimka")}
+          </p>
+        </div>
+
+        {isIntro && (
+          <span className="text-[10px] bg-amber-100 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-md font-medium leading-none flex-shrink-0">
+            pričekaj
+          </span>
+        )}
+
+        {!audio.isPlaying && !isDone && (
+          <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
+            pauzirano
+          </span>
+        )}
+
+        {/* Timestamp */}
+        {audio.duration > 0 && (
+          <span
+            className={cn(
+              "text-[10px] tabular-nums font-medium flex-shrink-0",
+              isIntro ? "text-amber-500" : "text-sky-500",
+            )}
+          >
+            {audio.formattedTime} / {audio.formattedDuration}
+          </span>
+        )}
+
+        {/* Indikator trake: N/ukupno */}
+        <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
+          {audio.trackIndex + 1}/{audio.totalTracks}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PausedOverlay({ onResume, isSyncing }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-x-0 bottom-0 top-14 z-20 flex items-center justify-center bg-warm-100/98 backdrop-blur-md px-4"
+    >
+      <div className="bg-white rounded-2xl border border-warm-200 shadow-card p-10 max-w-sm w-full text-center">
+        <div className="w-16 h-16 bg-warm-100 rounded-full flex items-center justify-center mx-auto mb-5">
+          {isSyncing ? (
+            <Loader2
+              size={28}
+              className="text-warm-400 animate-spin"
+              strokeWidth={1.5}
+            />
+          ) : (
+            <Pause size={28} className="text-warm-400" strokeWidth={1.5} />
+          )}
+        </div>
+        <h2 className="text-xl font-bold text-warm-900 mb-2">
+          {isSyncing ? "Sinkronizacija..." : "Ispit je pauziran"}
+        </h2>
+        <p className="text-warm-500 text-sm mb-6 leading-relaxed">
+          {isSyncing
+            ? "Čekamo potvrdu poslužitelja. Trenutak..."
+            : "Odgovori su sačuvani. Nastavi kad budeš spreman/a."}
+        </p>
+        {!isSyncing && (
+          <button
+            onClick={onResume}
+            className="inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-xl font-semibold text-sm hover:bg-primary-700 active:scale-95 transition-all"
+          >
+            <Play size={14} />
+            Nastavi ispit
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
 }
 
 function BlockedByTabScreen({ backLink }) {
@@ -226,49 +385,6 @@ function ExamEmptyState({ backLink, examMeta }) {
   );
 }
 
-function PausedOverlay({ onResume, isSyncing }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      className="fixed inset-x-0 bottom-0 top-14 z-20 flex items-center justify-center bg-warm-100/98 backdrop-blur-md px-4"
-    >
-      <div className="bg-white rounded-2xl border border-warm-200 shadow-card p-10 max-w-sm w-full text-center">
-        <div className="w-16 h-16 bg-warm-100 rounded-full flex items-center justify-center mx-auto mb-5">
-          {isSyncing ? (
-            <Loader2
-              size={28}
-              className="text-warm-400 animate-spin"
-              strokeWidth={1.5}
-            />
-          ) : (
-            <Pause size={28} className="text-warm-400" strokeWidth={1.5} />
-          )}
-        </div>
-        <h2 className="text-xl font-bold text-warm-900 mb-2">
-          {isSyncing ? "Sinkronizacija..." : "Ispit je pauziran"}
-        </h2>
-        <p className="text-warm-500 text-sm mb-6 leading-relaxed">
-          {isSyncing
-            ? "Čekamo potvrdu poslužitelja. Trenutak..."
-            : "Odgovori su sačuvani. Nastavi kad budeš spreman/a."}
-        </p>
-        {!isSyncing && (
-          <button
-            onClick={onResume}
-            className="inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-xl font-semibold text-sm hover:bg-primary-700 active:scale-95 transition-all"
-          >
-            <Play size={14} />
-            Nastavi ispit
-          </button>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
 function SubmitModal({
   open,
   onClose,
@@ -280,7 +396,6 @@ function SubmitModal({
 }) {
   const unanswered = totalVisible - answeredCount;
   const allAnswered = unanswered === 0;
-
   return (
     <Modal
       open={open}
@@ -460,6 +575,7 @@ function MobileBottomBar({
   onNext,
   onOpenNav,
   answeredCount,
+  onSubmit,
 }) {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-20 lg:hidden bg-white/95 backdrop-blur-sm border-t border-warm-200 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
@@ -493,7 +609,7 @@ function MobileBottomBar({
 
         {isLast ? (
           <button
-            onClick={() => {}}
+            onClick={onSubmit}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 active:scale-95 transition-all flex-shrink-0"
           >
             <Send size={14} />
@@ -559,17 +675,40 @@ export function QuizPage() {
 
   usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
 
-  const audioStatesRef = useRef(null);
-  if (!audioStatesRef.current) {
-    audioStatesRef.current = draftStorage.loadAudioStates(examId) ?? {};
-  }
+  const orderedAudioPassages = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (const q of questions) {
+      if (q.passageId && !seen.has(q.passageId)) {
+        const p = passages[q.passageId];
+        if (p && (p.audioUrl || p.audioIntroUrl)) {
+          result.push(p);
+          seen.add(q.passageId);
+        }
+      }
+    }
+    return result;
+  }, [questions, passages]);
 
-  const handleAudioStateChange = useCallback(
-    (passageId, state) => {
-      audioStatesRef.current[passageId] = state;
-      draftStorage.saveAudioState(examId, passageId, state);
-    },
-    [examId],
+  const audio = useListeningAudio(examId, orderedAudioPassages, isPaused);
+
+  useEffect(() => {
+    if (isSubmitting) {
+      audio.saveProgress();
+    }
+  }, [isSubmitting, audio]);
+
+  const audioStatus = useMemo(
+    () =>
+      audio.hasAudio
+        ? {
+            activePassageId: audio.activePassageId,
+            isPlaying: audio.isPlaying,
+            currentTrack: audio.currentTrack,
+            isDone: audio.isDone,
+          }
+        : null,
+    [audio],
   );
 
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
@@ -592,7 +731,6 @@ export function QuizPage() {
   if (isLoading || !isInitialized) return <ExamSkeleton showPassage={false} />;
   if (questions.length === 0)
     return <ExamEmptyState backLink={backLink} examMeta={examMeta} />;
-
   if (!current)
     return (
       <ExamErrorState
@@ -601,11 +739,16 @@ export function QuizPage() {
       />
     );
 
-  const isLastQuestion = isLastVisible;
-
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
-      {/* ── Sticky top bar (z-30) ─────────────────────────────────────────── */}
+      {audio.hasAudio && (
+        <audio
+          ref={audio.audioRef}
+          preload="auto"
+          style={{ display: "none" }}
+        />
+      )}
+
       <ExamTopBar
         backLink={backLink}
         examTitle={buildExamTitle(examMeta)}
@@ -636,7 +779,6 @@ export function QuizPage() {
         onConfirm={confirmRestoreDraft}
         onDiscard={discardDraft}
       />
-
       <MobileNavDrawer
         show={mobileNavOpen}
         onClose={() => setMobileNavOpen(false)}
@@ -659,8 +801,12 @@ export function QuizPage() {
                 "lg:w-[42%] xl:w-[38%] flex-shrink-0",
                 "lg:sticky lg:top-[4.5rem] lg:self-start",
                 "lg:max-h-[calc(100dvh-5.5rem)]",
+                "flex flex-col gap-3",
               )}
             >
+              {/* Globalni audio status — uvijek vidljiv iznad passage teksta */}
+              <GlobalAudioBar audio={audio} />
+
               {currentPassage ? (
                 <PassageDisplay
                   passage={currentPassage}
@@ -675,13 +821,8 @@ export function QuizPage() {
                       : null
                   }
                   isPaused={isPaused}
-                  initialAudioState={
-                    currentPassage?.id
-                      ? (audioStatesRef.current[currentPassage.id] ?? null)
-                      : null
-                  }
-                  onAudioStateChange={handleAudioStateChange}
-                  className="lg:h-full"
+                  audioStatus={audioStatus}
+                  className="lg:flex-1 lg:overflow-hidden"
                 />
               ) : (
                 <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 min-h-[180px]">
@@ -693,6 +834,7 @@ export function QuizPage() {
             </div>
           )}
 
+          {/* ── Desna kolona: pitanje ─────────────────────────────────────── */}
           <div className="flex-1 min-w-0 flex flex-col gap-4">
             <AnimatePresence custom={direction} mode="wait">
               <motion.div
@@ -727,9 +869,8 @@ export function QuizPage() {
               >
                 Prethodno
               </Button>
-
               <div className="flex items-center gap-2.5">
-                {isLastQuestion ? (
+                {isLastVisible ? (
                   <Button
                     variant="primary"
                     leftIcon={isSubmitting ? undefined : Send}
@@ -752,7 +893,7 @@ export function QuizPage() {
             </div>
           </div>
 
-          {/* ── Nav sidebar (desno, samo desktop) ──────────────────────────── */}
+          {/* ── Nav sidebar (samo desktop) ──────────────────────────────────── */}
           <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
             <QuestionNav
               questions={questions}
@@ -767,7 +908,7 @@ export function QuizPage() {
         </div>
       </div>
 
-      {/* ── Mobile bottom bar (skrivena za pauze) ─────────────────────────── */}
+      {/* Mobile bottom bar */}
       {!isPaused && (
         <MobileBottomBar
           currentIndex={currentIndex}
@@ -778,6 +919,7 @@ export function QuizPage() {
           onNext={handleNext}
           onOpenNav={() => setMobileNavOpen(true)}
           answeredCount={answeredCount}
+          onSubmit={() => setShowSubmitModal(true)}
         />
       )}
 
