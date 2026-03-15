@@ -55,10 +55,11 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const [duration, setDuration] = useState(0);
   const [hasError, setHasError] = useState(false);
   const [isDone, setIsDone] = useState(false);
-
   const [hasStarted, setHasStarted] = useState(false);
 
   const audioRef = useRef(null);
+
+  const currentTimeRef = useRef(savedProgressRef.current?.currentTime ?? 0);
 
   const trackIndexRef = useRef(savedProgressRef.current?.trackIndex ?? 0);
   const isPausedRef = useRef(isPaused);
@@ -92,11 +93,10 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const saveProgressRef = useRef(null);
   saveProgressRef.current = () => {
     const eid = examIdRef.current;
-    if (!eid || !hasAudioRef.current) return;
-    const audio = audioRef.current;
+    if (!eid || !hasAudioRef.current || !audioInitializedRef.current) return;
     audioProgressStorage.save(eid, {
       trackIndex: trackIndexRef.current,
-      currentTime: audio?.currentTime ?? 0,
+      currentTime: currentTimeRef.current,
     });
   };
 
@@ -113,6 +113,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     const audio = audioRef.current;
     const track = queueRef.current[index];
     if (!audio || !track) return;
+
+    currentTimeRef.current = startTime;
 
     audioProgressStorage.save(examIdRef.current, {
       trackIndex: index,
@@ -189,10 +191,6 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   useEffect(() => {
     return () => {
       if (!audioInitializedRef.current) return;
-      const audio = audioRef.current;
-      if (audio && !audio.paused) {
-        audio.pause();
-      }
       saveProgressRef.current?.();
     };
   }, []);
@@ -206,7 +204,10 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
       setHasStarted(true);
     };
     const onPause = () => setIsPlaying(false);
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onTimeUpdate = () => {
+      currentTimeRef.current = audio.currentTime;
+      setCurrentTime(audio.currentTime);
+    };
     const onLoadedMetadata = () => setDuration(audio.duration);
     const onError = () => {
       console.error(
