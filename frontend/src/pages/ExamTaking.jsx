@@ -771,13 +771,11 @@ export function QuizPage() {
 
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
-      {audio.hasAudio && (
-        <audio
-          ref={audio.audioRef}
-          preload={audio.hasAudio ? "auto" : "none"}
-          style={{ display: "none" }}
-        />
-      )}
+      <audio
+        ref={audio.audioRef}
+        preload={audio.hasAudio ? "auto" : "none"}
+        style={{ display: "none" }}
+      />
 
       <ExamTopBar
         backLink={backLink}

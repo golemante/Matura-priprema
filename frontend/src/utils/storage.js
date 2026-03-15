@@ -48,9 +48,7 @@ export const draftStorage = {
     const expiresAt = draft.expiresAt ?? 0;
     if (Date.now() > expiresAt) {
       storage.remove(draftStorage._key(examId));
-      console.info(
-        `[draftStorage] Draft za examId="${examId}" je istekao i obrisan.`,
-      );
+      console.info(`[draftStorage] Draft za examId="${examId}" je istekao.`);
       return null;
     }
     return draft;
@@ -79,7 +77,7 @@ export const draftStorage = {
     expired.forEach((k) => localStorage.removeItem(k));
     if (expired.length > 0) {
       console.info(
-        `[draftStorage] Obrisano ${expired.length} isteklih/zastarjelih draft(ova).`,
+        `[draftStorage] Obrisano ${expired.length} isteklih draft(ova).`,
       );
     }
   },
@@ -88,9 +86,13 @@ export const draftStorage = {
 export const audioProgressStorage = {
   _key: (examId) => `audio_${getUserId()}_${examId}`,
 
-  save: (examId, { trackIndex, currentTime, isDone = false }) => {
+  save: (
+    examId,
+    { trackIndex, trackUrl = null, currentTime, isDone = false },
+  ) => {
     storage.set(audioProgressStorage._key(examId), {
       trackIndex,
+      trackUrl,
       currentTime,
       isDone,
       savedAt: Date.now(),
@@ -107,6 +109,7 @@ export const audioProgressStorage = {
     }
     return {
       trackIndex: data.trackIndex ?? 0,
+      trackUrl: data.trackUrl ?? null,
       currentTime: data.currentTime ?? 0,
       isDone: data.isDone ?? false,
     };

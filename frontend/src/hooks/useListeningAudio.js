@@ -38,39 +38,35 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const hasAudio = queue.length > 0;
 
   const savedProgressRef = useRef(null);
-  if (!savedProgressRef.current && examId) {
+  if (savedProgressRef.current === null && examId) {
     savedProgressRef.current = audioProgressStorage.load(examId) ?? {
       trackIndex: 0,
+      trackUrl: null,
       currentTime: 0,
       isDone: false,
     };
   }
 
-  const [trackIndex, setTrackIndex] = useState(
-    savedProgressRef.current?.trackIndex ?? 0,
-  );
+  const saved = savedProgressRef.current;
+
+  const [trackIndex, setTrackIndex] = useState(saved?.trackIndex ?? 0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(
-    savedProgressRef.current?.currentTime ?? 0,
-  );
+  const [currentTime, setCurrentTime] = useState(saved?.currentTime ?? 0);
   const [duration, setDuration] = useState(0);
   const [hasError, setHasError] = useState(false);
-  const [isDone, setIsDone] = useState(
-    savedProgressRef.current?.isDone ?? false,
-  );
+  const [isDone, setIsDone] = useState(saved?.isDone ?? false);
   const [hasStarted, setHasStarted] = useState(false);
   const [hasBlockedAutoplay, setHasBlockedAutoplay] = useState(false);
 
   const audioRef = useRef(null);
-  const currentTimeRef = useRef(savedProgressRef.current?.currentTime ?? 0);
-  const trackIndexRef = useRef(savedProgressRef.current?.trackIndex ?? 0);
+  const currentTimeRef = useRef(saved?.currentTime ?? 0);
+  const trackIndexRef = useRef(saved?.trackIndex ?? 0);
   const isPausedRef = useRef(isPaused);
   const queueRef = useRef(queue);
-  const isDoneRef = useRef(savedProgressRef.current?.isDone ?? false);
+  const isDoneRef = useRef(saved?.isDone ?? false);
   const hasAudioRef = useRef(hasAudio);
   const examIdRef = useRef(examId);
-  const initDoneRef = useRef(false);
-  const audioInitializedRef = useRef(false);
+  const initDoneRef = useRef(null);
   const pendingLoadedMetadataRef = useRef(null);
 
   useEffect(() => {
@@ -95,17 +91,18 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const saveProgressRef = useRef(null);
   saveProgressRef.current = () => {
     const eid = examIdRef.current;
-    if (!eid || !hasAudioRef.current || !audioInitializedRef.current) return;
+    if (!eid || !hasAudioRef.current) return;
+    const q = queueRef.current;
+    const idx = trackIndexRef.current;
     audioProgressStorage.save(eid, {
-      trackIndex: trackIndexRef.current,
+      trackIndex: idx,
+      trackUrl: q[idx]?.url ?? null,
       currentTime: currentTimeRef.current,
       isDone: isDoneRef.current,
     });
   };
 
-  const saveProgress = useCallback(() => {
-    saveProgressRef.current?.();
-  }, []);
+  const saveProgress = useCallback(() => saveProgressRef.current?.(), []);
 
   const clearProgress = useCallback(() => {
     const eid = examIdRef.current;
@@ -115,7 +112,15 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const playTrackAtIndex = useCallback((index, startTime = 0) => {
     const audio = audioRef.current;
     const track = queueRef.current[index];
-    if (!audio || !track) return;
+    if (!audio || !track) {
+      console.warn(
+        `[useListeningAudio] playTrackAtIndex(${index}) bail:`,
+        !audio
+          ? "no audio element"
+          : `no track at ${index} (queue size ${queueRef.current.length})`,
+      );
+      return;
+    }
 
     if (pendingLoadedMetadataRef.current) {
       audio.removeEventListener(
@@ -126,8 +131,10 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     }
 
     currentTimeRef.current = startTime;
+
     audioProgressStorage.save(examIdRef.current, {
       trackIndex: index,
+      trackUrl: track.url,
       currentTime: startTime,
       isDone: false,
     });
@@ -141,7 +148,6 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     audio.src = track.url;
     audio.load();
-    audioInitializedRef.current = true;
 
     const doPlay = () => {
       pendingLoadedMetadataRef.current = null;
@@ -160,7 +166,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
       pendingLoadedMetadataRef.current = doPlay;
       audio.addEventListener("loadedmetadata", doPlay, { once: true });
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const manualStart = useCallback(() => {
     const audio = audioRef.current;
@@ -179,12 +185,13 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   }, [playTrackAtIndex]);
 
   useEffect(() => {
-    if (!hasAudio || initDoneRef.current) return;
-    initDoneRef.current = true;
+    if (!hasAudio) return;
+    if (initDoneRef.current === examId) return;
+    initDoneRef.current = examId;
 
-    const saved = savedProgressRef.current;
+    const s = savedProgressRef.current;
 
-    if (saved?.isDone) {
+    if (s?.isDone) {
       isDoneRef.current = true;
       setIsDone(true);
       console.info(
@@ -193,16 +200,22 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
       return;
     }
 
-    const startIndex = Math.min(saved?.trackIndex ?? 0, queue.length - 1);
-    const startTime = saved?.currentTime ?? 0;
+    let startIndex = 0;
+    if (s?.trackUrl) {
+      const byUrl = queue.findIndex((t) => t.url === s.trackUrl);
+      startIndex =
+        byUrl !== -1 ? byUrl : Math.min(s?.trackIndex ?? 0, queue.length - 1);
+    } else {
+      startIndex = Math.min(s?.trackIndex ?? 0, queue.length - 1);
+    }
+    const startTime = s?.currentTime ?? 0;
 
-    const id = setTimeout(() => {
-      playTrackAtIndex(startIndex, startTime);
-    }, 350);
+    console.info(
+      `[useListeningAudio] Init: track ${startIndex}/${queue.length - 1} @ ${startTime.toFixed(1)}s`,
+    );
 
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasAudio]);
+    playTrackAtIndex(startIndex, startTime);
+  }, [hasAudio, examId, queue, playTrackAtIndex]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -210,13 +223,12 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     if (isPaused) {
       audio.pause();
-      if (audioInitializedRef.current) {
-        saveProgressRef.current?.();
-      }
+      saveProgressRef.current?.();
     } else {
       if (
         hasAudioRef.current &&
         !isDoneRef.current &&
+        !hasError &&
         audio.src &&
         audio.src !== window.location.href &&
         audio.paused &&
@@ -230,14 +242,22 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
   useEffect(() => {
     return () => {
-      if (!audioInitializedRef.current) return;
+      const audio = audioRef.current;
+      if (audio && !audio.paused) {
+        audio.pause();
+      }
       saveProgressRef.current?.();
     };
   }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio) {
+      console.error(
+        "[useListeningAudio] audioRef.current je null pri registraciji listenera!",
+      );
+      return;
+    }
 
     const onPlay = () => {
       setIsPlaying(true);
@@ -259,24 +279,34 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     const onLoadedMetadata = () => setDuration(audio.duration);
 
     const onError = () => {
-      console.error(
-        "[useListeningAudio] Audio greška na traci:",
-        queueRef.current[trackIndexRef.current]?.url,
-      );
+      const url = queueRef.current[trackIndexRef.current]?.url;
+      console.error("[useListeningAudio] Audio greška na traci:", url);
       setHasError(true);
       setIsPlaying(false);
     };
 
     const onEnded = () => {
       setIsPlaying(false);
+
+      const q = queueRef.current;
+
+      if (q.length === 0) {
+        console.warn(
+          "[useListeningAudio] onEnded s praznim queue-om — ignoriram.",
+        );
+        return;
+      }
+
       const nextIndex = trackIndexRef.current + 1;
-      if (nextIndex < queueRef.current.length) {
+
+      if (nextIndex < q.length) {
         playTrackAtIndex(nextIndex, 0);
       } else {
         isDoneRef.current = true;
         setIsDone(true);
         audioProgressStorage.save(examIdRef.current, {
           trackIndex: trackIndexRef.current,
+          trackUrl: q[trackIndexRef.current]?.url ?? null,
           currentTime: currentTimeRef.current,
           isDone: true,
         });
@@ -299,23 +329,18 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
       audio.removeEventListener("error", onError);
       audio.removeEventListener("ended", onEnded);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasAudio, playTrackAtIndex]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!hasAudio) return;
-    const id = setInterval(() => {
-      if (audioInitializedRef.current) saveProgressRef.current?.();
-    }, 3000);
+    const id = setInterval(() => saveProgressRef.current?.(), 1000);
     return () => clearInterval(id);
   }, [hasAudio]);
 
   useEffect(() => {
     if (!hasAudio) return;
     const handler = () => {
-      if (document.hidden && audioInitializedRef.current) {
-        saveProgressRef.current?.();
-      }
+      if (document.hidden) saveProgressRef.current?.();
     };
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
@@ -323,9 +348,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
   useEffect(() => {
     if (!hasAudio) return;
-    const handler = () => {
-      if (audioInitializedRef.current) saveProgressRef.current?.();
-    };
+    const handler = () => saveProgressRef.current?.();
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasAudio]);
