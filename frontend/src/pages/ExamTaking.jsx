@@ -1,6 +1,6 @@
 // pages/ExamTaking.jsx
 import { useParams, Link } from "react-router-dom";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -57,15 +57,15 @@ function parseExamError(error) {
   return "Greška pri učitavanju ispita. Pokušajte ponovo.";
 }
 
+// ─── GlobalAudioBar ───────────────────────────────────────────────────────────
 function GlobalAudioBar({ audio }) {
   if (!audio.hasAudio) return null;
 
   const track = audio.currentTrack;
   const isIntro = track?.type === "intro";
   const isDone = audio.isDone;
-  const isError = audio.hasError;
 
-  if (isError) {
+  if (audio.hasError) {
     return (
       <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
         <AlertCircle size={13} className="flex-shrink-0" />
@@ -92,7 +92,6 @@ function GlobalAudioBar({ audio }) {
         isIntro ? "bg-amber-50 border-amber-200" : "bg-sky-50 border-sky-200",
       )}
     >
-      {/* Progress traka */}
       <div className={cn("h-1", isIntro ? "bg-amber-100" : "bg-sky-100")}>
         <div
           className={cn(
@@ -102,7 +101,6 @@ function GlobalAudioBar({ audio }) {
           style={{ width: `${audio.progressPct}%` }}
         />
       </div>
-
       <div className="px-3.5 py-2.5 flex items-center gap-2.5">
         <Headphones
           size={13}
@@ -111,8 +109,6 @@ function GlobalAudioBar({ audio }) {
             isIntro ? "text-amber-500" : "text-sky-500",
           )}
         />
-
-        {/* Waveform animacija ako svira */}
         {audio.isPlaying && (
           <span className="flex gap-px items-end h-3 flex-shrink-0">
             {[7, 11, 8, 11, 7].map((h, i) => (
@@ -128,7 +124,6 @@ function GlobalAudioBar({ audio }) {
             ))}
           </span>
         )}
-
         <div className="flex-1 min-w-0">
           <p
             className={cn(
@@ -139,20 +134,16 @@ function GlobalAudioBar({ audio }) {
             {track?.label ?? (isIntro ? "Upute" : "Snimka")}
           </p>
         </div>
-
         {isIntro && (
           <span className="text-[10px] bg-amber-100 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-md font-medium leading-none flex-shrink-0">
             pričekaj
           </span>
         )}
-
         {!audio.isPlaying && !isDone && (
           <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
             pauzirano
           </span>
         )}
-
-        {/* Timestamp */}
         {audio.duration > 0 && (
           <span
             className={cn(
@@ -163,8 +154,6 @@ function GlobalAudioBar({ audio }) {
             {audio.formattedTime} / {audio.formattedDuration}
           </span>
         )}
-
-        {/* Indikator trake: N/ukupno */}
         <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
           {audio.trackIndex + 1}/{audio.totalTracks}
         </span>
@@ -173,6 +162,7 @@ function GlobalAudioBar({ audio }) {
   );
 }
 
+// ─── PausedOverlay ────────────────────────────────────────────────────────────
 function PausedOverlay({ onResume, isSyncing }) {
   return (
     <motion.div
@@ -665,7 +655,7 @@ export function QuizPage() {
     handlePrev,
     isLastVisible,
     hasPrev,
-    handleSubmit,
+    handleSubmit: sessionHandleSubmit,
     handlePause,
     handleResume,
     timer,
@@ -675,6 +665,7 @@ export function QuizPage() {
 
   usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
 
+  // ── Globalni audio za ispit slušanja ──────────────────────────────────────
   const orderedAudioPassages = useMemo(() => {
     const seen = new Set();
     const result = [];
@@ -692,12 +683,12 @@ export function QuizPage() {
 
   const audio = useListeningAudio(examId, orderedAudioPassages, isPaused);
 
-  useEffect(() => {
-    if (isSubmitting) {
-      audio.saveProgress();
-    }
-  }, [isSubmitting, audio]);
+  const handleSubmit = useCallback(() => {
+    audio.clearProgress();
+    sessionHandleSubmit();
+  }, [audio, sessionHandleSubmit]);
 
+  // audioStatus za PassageDisplay (samo read-only)
   const audioStatus = useMemo(
     () =>
       audio.hasAudio
@@ -741,6 +732,7 @@ export function QuizPage() {
 
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
+      {/* Jedan <audio> element za cijeli ispit — mountan jednom, ne remountira */}
       {audio.hasAudio && (
         <audio
           ref={audio.audioRef}
@@ -795,6 +787,7 @@ export function QuizPage() {
 
       <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
         <div className="flex flex-col lg:flex-row gap-5 h-full">
+          {/* ── Lijeva kolona: GlobalAudioBar + passage ──────────────────── */}
           {hasAnyPassage && (
             <div
               className={cn(
@@ -804,7 +797,6 @@ export function QuizPage() {
                 "flex flex-col gap-3",
               )}
             >
-              {/* Globalni audio status — uvijek vidljiv iznad passage teksta */}
               <GlobalAudioBar audio={audio} />
 
               {currentPassage ? (
@@ -859,7 +851,6 @@ export function QuizPage() {
               </motion.div>
             </AnimatePresence>
 
-            {/* Desktop navigacijski buttoni */}
             <div className="hidden lg:flex items-center justify-between gap-3 mt-auto pt-1">
               <Button
                 variant="secondary"
@@ -893,7 +884,7 @@ export function QuizPage() {
             </div>
           </div>
 
-          {/* ── Nav sidebar (samo desktop) ──────────────────────────────────── */}
+          {/* ── Nav sidebar (samo desktop) ──────────────────────────────── */}
           <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
             <QuestionNav
               questions={questions}
@@ -908,7 +899,6 @@ export function QuizPage() {
         </div>
       </div>
 
-      {/* Mobile bottom bar */}
       {!isPaused && (
         <MobileBottomBar
           currentIndex={currentIndex}

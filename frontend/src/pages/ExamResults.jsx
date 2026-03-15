@@ -1,4 +1,12 @@
 // pages/ExamResults.jsx
+//
+// PROMJENE u odnosu na prethodnu verziju:
+//   - Import audioProgressStorage
+//   - handleRetry: dodano audioProgressStorage.clear(examId)
+//   - handleNewExam: dodano audioProgressStorage.clear(examId)
+//
+// Sve ostalo je nepromijenjeno.
+
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -16,7 +24,7 @@ import { SUBJECTS } from "@/utils/constants";
 import { useExamStore } from "@/store/examStore";
 import { examApi } from "@/api/examApi";
 import { attemptApi } from "@/api/attemptApi";
-import { draftStorage } from "@/utils/storage";
+import { draftStorage, audioProgressStorage } from "@/utils/storage";
 import { ScoreHero } from "@/components/results/ScoreHero";
 import { SectionReview } from "@/components/results/SectionReview";
 import { FilterTabs } from "@/components/results/FilterTabs";
@@ -271,10 +279,12 @@ export function ResultsPage() {
     if (!examId) return;
     resetExam();
     draftStorage.clear(examId);
+    audioProgressStorage.clear(examId);
     navigate(`/ispit/${examId}`);
   };
 
   const handleNewExam = () => {
+    if (examId) audioProgressStorage.clear(examId);
     resetExam();
     navigate("/predmeti/" + (subject?.id ?? subjectId));
   };
