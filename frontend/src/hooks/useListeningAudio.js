@@ -56,6 +56,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const [hasError, setHasError] = useState(false);
   const [isDone, setIsDone] = useState(false);
 
+  const [hasStarted, setHasStarted] = useState(false);
+
   const audioRef = useRef(null);
 
   const trackIndexRef = useRef(savedProgressRef.current?.trackIndex ?? 0);
@@ -65,6 +67,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const hasAudioRef = useRef(hasAudio);
   const examIdRef = useRef(examId);
   const initDoneRef = useRef(false);
+
+  const audioInitializedRef = useRef(false);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -124,6 +128,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     audio.src = track.url;
     audio.load();
+    audioInitializedRef.current = true;
 
     const doPlay = () => {
       audio.currentTime = startTime;
@@ -163,13 +168,15 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     if (isPaused) {
       audio.pause();
-      saveProgressRef.current?.();
+      if (audioInitializedRef.current) {
+        saveProgressRef.current?.();
+      }
     } else {
       if (
         hasAudioRef.current &&
         !isDoneRef.current &&
         audio.src &&
-        audio.src !== window.location.href && // nije prazan src
+        audio.src !== window.location.href &&
         audio.paused &&
         !audio.ended
       ) {
@@ -181,6 +188,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
   useEffect(() => {
     return () => {
+      if (!audioInitializedRef.current) return;
       const audio = audioRef.current;
       if (audio && !audio.paused) {
         audio.pause();
@@ -193,7 +201,10 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const onPlay = () => setIsPlaying(true);
+    const onPlay = () => {
+      setIsPlaying(true);
+      setHasStarted(true);
+    };
     const onPause = () => setIsPlaying(false);
     const onTimeUpdate = () => setCurrentTime(audio.currentTime);
     const onLoadedMetadata = () => setDuration(audio.duration);
@@ -238,14 +249,18 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
   useEffect(() => {
     if (!hasAudio) return;
-    const id = setInterval(() => saveProgressRef.current?.(), 3000);
+    const id = setInterval(() => {
+      if (audioInitializedRef.current) saveProgressRef.current?.();
+    }, 3000);
     return () => clearInterval(id);
   }, [hasAudio]);
 
   useEffect(() => {
     if (!hasAudio) return;
     const handler = () => {
-      if (document.hidden) saveProgressRef.current?.();
+      if (document.hidden && audioInitializedRef.current) {
+        saveProgressRef.current?.();
+      }
     };
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
@@ -253,7 +268,9 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
   useEffect(() => {
     if (!hasAudio) return;
-    const handler = () => saveProgressRef.current?.();
+    const handler = () => {
+      if (audioInitializedRef.current) saveProgressRef.current?.();
+    };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasAudio]);
@@ -274,6 +291,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     activePassageId: currentTrack?.passageId ?? null,
 
     isPlaying,
+    hasStarted,
     isDone,
     hasError,
     currentTime,

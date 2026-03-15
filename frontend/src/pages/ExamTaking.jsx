@@ -63,7 +63,7 @@ function GlobalAudioBar({ audio }) {
 
   const track = audio.currentTrack;
   const isIntro = track?.type === "intro";
-  const isDone = audio.isDone;
+  const { isDone, isPlaying, hasStarted } = audio;
 
   if (audio.hasError) {
     return (
@@ -109,7 +109,8 @@ function GlobalAudioBar({ audio }) {
             isIntro ? "text-amber-500" : "text-sky-500",
           )}
         />
-        {audio.isPlaying && (
+
+        {isPlaying && (
           <span className="flex gap-px items-end h-3 flex-shrink-0">
             {[7, 11, 8, 11, 7].map((h, i) => (
               <span
@@ -124,6 +125,7 @@ function GlobalAudioBar({ audio }) {
             ))}
           </span>
         )}
+
         <div className="flex-1 min-w-0">
           <p
             className={cn(
@@ -134,16 +136,19 @@ function GlobalAudioBar({ audio }) {
             {track?.label ?? (isIntro ? "Upute" : "Snimka")}
           </p>
         </div>
+
         {isIntro && (
           <span className="text-[10px] bg-amber-100 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-md font-medium leading-none flex-shrink-0">
             pričekaj
           </span>
         )}
-        {!audio.isPlaying && !isDone && (
+
+        {hasStarted && !isPlaying && !isDone && (
           <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
             pauzirano
           </span>
         )}
+
         {audio.duration > 0 && (
           <span
             className={cn(
@@ -154,6 +159,7 @@ function GlobalAudioBar({ audio }) {
             {audio.formattedTime} / {audio.formattedDuration}
           </span>
         )}
+
         <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
           {audio.trackIndex + 1}/{audio.totalTracks}
         </span>
