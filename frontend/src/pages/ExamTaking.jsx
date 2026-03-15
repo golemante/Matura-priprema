@@ -63,7 +63,8 @@ function GlobalAudioBar({ audio }) {
 
   const track = audio.currentTrack;
   const isIntro = track?.type === "intro";
-  const { isDone, isPlaying, hasStarted } = audio;
+  const { isDone, isPlaying, hasStarted, hasBlockedAutoplay, manualStart } =
+    audio;
 
   if (audio.hasError) {
     return (
@@ -81,6 +82,35 @@ function GlobalAudioBar({ audio }) {
         <span className="text-xs text-green-700 font-semibold">
           Sve snimke završene
         </span>
+      </div>
+    );
+  }
+
+  if (hasBlockedAutoplay && !isPlaying) {
+    return (
+      <div className="rounded-xl border border-sky-200 bg-sky-50 overflow-hidden">
+        <div className="px-3.5 py-2.5 flex items-center gap-2.5">
+          <Headphones size={13} className="text-sky-500 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-sky-700 truncate">
+              {track?.label ?? "Audio snimka"}
+            </p>
+            <p className="text-[10px] text-sky-400">
+              Klikni za pokretanje audia
+            </p>
+          </div>
+          <button
+            onClick={manualStart}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold",
+              "bg-sky-600 hover:bg-sky-700 text-white",
+              "transition-colors active:scale-95",
+            )}
+          >
+            <Play size={11} />
+            Pokreni
+          </button>
+        </div>
       </div>
     );
   }
@@ -143,7 +173,7 @@ function GlobalAudioBar({ audio }) {
           </span>
         )}
 
-        {hasStarted && !isPlaying && !isDone && (
+        {hasStarted && !isPlaying && !isDone && !hasBlockedAutoplay && (
           <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
             pauzirano
           </span>
@@ -690,6 +720,9 @@ export function QuizPage() {
   const audio = useListeningAudio(examId, orderedAudioPassages, isPaused);
 
   const handleSubmit = useCallback(() => {
+    if (audio.audioRef.current) {
+      audio.audioRef.current.pause();
+    }
     audio.clearProgress();
     sessionHandleSubmit();
   }, [audio, sessionHandleSubmit]);

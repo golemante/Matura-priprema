@@ -56,11 +56,10 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const [hasError, setHasError] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [hasBlockedAutoplay, setHasBlockedAutoplay] = useState(false);
 
   const audioRef = useRef(null);
-
   const currentTimeRef = useRef(savedProgressRef.current?.currentTime ?? 0);
-
   const trackIndexRef = useRef(savedProgressRef.current?.trackIndex ?? 0);
   const isPausedRef = useRef(isPaused);
   const queueRef = useRef(queue);
@@ -68,8 +67,9 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const hasAudioRef = useRef(hasAudio);
   const examIdRef = useRef(examId);
   const initDoneRef = useRef(false);
-
   const audioInitializedRef = useRef(false);
+
+  const pendingLoadedMetadataRef = useRef(null);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -114,6 +114,14 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     const track = queueRef.current[index];
     if (!audio || !track) return;
 
+    if (pendingLoadedMetadataRef.current) {
+      audio.removeEventListener(
+        "loadedmetadata",
+        pendingLoadedMetadataRef.current,
+      );
+      pendingLoadedMetadataRef.current = null;
+    }
+
     currentTimeRef.current = startTime;
 
     audioProgressStorage.save(examIdRef.current, {
@@ -133,10 +141,12 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     audioInitializedRef.current = true;
 
     const doPlay = () => {
+      pendingLoadedMetadataRef.current = null;
       audio.currentTime = startTime;
       if (!isPausedRef.current) {
         audio.play().catch((err) => {
           console.warn("[useListeningAudio] Autoplay blokiran:", err.message);
+          setHasBlockedAutoplay(true);
         });
       }
     };
@@ -144,9 +154,28 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     if (audio.readyState >= 1) {
       doPlay();
     } else {
+      pendingLoadedMetadataRef.current = doPlay;
       audio.addEventListener("loadedmetadata", doPlay, { once: true });
     }
   }, []);
+
+  const manualStart = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || isDoneRef.current) return;
+
+    setHasBlockedAutoplay(false);
+
+    if (
+      audio.src &&
+      audio.src !== window.location.href &&
+      !audio.ended &&
+      audio.paused
+    ) {
+      audio.play().catch(() => setHasBlockedAutoplay(true));
+    } else {
+      playTrackAtIndex(trackIndexRef.current, currentTimeRef.current);
+    }
+  }, [playTrackAtIndex]);
 
   useEffect(() => {
     if (!hasAudio || initDoneRef.current) return;
@@ -164,6 +193,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasAudio]);
 
+  // Pauziranje/nastavak ispita → pauziranje/nastavak audia
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -182,7 +212,11 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
         audio.paused &&
         !audio.ended
       ) {
-        audio.play().catch(() => {});
+        audio.play().catch(() => {
+          // Na resume (korisnik kliknuo) autoplay gotovo sigurno prolazi,
+          // ali ako ne — postavi blocked stanje
+          setHasBlockedAutoplay(true);
+        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -202,11 +236,16 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     const onPlay = () => {
       setIsPlaying(true);
       setHasStarted(true);
+      setHasBlockedAutoplay(false);
     };
     const onPause = () => setIsPlaying(false);
     const onTimeUpdate = () => {
       currentTimeRef.current = audio.currentTime;
-      setCurrentTime(audio.currentTime);
+      const nowSec = Math.floor(audio.currentTime);
+      if (nowSec !== Math.floor(currentTimeRef._lastSec ?? -1)) {
+        currentTimeRef._lastSec = nowSec;
+        setCurrentTime(audio.currentTime);
+      }
     };
     const onLoadedMetadata = () => setDuration(audio.duration);
     const onError = () => {
@@ -295,6 +334,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     hasStarted,
     isDone,
     hasError,
+    hasBlockedAutoplay,
+    manualStart,
     currentTime,
     duration,
     progressPct,
