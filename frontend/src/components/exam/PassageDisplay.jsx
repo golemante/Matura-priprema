@@ -64,9 +64,11 @@ export function SequentialAudioPlayer({
   contentUrl,
   maxPlays = 2,
   isPaused = false,
+  initialState = null,
+  onStateChange = null,
 }) {
-  const [phase, setPhase] = useState("pending");
-  const [playsUsed, setPlaysUsed] = useState(0);
+  const [phase, setPhase] = useState(initialState?.phase ?? "pending");
+  const [playsUsed, setPlaysUsed] = useState(initialState?.playsUsed ?? 0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [introTime, setIntroTime] = useState(0);
   const [introDuration, setIntroDuration] = useState(0);
@@ -76,13 +78,20 @@ export function SequentialAudioPlayer({
 
   const introRef = useRef(null);
   const contentRef = useRef(null);
-  const phaseRef = useRef("pending");
 
-  const playsLeft = maxPlays - playsUsed;
+  const phaseRef = useRef(initialState?.phase ?? "pending");
+  const playsUsedRef = useRef(initialState?.playsUsed ?? 0);
+  const isPausedRef = useRef(isPaused);
 
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
+  const playsLeft = maxPlays - playsUsed;
 
   const playIntro = useCallback(() => {
     const el = introRef.current;
@@ -91,7 +100,10 @@ export function SequentialAudioPlayer({
     phaseRef.current = "intro";
     el.currentTime = 0;
     el.play().catch((err) => {
-      console.warn("[SequentialAudioPlayer] Autoplay blocked:", err.message);
+      console.warn(
+        "[SequentialAudioPlayer] Autoplay blokiran (intro):",
+        err.message,
+      );
     });
   }, []);
 
@@ -103,13 +115,48 @@ export function SequentialAudioPlayer({
     el.currentTime = 0;
     el.play().catch((err) => {
       console.warn(
-        "[SequentialAudioPlayer] Content play blocked:",
+        "[SequentialAudioPlayer] Autoplay blokiran (content):",
         err.message,
       );
     });
   }, []);
 
   useEffect(() => {
+    if (initialState) {
+      const { phase: initPhase, currentTime: initTime = 0 } = initialState;
+
+      if (initPhase === "done") return;
+
+      if (initPhase === "pending") {
+        if (maxPlays - playsUsedRef.current <= 0 || isPausedRef.current) return;
+        const id = setTimeout(() => {
+          if (introUrl) playIntro();
+          else playContent();
+        }, 350);
+        return () => clearTimeout(id);
+      }
+
+      const isIntroPhase = initPhase === "intro";
+      const el = isIntroPhase ? introRef.current : contentRef.current;
+      if (!el) return;
+
+      const seekAndMaybePlay = () => {
+        el.currentTime = initTime;
+        if (!isPausedRef.current) {
+          el.play().catch(() => {});
+        }
+      };
+
+      if (el.readyState >= 1) {
+        seekAndMaybePlay();
+      } else {
+        el.addEventListener("loadedmetadata", seekAndMaybePlay, { once: true });
+        return () => el.removeEventListener("loadedmetadata", seekAndMaybePlay);
+      }
+      return;
+    }
+
+    // Bez initialState — normalni auto-start nakon kratke pauze
     const id = setTimeout(() => {
       if (introUrl) {
         playIntro();
@@ -117,11 +164,40 @@ export function SequentialAudioPlayer({
         playContent();
       }
     }, 350);
-
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const ph = phaseRef.current;
+
+    if (isPaused) {
+      if (ph === "intro") introRef.current?.pause();
+      if (ph === "content") contentRef.current?.pause();
+
+      if (onStateChange) {
+        const el =
+          ph === "intro"
+            ? introRef.current
+            : ph === "content"
+              ? contentRef.current
+              : null;
+        onStateChange({
+          phase: ph,
+          playsUsed: playsUsedRef.current,
+          currentTime: el?.currentTime ?? 0,
+        });
+      }
+    } else {
+      if (ph === "intro" && introRef.current?.paused) {
+        introRef.current.play().catch(() => {});
+      } else if (ph === "content" && contentRef.current?.paused) {
+        contentRef.current.play().catch(() => {});
+      }
+    }
+  }, [isPaused, onStateChange]);
+
+  // ── Intro event listeneri ────────────────────────────────────────────────
   useEffect(() => {
     const el = introRef.current;
     if (!el || !introUrl) return;
@@ -135,6 +211,7 @@ export function SequentialAudioPlayer({
       setHasError(true);
     };
     const onEnded = () => {
+      // Nakon intro-a pusti content (ako ima preostalih reproducija)
       if (playsLeft > 0) {
         playContent();
       } else {
@@ -160,6 +237,7 @@ export function SequentialAudioPlayer({
     };
   }, [introUrl, playsLeft, playContent]);
 
+  // ── Content event listeneri ──────────────────────────────────────────────
   useEffect(() => {
     const el = contentRef.current;
     if (!el) return;
@@ -174,7 +252,8 @@ export function SequentialAudioPlayer({
     };
     const onEnded = () => {
       setIsPlaying(false);
-      const nextPlaysUsed = playsUsed + 1;
+      const nextPlaysUsed = playsUsedRef.current + 1;
+      playsUsedRef.current = nextPlaysUsed;
       setPlaysUsed(nextPlaysUsed);
 
       if (nextPlaysUsed >= maxPlays) {
@@ -183,10 +262,14 @@ export function SequentialAudioPlayer({
       } else {
         setPhase("pending");
         phaseRef.current = "pending";
-        if (introUrl) {
-          playIntro();
-        } else {
-          playContent();
+
+        // Automatski počni drugu reprodukciju ako ispit nije pauziran
+        if (!isPausedRef.current) {
+          if (introUrl) {
+            playIntro();
+          } else {
+            playContent();
+          }
         }
       }
     };
@@ -208,21 +291,7 @@ export function SequentialAudioPlayer({
     };
   }, [introUrl, playsUsed, maxPlays, playIntro, playContent]);
 
-  useEffect(() => {
-    const ph = phaseRef.current;
-
-    if (isPaused) {
-      if (ph === "intro") introRef.current?.pause();
-      if (ph === "content") contentRef.current?.pause();
-    } else {
-      if (ph === "intro" && introRef.current?.paused) {
-        introRef.current.play().catch(() => {});
-      } else if (ph === "content" && contentRef.current?.paused) {
-        contentRef.current.play().catch(() => {});
-      }
-    }
-  }, [isPaused]);
-
+  // ── Progress traka ───────────────────────────────────────────────────────
   const progressPct = useMemo(() => {
     if (phase === "intro" && introDuration > 0)
       return (introTime / introDuration) * 100;
@@ -322,9 +391,8 @@ export function SequentialAudioPlayer({
                     className="w-0.5 rounded-full"
                     style={{
                       height: `${h}px`,
-                      background: phase === "intro" ? "#f59e0b" : "#38bdf8",
-                      animation: "waveform 0.7s ease-in-out infinite",
-                      animationDelay: `${i * 0.1}s`,
+                      background: phase === "intro" ? "#f59e0b" : "#0ea5e9",
+                      animation: `waveform ${0.6 + i * 0.1}s ease-in-out infinite alternate`,
                     }}
                   />
                 ))}
@@ -332,61 +400,50 @@ export function SequentialAudioPlayer({
             )}
           </div>
 
-          {/* Dots: preostala slušanja sadržaja */}
-          <div className="flex items-center gap-1.5">
+          {/* Timestamp */}
+          {(phase === "intro" || phase === "content") &&
+            displayDuration > 0 && (
+              <span className="text-[10px] text-sky-500 tabular-nums font-medium">
+                {formatTime(displayTime)} / {formatTime(displayDuration)}
+              </span>
+            )}
+        </div>
+
+        {/* Reprodukcije */}
+        <div className="flex items-center justify-between">
+          <div className="flex gap-1">
             {Array.from({ length: maxPlays }).map((_, i) => (
               <span
                 key={i}
                 className={cn(
-                  "w-2 h-2 rounded-full transition-colors duration-300",
-                  i < playsLeft ? "bg-sky-400" : "bg-sky-200",
+                  "w-1.5 h-1.5 rounded-full",
+                  i < playsUsed ? "bg-sky-200" : "bg-sky-500",
                 )}
               />
             ))}
-            <span className="text-[11px] text-sky-400 tabular-nums ml-0.5 font-medium">
-              {playsLeft}/{maxPlays}
-            </span>
           </div>
+
+          {phase === "pending" && playsUsed === 0 && (
+            <p className="text-[11px] text-sky-400 text-center">
+              Audio se automatski reproducira ·{" "}
+              <strong className="font-semibold text-sky-500">
+                {maxPlays}×
+              </strong>{" "}
+              ukupno
+            </p>
+          )}
+          {phase === "pending" && playsUsed > 0 && playsLeft > 0 && (
+            <p className="text-[11px] text-sky-500 text-center">
+              Preostalo: <strong className="font-semibold">{playsLeft}</strong>{" "}
+              {playsLeft === 1 ? "reprodukcija" : "reprodukcije"}
+            </p>
+          )}
+          {phase === "done" && (
+            <p className="text-[11px] text-green-600 font-medium">
+              Sve reprodukcije iskorištene
+            </p>
+          )}
         </div>
-
-        {/* Progress bar + timestamp — samo kad svira */}
-        {(phase === "intro" || phase === "content") && displayDuration > 0 && (
-          <div className="space-y-0.5">
-            <div className="h-1 bg-sky-100 rounded-full overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-300",
-                  phase === "intro" ? "bg-amber-400" : "bg-sky-400",
-                )}
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] text-sky-400/80 tabular-nums">
-              <span>{formatTime(displayTime)}</span>
-              <span>{formatTime(displayDuration)}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Statusi */}
-        {phase === "done" && (
-          <p className="text-[11px] text-green-600 text-center font-medium">
-            Iskoristio/la si sva slušanja za ovaj zadatak.
-          </p>
-        )}
-        {phase === "pending" && playsUsed === 0 && (
-          <p className="text-[11px] text-sky-400 text-center">
-            Audio se automatski reproducira ·{" "}
-            <strong className="font-semibold text-sky-500">{maxPlays}×</strong>{" "}
-            ukupno
-          </p>
-        )}
-        {phase === "pending" && playsUsed > 0 && playsLeft > 0 && (
-          <p className="text-[11px] text-sky-500 text-center">
-            Preostalo: <strong className="font-semibold">{playsLeft}</strong>{" "}
-            {playsLeft === 1 ? "reprodukcija" : "reprodukcije"}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -460,87 +517,69 @@ export function AudioPlayer({
         >
           {isPlaying ? "⏸" : "▶"}
         </button>
-        <div className="flex-1 h-1.5 bg-sky-200 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-sky-600 transition-all duration-300"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <span className="text-xs text-sky-700 tabular-nums min-w-[2.5rem] text-right">
-          {formatTime(currentTime)}
-        </span>
-        <span
-          className={cn(
-            "text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded-md",
-            playsLeft > 0
-              ? "bg-sky-100 text-sky-700"
-              : "bg-warm-100 text-warm-500",
+        <div className="flex-1 min-w-0">
+          {label && (
+            <p className="text-xs font-semibold text-sky-800 truncate mb-1">
+              {label}
+            </p>
           )}
-        >
-          {playsLeft}/{maxPlays}
+          <div className="h-1 bg-sky-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-sky-500 transition-all duration-300"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+        <span className="text-[10px] text-sky-500 font-semibold tabular-nums">
+          {playsLeft}×
         </span>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 space-y-3">
+    <div className="rounded-xl border border-sky-200 bg-sky-50 overflow-hidden">
       <audio ref={audioRef} src={audioUrl} preload="metadata" />
-      {label && (
-        <p className="text-xs font-semibold text-sky-700 uppercase tracking-wider">
-          {label}
-        </p>
-      )}
-      <div className="flex items-center gap-3">
+      <div className="h-1 bg-sky-100">
+        <div
+          className="h-full bg-sky-500 transition-all duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="px-3 py-2.5 flex items-center gap-3">
         <button
           onClick={handlePlay}
           disabled={!canPlay && !isPlaying}
           className={cn(
-            "flex items-center justify-center w-10 h-10 rounded-full transition-all flex-shrink-0 text-sm",
+            "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all",
             canPlay || isPlaying
-              ? "bg-sky-600 text-white hover:bg-sky-700 active:scale-95 shadow-sm"
+              ? "bg-sky-600 text-white hover:bg-sky-700 active:scale-95"
               : "bg-warm-200 text-warm-400 cursor-not-allowed",
           )}
         >
           {isPlaying ? "⏸" : "▶"}
         </button>
-        <div className="flex-1 space-y-1.5">
-          <div className="h-1.5 bg-sky-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-sky-600 transition-all duration-300"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <div className="flex justify-between">
-            <span className="text-xs text-sky-600 tabular-nums">
-              {formatTime(currentTime)}
-            </span>
-            <span className="text-xs text-sky-500 tabular-nums">
-              {formatTime(duration)}
-            </span>
-          </div>
+        <div className="flex-1 min-w-0">
+          {label && (
+            <p className="text-xs font-semibold text-sky-900 truncate mb-0.5">
+              {label}
+            </p>
+          )}
+          <p className="text-[10px] text-sky-500">
+            {playsLeft > 0
+              ? `${playsLeft} ${playsLeft === 1 ? "reprodukcija" : "reprodukcije"} preostalo`
+              : "Iskorišteno"}
+          </p>
         </div>
-      </div>
-      <div className="flex justify-between items-center">
-        <div className="flex gap-1">
-          {Array.from({ length: maxPlays }).map((_, i) => (
-            <span
-              key={i}
-              className={cn(
-                "w-2 h-2 rounded-full",
-                i < playsLeft ? "bg-sky-500" : "bg-sky-200",
-              )}
-            />
-          ))}
-        </div>
-        <span className="text-xs text-sky-600">
-          {playsLeft > 0 ? `Preostalo: ${playsLeft}` : "Iskorišteno"}
+        <span className="text-xs text-sky-500 tabular-nums font-medium">
+          {formatTime(currentTime)} / {formatTime(duration)}
         </span>
       </div>
     </div>
   );
 }
 
+// ─── Footnotei ────────────────────────────────────────────────────────────────
 function FootnoteList({ footnotes }) {
   if (!footnotes?.length) return null;
   return (
@@ -567,6 +606,8 @@ export function PassageDisplay({
   activeGapPosition,
   selectedPersonLetter,
   isPaused = false,
+  initialAudioState = null,
+  onAudioStateChange = null,
   className,
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -579,6 +620,15 @@ export function PassageDisplay({
   const hasText = !!passage.content;
   const hasAudio = !!(passage.audioUrl || passage.audioIntroUrl);
   const isAudioOnly = typeKey === "audio" && !hasText;
+
+  const handleAudioStateChange = useCallback(
+    (state) => {
+      if (onAudioStateChange && passage?.id) {
+        onAudioStateChange(passage.id, state);
+      }
+    },
+    [onAudioStateChange, passage?.id],
+  );
 
   useEffect(() => {
     const el = contentRef.current;
@@ -661,7 +711,6 @@ export function PassageDisplay({
             "lg:max-h-none lg:flex-1 lg:overflow-y-auto",
           )}
         >
-          {/* Audio player — key=passage.id jamči stabilan mount kroz navigaciju */}
           {hasAudio && (
             <SequentialAudioPlayer
               key={passage.id}
@@ -669,32 +718,20 @@ export function PassageDisplay({
               contentUrl={passage.audioUrl ?? ""}
               maxPlays={2}
               isPaused={isPaused}
+              initialState={initialAudioState}
+              onStateChange={handleAudioStateChange}
             />
           )}
 
-          {/* Tekst */}
           {hasText && (
-            <>
-              {passage.author && (
-                <p className="text-xs text-warm-500 italic">{passage.author}</p>
-              )}
-              <div ref={contentRef}>
-                <PassageSafeHtml
-                  html={passage.content}
-                  className={cn(
-                    typeKey === "poem" && "passage-poem",
-                    typeKey === "drama" && "passage-drama",
-                    typeKey === "article" && "passage-article",
-                  )}
-                />
-              </div>
-              {passage.source && (
-                <p className="text-[11px] text-warm-400 mt-2">
-                  Izvor: {passage.source}
-                </p>
-              )}
+            <div ref={contentRef}>
+              <PassageSafeHtml
+                html={passage.content}
+                contentType={typeKey}
+                className="passage-content"
+              />
               <FootnoteList footnotes={passage.footnotes} />
-            </>
+            </div>
           )}
         </div>
       )}

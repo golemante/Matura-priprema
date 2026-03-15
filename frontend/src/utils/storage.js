@@ -66,6 +66,28 @@ export const draftStorage = {
     storage.set(key, { ...existing, attemptId });
   },
 
+  saveAudioState: (examId, passageId, state) => {
+    const key = draftStorage._key(examId);
+    const existing = storage.get(key) ?? {
+      answers: {},
+      attemptId: null,
+      savedAt: Date.now(),
+      expiresAt: Date.now() + DRAFT_TTL_MS,
+    };
+    storage.set(key, {
+      ...existing,
+      audioStates: {
+        ...(existing.audioStates ?? {}),
+        [passageId]: state,
+      },
+    });
+  },
+
+  loadAudioStates: (examId) => {
+    const draft = draftStorage.load(examId);
+    return draft?.audioStates ?? {};
+  },
+
   purgeExpired: () => {
     const now = Date.now();
     const draftPrefix = `${PREFIX}draft_`;

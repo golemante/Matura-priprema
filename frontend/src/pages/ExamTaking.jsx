@@ -1,5 +1,6 @@
+// pages/ExamTaking.jsx
 import { useParams, Link } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -23,6 +24,7 @@ import { QuestionNav } from "@/components/exam/QuestionNav";
 import { ProgressBar } from "@/components/exam/ProgressBar";
 import { ExamTimer } from "@/components/exam/Timer";
 import { useExamSession } from "@/hooks/useExamSession";
+import { draftStorage } from "@/utils/storage";
 import { EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 import { cn } from "@/utils/utils";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -160,39 +162,18 @@ function ExamTopBar({
               <Pause size={13} />
             )}
             <span className="hidden sm:inline">
-              {isPauseSyncing ? "Sinkr..." : isPaused ? "Nastavi" : "Pauziraj"}
+              {isPauseSyncing
+                ? "Sinkronizacija..."
+                : isPaused
+                  ? "Nastavi"
+                  : "Pauza"}
             </span>
           </button>
 
           <button
-            onClick={onSubmit}
-            disabled={isSyncing}
-            title={
-              isPauseSyncing
-                ? "Pričekaj završetak sinkronizacije..."
-                : "Predaj ispit"
-            }
-            className={cn(
-              "hidden lg:flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors",
-              isSyncing
-                ? "bg-warm-400 text-white cursor-not-allowed opacity-60"
-                : isSubmitting
-                  ? "bg-warm-700 text-white cursor-not-allowed"
-                  : "bg-warm-900 text-white hover:bg-black",
-            )}
-          >
-            {isSubmitting ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Send size={13} />
-            )}
-            <span>{isSubmitting ? "Predaje se..." : "Predaj ispit"}</span>
-          </button>
-
-          <button
             onClick={onOpenNav}
-            className="flex-shrink-0 lg:hidden p-2 rounded-lg text-warm-500 hover:bg-warm-100 transition-colors relative"
-            aria-label="Otvori navigaciju"
+            className="lg:hidden flex-shrink-0 p-2 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition-colors"
+            aria-label="Otvori navigaciju pitanja"
           >
             <LayoutGrid size={18} />
           </button>
@@ -202,224 +183,89 @@ function ExamTopBar({
   );
 }
 
-function MobileNavDrawer({
-  show,
-  onClose,
-  questions,
-  answers,
-  flagged,
-  currentIndex,
-  onGoTo,
-  onSubmit,
-  answeredCount,
-  isSyncing,
-  isSubmitting,
-}) {
-  const visibleCount = questions.filter(
-    (q) => q.questionType !== "fill_blank_mc",
-  ).length;
-  const unanswered = visibleCount - (answeredCount ?? 0);
-  const flaggedCount = flagged?.size ?? 0;
-
+function ExamErrorState({ error, backLink }) {
+  const msg = parseExamError(error);
   return (
-    <AnimatePresence>
-      {show && (
-        <>
-          <motion.div
-            key="backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] lg:hidden"
-            onClick={onClose}
-          />
-          <motion.div
-            key="sheet"
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 32, stiffness: 320 }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl max-h-[82vh] flex flex-col lg:hidden"
-          >
-            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-              <div className="w-10 h-1 rounded-full bg-warm-300" />
-            </div>
-
-            <div className="flex items-center justify-between px-5 pb-3 flex-shrink-0">
-              <div>
-                <h3 className="text-sm font-bold text-warm-900">Navigacija</h3>
-                <p className="text-xs text-warm-500 tabular-nums">
-                  {answeredCount}/{visibleCount} odgovoreno
-                  {flaggedCount > 0 && ` · ${flaggedCount} označeno`}
-                </p>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-xl hover:bg-warm-100 text-warm-400 transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="px-5 pb-4 flex-shrink-0">
-              <ProgressBar value={answeredCount} max={visibleCount} />
-            </div>
-
-            <div className="overflow-y-auto flex-1 px-5 pb-2">
-              <div className="grid grid-cols-6 gap-2">
-                {questions.map((q, idx) => {
-                  const label = q.positionLabel ?? String(idx + 1);
-
-                  if (q.questionType === "fill_blank_mc") {
-                    return (
-                      <div
-                        key={q.id}
-                        className="aspect-square rounded-xl bg-warm-50 border border-dashed border-warm-200 flex items-center justify-center text-[10px] font-bold text-warm-300"
-                        title={`Zadatak ${label}`}
-                      >
-                        {label}
-                      </div>
-                    );
-                  }
-
-                  const isAnswered = !!answers?.[q.id];
-                  const isFlagged = flagged?.has(q.id) ?? false;
-                  const isCurrent = idx === currentIndex;
-
-                  return (
-                    <motion.button
-                      key={q.id}
-                      whileTap={{ scale: 0.88 }}
-                      onClick={() => {
-                        onGoTo(idx);
-                        onClose();
-                      }}
-                      aria-current={isCurrent ? "step" : undefined}
-                      className={cn(
-                        "aspect-square rounded-xl text-[11px] font-bold transition-all duration-100 relative",
-                        isCurrent
-                          ? "bg-primary-600 text-white shadow-sm"
-                          : isAnswered && isFlagged
-                            ? "bg-amber-100 text-amber-800 border border-amber-300"
-                            : isAnswered
-                              ? "bg-primary-100 text-primary-700 border border-primary-200"
-                              : isFlagged
-                                ? "bg-amber-50 text-amber-700 border border-amber-300"
-                                : "bg-warm-50 text-warm-500 border border-warm-200",
-                      )}
-                    >
-                      {label}
-                      {isFlagged && !isCurrent && (
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 border-2 border-white" />
-                      )}
-                    </motion.button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="p-5 flex-shrink-0 border-t border-warm-100">
-              <button
-                onClick={() => {
-                  if (isSyncing) return;
-                  onClose();
-                  onSubmit();
-                }}
-                disabled={isSyncing}
-                className={cn(
-                  "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-all",
-                  isSyncing
-                    ? "bg-warm-300 text-warm-500 cursor-not-allowed"
-                    : isSubmitting
-                      ? "bg-warm-700 text-white cursor-not-allowed"
-                      : unanswered > 0
-                        ? "bg-warm-900 text-white hover:bg-black active:scale-[0.98]"
-                        : "bg-primary-600 text-white hover:bg-primary-700 active:scale-[0.98]",
-                )}
-              >
-                {isSubmitting ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <Send size={15} />
-                )}
-                <span>
-                  {isSubmitting
-                    ? "Predaje se..."
-                    : isSyncing
-                      ? "Sinkronizacija..."
-                      : unanswered > 0
-                        ? `Predaj ispit (${unanswered} bez odg.)`
-                        : "Predaj ispit"}
-                </span>
-              </button>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+    <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
+      <div className="max-w-sm w-full bg-white rounded-2xl border border-warm-200 shadow-sm p-8 text-center space-y-4">
+        <AlertCircle size={32} className="text-red-400 mx-auto" />
+        <p className="text-sm text-warm-700 leading-relaxed">{msg}</p>
+        <Link
+          to={backLink}
+          className="inline-flex items-center gap-2 bg-warm-100 text-warm-700 border border-warm-300 px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-warm-200 transition-colors"
+        >
+          <ArrowLeft size={15} />
+          Natrag
+        </Link>
+      </div>
+    </div>
   );
 }
 
-function MobileBottomBar({
-  currentIndex,
-  totalVisible,
-  hasPrev,
-  isLast,
-  onPrev,
-  onNext,
-  onOpenNav,
-  answeredCount,
-}) {
+function ExamEmptyState({ backLink, examMeta }) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-20 lg:hidden bg-white/95 backdrop-blur-sm border-t border-warm-200 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
-      <div className="flex items-center h-14 px-3 gap-2 max-w-xl mx-auto">
-        <button
-          onClick={onPrev}
-          disabled={!hasPrev}
-          className={cn(
-            "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors min-w-0 flex-shrink-0",
-            !hasPrev
-              ? "text-warm-300 cursor-not-allowed"
-              : "text-warm-700 hover:bg-warm-100 active:bg-warm-200",
+    <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
+      <div className="max-w-sm w-full bg-white rounded-2xl border border-warm-200 shadow-sm p-8 text-center space-y-4">
+        <Construction size={32} className="text-warm-400 mx-auto" />
+        <p className="text-sm text-warm-600 leading-relaxed">
+          Ispit{" "}
+          <strong className="font-semibold text-warm-800">
+            {examMeta ? buildExamTitle(examMeta) : "Ovaj ispit"}
+          </strong>{" "}
+          još nema unesena pitanja.
+        </p>
+        <Link
+          to={backLink}
+          className="inline-flex items-center gap-2 bg-warm-100 text-warm-700 border border-warm-300 px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-warm-200 transition-colors"
+        >
+          <ArrowLeft size={15} />
+          Natrag
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function PausedOverlay({ onResume, isSyncing }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-x-0 bottom-0 top-14 z-20 flex items-center justify-center bg-warm-100/98 backdrop-blur-md px-4"
+    >
+      <div className="bg-white rounded-2xl border border-warm-200 shadow-card p-10 max-w-sm w-full text-center">
+        <div className="w-16 h-16 bg-warm-100 rounded-full flex items-center justify-center mx-auto mb-5">
+          {isSyncing ? (
+            <Loader2
+              size={28}
+              className="text-warm-400 animate-spin"
+              strokeWidth={1.5}
+            />
+          ) : (
+            <Pause size={28} className="text-warm-400" strokeWidth={1.5} />
           )}
-        >
-          <ArrowLeft size={16} />
-          <span className="hidden xs:inline text-xs">Preth.</span>
-        </button>
-
-        <button
-          onClick={onOpenNav}
-          className="flex-1 flex items-center justify-center gap-2.5 py-2 rounded-xl bg-warm-100 hover:bg-warm-200 active:bg-warm-300 transition-colors"
-        >
-          <LayoutGrid size={14} className="text-warm-500 flex-shrink-0" />
-          <span className="text-xs font-bold text-warm-700 tabular-nums">
-            {currentIndex + 1} / {totalVisible}
-          </span>
-          <span className="text-[10px] text-warm-400 font-medium">
-            · {answeredCount} odg.
-          </span>
-        </button>
-
-        {isLast ? (
+        </div>
+        <h2 className="text-xl font-bold text-warm-900 mb-2">
+          {isSyncing ? "Sinkronizacija..." : "Ispit je pauziran"}
+        </h2>
+        <p className="text-warm-500 text-sm mb-6 leading-relaxed">
+          {isSyncing
+            ? "Čekamo potvrdu poslužitelja. Trenutak..."
+            : "Odgovori su sačuvani. Nastavi kad budeš spreman/a."}
+        </p>
+        {!isSyncing && (
           <button
-            onClick={onOpenNav}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800 transition-colors flex-shrink-0"
+            onClick={onResume}
+            className="inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-xl font-semibold text-sm hover:bg-primary-700 active:scale-95 transition-all"
           >
-            <Send size={14} />
-            <span className="text-xs">Predaj</span>
-          </button>
-        ) : (
-          <button
-            onClick={onNext}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold text-warm-700 hover:bg-warm-100 active:bg-warm-200 transition-colors flex-shrink-0"
-          >
-            <span className="hidden xs:inline text-xs">Sljedeće</span>
-            <ArrowRight size={16} />
+            <Play size={14} />
+            Nastavi ispit
           </button>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -438,32 +284,24 @@ function SubmitModal({
   return (
     <Modal
       open={open}
-      onClose={isSyncing ? undefined : onClose}
-      title="Predaj ispit"
+      onClose={onClose}
+      title={allAnswered ? "Predaj ispit?" : "Još ima neodgovorenih pitanja"}
     >
       <ModalBody>
         {allAnswered ? (
-          <div className="text-center py-3">
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 size={28} className="text-green-600" />
-            </div>
-            <p className="text-base font-bold text-warm-900 mb-1.5">
-              Sve gotovo!
-            </p>
-            <p className="text-sm text-warm-500">
-              Odgovorili ste na svih{" "}
-              <strong className="text-warm-800">{totalVisible}</strong> pitanja.
-            </p>
-          </div>
+          <p className="text-sm text-warm-700 leading-relaxed">
+            Odgovorili ste na sva pitanja. Potvrdom se ispit predaje i ne možete
+            se više vraćati na odgovore.
+          </p>
         ) : (
-          <div className="space-y-4">
-            <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200">
               <AlertCircle
-                size={20}
-                className="text-amber-600 flex-shrink-0 mt-0.5"
+                size={16}
+                className="text-amber-500 flex-shrink-0 mt-0.5"
               />
               <div>
-                <p className="text-sm font-bold text-amber-900">
+                <p className="text-sm font-semibold text-amber-800">
                   {unanswered}{" "}
                   {unanswered === 1 ? "pitanje ostalo" : "pitanja ostalo"} bez
                   odgovora
@@ -525,101 +363,151 @@ function DraftModal({ open, onConfirm, onDiscard }) {
   );
 }
 
-function PausedOverlay({ onResume, isSyncing }) {
+function MobileNavDrawer({
+  show,
+  onClose,
+  questions,
+  answers,
+  flagged,
+  currentIndex,
+  onGoTo,
+  onSubmit,
+  answeredCount,
+  isSyncing,
+  isSubmitting,
+}) {
   return (
-    <motion.div
-      key="paused"
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ duration: 0.2 }}
-      className="flex-1 flex items-center justify-center py-16"
-    >
-      <div className="bg-white rounded-2xl border border-warm-200 shadow-card p-10 max-w-sm w-full text-center">
-        <div className="w-16 h-16 bg-warm-100 rounded-full flex items-center justify-center mx-auto mb-5">
-          {isSyncing ? (
-            <Loader2
-              size={28}
-              className="text-warm-400 animate-spin"
-              strokeWidth={1.5}
-            />
-          ) : (
-            <Pause size={28} className="text-warm-400" strokeWidth={1.5} />
+    <AnimatePresence>
+      {show && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.4 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black z-40 lg:hidden"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="fixed right-0 top-0 bottom-0 w-72 bg-white z-50 lg:hidden flex flex-col shadow-2xl"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-warm-200">
+              <span className="text-sm font-bold text-warm-800">
+                Navigacija
+              </span>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg hover:bg-warm-100 transition-colors"
+              >
+                <X size={16} className="text-warm-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <QuestionNav
+                questions={questions}
+                answers={answers}
+                flagged={flagged}
+                currentIndex={currentIndex}
+                onGoTo={(i) => {
+                  onGoTo(i);
+                  onClose();
+                }}
+                onSubmit={onSubmit}
+                answeredCount={answeredCount}
+              />
+            </div>
+            <div className="p-4 border-t border-warm-200">
+              <button
+                onClick={onSubmit}
+                disabled={isSyncing || isSubmitting}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                  isSyncing || isSubmitting
+                    ? "bg-warm-200 text-warm-400 cursor-not-allowed"
+                    : "bg-primary-600 text-white hover:bg-primary-700",
+                )}
+              >
+                {isSubmitting ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Send size={15} />
+                )}
+                <span>
+                  {isSubmitting
+                    ? "Predaje se..."
+                    : isSyncing
+                      ? "Sinkronizacija..."
+                      : "Predaj ispit"}
+                </span>
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function MobileBottomBar({
+  currentIndex,
+  totalVisible,
+  hasPrev,
+  isLast,
+  onPrev,
+  onNext,
+  onOpenNav,
+  answeredCount,
+}) {
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-20 lg:hidden bg-white/95 backdrop-blur-sm border-t border-warm-200 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
+      <div className="flex items-center h-14 px-3 gap-2 max-w-xl mx-auto">
+        <button
+          onClick={onPrev}
+          disabled={!hasPrev}
+          className={cn(
+            "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors min-w-0 flex-shrink-0",
+            !hasPrev
+              ? "text-warm-300 cursor-not-allowed"
+              : "text-warm-700 hover:bg-warm-100 active:bg-warm-200",
           )}
-        </div>
-        <h2 className="text-xl font-bold text-warm-900 mb-2">
-          {isSyncing ? "Sinkronizacija..." : "Ispit je pauziran"}
-        </h2>
-        <p className="text-warm-500 text-sm mb-6 leading-relaxed">
-          {isSyncing
-            ? "Čekamo potvrdu poslužitelja. Trenutak..."
-            : "Odgovori su sačuvani. Nastavi kad budeš spreman/a."}
-        </p>
-        <Button
-          variant="primary"
-          leftIcon={isSyncing ? undefined : Play}
-          size="lg"
-          onClick={onResume}
-          disabled={isSyncing}
-          loading={isSyncing}
         >
-          {isSyncing ? "Pričekaj..." : "Nastavi ispit"}
-        </Button>
-      </div>
-    </motion.div>
-  );
-}
+          <ArrowLeft size={16} />
+          <span className="hidden xs:inline text-xs">Preth.</span>
+        </button>
 
-function ExamErrorState({ error, backLink }) {
-  return (
-    <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-error-200 p-8 max-w-md w-full text-center shadow-card">
-        <AlertCircle
-          size={40}
-          className="text-error-500 mx-auto mb-4"
-          strokeWidth={1.5}
-        />
-        <h2 className="text-lg font-bold text-warm-900 mb-2">
-          Ispit nije dostupan
-        </h2>
-        <p className="text-warm-500 text-sm mb-6 leading-relaxed">
-          {parseExamError(error)}
-        </p>
-        <Link
-          to={backLink}
-          className="inline-flex items-center gap-2 bg-primary-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-primary-700 transition-colors"
+        <button
+          onClick={onOpenNav}
+          className="flex-1 flex items-center justify-center gap-2.5 py-2 rounded-xl bg-warm-100 hover:bg-warm-200 active:bg-warm-300 transition-colors"
         >
-          <ArrowLeft size={15} />
-          Natrag
-        </Link>
-      </div>
-    </div>
-  );
-}
+          <LayoutGrid size={14} className="text-warm-500 flex-shrink-0" />
+          <span className="text-xs font-bold text-warm-700 tabular-nums">
+            {currentIndex + 1} / {totalVisible}
+          </span>
+          <span className="text-[10px] text-warm-400 font-medium">
+            · {answeredCount} odg.
+          </span>
+        </button>
 
-function ExamEmptyState({ backLink, examMeta }) {
-  return (
-    <div className="min-h-dvh bg-warm-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-warm-200 p-8 max-w-md w-full text-center shadow-card">
-        <Construction
-          size={40}
-          className="text-warm-400 mx-auto mb-4"
-          strokeWidth={1.5}
-        />
-        <h2 className="text-lg font-bold text-warm-900 mb-2">
-          Ispit se priprema
-        </h2>
-        <p className="text-warm-500 text-sm mb-6">
-          {examMeta ? buildExamTitle(examMeta) : "Ovaj ispit"} još nema unesena
-          pitanja.
-        </p>
-        <Link
-          to={backLink}
-          className="inline-flex items-center gap-2 bg-warm-100 text-warm-700 border border-warm-300 px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-warm-200 transition-colors"
-        >
-          <ArrowLeft size={15} />
-          Natrag
-        </Link>
+        {isLast ? (
+          <button
+            onClick={() => {}}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 active:scale-95 transition-all flex-shrink-0"
+          >
+            <Send size={14} />
+            <span className="hidden xs:inline text-xs">Predaj</span>
+          </button>
+        ) : (
+          <button
+            onClick={onNext}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold text-warm-700 hover:bg-warm-100 active:bg-warm-200 transition-colors flex-shrink-0"
+          >
+            <span className="hidden xs:inline text-xs">Sljed.</span>
+            <ArrowRight size={16} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -671,6 +559,19 @@ export function QuizPage() {
 
   usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
 
+  const audioStatesRef = useRef(null);
+  if (!audioStatesRef.current) {
+    audioStatesRef.current = draftStorage.loadAudioStates(examId) ?? {};
+  }
+
+  const handleAudioStateChange = useCallback(
+    (passageId, state) => {
+      audioStatesRef.current[passageId] = state;
+      draftStorage.saveAudioState(examId, passageId, state);
+    },
+    [examId],
+  );
+
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
 
@@ -704,6 +605,7 @@ export function QuizPage() {
 
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
+      {/* ── Sticky top bar (z-30) ─────────────────────────────────────────── */}
       <ExamTopBar
         backLink={backLink}
         examTitle={buildExamTitle(examMeta)}
@@ -751,15 +653,10 @@ export function QuizPage() {
 
       <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
         <div className="flex flex-col lg:flex-row gap-5 h-full">
-          {/* ── Passage kolona: UVIJEK MOUNTANA ─────────────────────────── */}
-          {/* ⚠️ Ne stavlja se unutar AnimatePresence!                        */}
-          {/* Audio stanje (pozicija, playsUsed) preživljava pauzu/resume.    */}
           {hasAnyPassage && (
             <div
               className={cn(
                 "lg:w-[42%] xl:w-[38%] flex-shrink-0",
-                // Desktop: sticky s ograničenom visinom
-                // PassageDisplay body ima overflow-y-auto pa tekst skrolira interno
                 "lg:sticky lg:top-[4.5rem] lg:self-start",
                 "lg:max-h-[calc(100dvh-5.5rem)]",
               )}
@@ -778,6 +675,12 @@ export function QuizPage() {
                       : null
                   }
                   isPaused={isPaused}
+                  initialAudioState={
+                    currentPassage?.id
+                      ? (audioStatesRef.current[currentPassage.id] ?? null)
+                      : null
+                  }
+                  onAudioStateChange={handleAudioStateChange}
                   className="lg:h-full"
                 />
               ) : (
@@ -790,103 +693,81 @@ export function QuizPage() {
             </div>
           )}
 
-          {/* ── Desna kolona: pitanje + navigacija ───────────────────────── */}
           <div className="flex-1 min-w-0 flex flex-col gap-4">
-            {/* AnimatePresence samo za pitanje / pauziranu poruku */}
-            <AnimatePresence mode="wait">
-              {isPaused ? (
-                <PausedOverlay
-                  key="paused"
-                  onResume={handleResume}
-                  isSyncing={isSyncing}
+            <AnimatePresence custom={direction} mode="wait">
+              <motion.div
+                key={current?.id}
+                custom={direction}
+                variants={slideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.16, ease: "easeInOut" }}
+              >
+                <QuestionDisplay
+                  question={current}
+                  parentQuestion={parentQuestion}
+                  selectedAnswer={answers[current?.id] ?? null}
+                  isFlagged={isCurrentFlagged}
+                  onAnswer={handleAnswer}
+                  onFlag={handleToggleFlag}
+                  index={currentIndex}
+                  isPaused={isPaused}
                 />
-              ) : (
-                <motion.div
-                  key="exam-question"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="flex flex-col gap-4 flex-1"
-                >
-                  <AnimatePresence custom={direction} mode="wait">
-                    <motion.div
-                      key={current?.id}
-                      custom={direction}
-                      variants={slideVariants}
-                      initial="enter"
-                      animate="center"
-                      exit="exit"
-                      transition={{ duration: 0.16, ease: "easeInOut" }}
-                    >
-                      <QuestionDisplay
-                        question={current}
-                        parentQuestion={parentQuestion}
-                        selectedAnswer={answers[current?.id] ?? null}
-                        isFlagged={isCurrentFlagged}
-                        onAnswer={handleAnswer}
-                        onFlag={handleToggleFlag}
-                        index={currentIndex}
-                        isPaused={isPaused}
-                      />
-                    </motion.div>
-                  </AnimatePresence>
-
-                  {/* Desktop navigacijski buttoni */}
-                  <div className="hidden lg:flex items-center justify-between gap-3 mt-auto pt-1">
-                    <Button
-                      variant="secondary"
-                      leftIcon={ArrowLeft}
-                      disabled={!hasPrev}
-                      onClick={handlePrev}
-                    >
-                      Prethodno
-                    </Button>
-
-                    <div className="flex items-center gap-2.5">
-                      {isLastQuestion ? (
-                        <Button
-                          variant="primary"
-                          leftIcon={isSubmitting ? undefined : Send}
-                          onClick={() => setShowSubmitModal(true)}
-                          disabled={isSyncing}
-                          loading={isSubmitting}
-                        >
-                          {isSubmitting ? "Predaje se..." : "Predaj ispit"}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="primary"
-                          rightIcon={ArrowRight}
-                          onClick={handleNext}
-                        >
-                          Sljedeće
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
+              </motion.div>
             </AnimatePresence>
+
+            {/* Desktop navigacijski buttoni */}
+            <div className="hidden lg:flex items-center justify-between gap-3 mt-auto pt-1">
+              <Button
+                variant="secondary"
+                leftIcon={ArrowLeft}
+                disabled={!hasPrev}
+                onClick={handlePrev}
+              >
+                Prethodno
+              </Button>
+
+              <div className="flex items-center gap-2.5">
+                {isLastQuestion ? (
+                  <Button
+                    variant="primary"
+                    leftIcon={isSubmitting ? undefined : Send}
+                    onClick={() => setShowSubmitModal(true)}
+                    disabled={isSyncing}
+                    loading={isSubmitting}
+                  >
+                    {isSubmitting ? "Predaje se..." : "Predaj ispit"}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    rightIcon={ArrowRight}
+                    onClick={handleNext}
+                  >
+                    Sljedeće
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* ── Nav sidebar (desno, samo desktop, samo kad nije pauziran) ── */}
-          {!isPaused && (
-            <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
-              <QuestionNav
-                questions={questions}
-                answers={answers}
-                flagged={flagged}
-                currentIndex={currentIndex}
-                onGoTo={handleGoTo}
-                onSubmit={() => setShowSubmitModal(true)}
-                answeredCount={answeredCount}
-              />
-            </div>
-          )}
+          {/* ── Nav sidebar (desno, samo desktop) ──────────────────────────── */}
+          <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
+            <QuestionNav
+              questions={questions}
+              answers={answers}
+              flagged={flagged}
+              currentIndex={currentIndex}
+              onGoTo={handleGoTo}
+              onSubmit={() => setShowSubmitModal(true)}
+              answeredCount={answeredCount}
+            />
+          </div>
         </div>
       </div>
 
+      {/* ── Mobile bottom bar (skrivena za pauze) ─────────────────────────── */}
       {!isPaused && (
         <MobileBottomBar
           currentIndex={currentIndex}
@@ -899,6 +780,16 @@ export function QuizPage() {
           answeredCount={answeredCount}
         />
       )}
+
+      <AnimatePresence>
+        {isPaused && (
+          <PausedOverlay
+            key="paused-overlay"
+            onResume={handleResume}
+            isSyncing={isSyncing}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
