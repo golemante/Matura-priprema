@@ -45,7 +45,6 @@ export const draftStorage = {
   load: (examId) => {
     const draft = storage.get(draftStorage._key(examId));
     if (!draft) return null;
-
     const expiresAt = draft.expiresAt ?? 0;
     if (Date.now() > expiresAt) {
       storage.remove(draftStorage._key(examId));
@@ -54,7 +53,6 @@ export const draftStorage = {
       );
       return null;
     }
-
     return draft;
   },
 
@@ -78,9 +76,7 @@ export const draftStorage = {
         return true;
       }
     });
-
     expired.forEach((k) => localStorage.removeItem(k));
-
     if (expired.length > 0) {
       console.info(
         `[draftStorage] Obrisano ${expired.length} isteklih/zastarjelih draft(ova).`,
@@ -92,10 +88,11 @@ export const draftStorage = {
 export const audioProgressStorage = {
   _key: (examId) => `audio_${getUserId()}_${examId}`,
 
-  save: (examId, { trackIndex, currentTime }) => {
+  save: (examId, { trackIndex, currentTime, isDone = false }) => {
     storage.set(audioProgressStorage._key(examId), {
       trackIndex,
       currentTime,
+      isDone,
       savedAt: Date.now(),
       expiresAt: Date.now() + DRAFT_TTL_MS,
     });
@@ -111,6 +108,7 @@ export const audioProgressStorage = {
     return {
       trackIndex: data.trackIndex ?? 0,
       currentTime: data.currentTime ?? 0,
+      isDone: data.isDone ?? false,
     };
   },
 

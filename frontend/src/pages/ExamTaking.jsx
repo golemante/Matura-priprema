@@ -771,11 +771,10 @@ export function QuizPage() {
 
   return (
     <div className="min-h-dvh bg-warm-100 flex flex-col">
-      {/* Jedan <audio> element za cijeli ispit — mountan jednom, ne remountira */}
       {audio.hasAudio && (
         <audio
           ref={audio.audioRef}
-          preload="auto"
+          preload={audio.hasAudio ? "auto" : "none"}
           style={{ display: "none" }}
         />
       )}
