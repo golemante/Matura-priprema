@@ -727,6 +727,16 @@ export function QuizPage() {
     sessionHandleSubmit();
   }, [audio, sessionHandleSubmit]);
 
+  const wrappedHandlePause = useCallback(() => {
+    audio.triggerPause();
+    handlePause();
+  }, [audio, handlePause]);
+
+  const wrappedHandleResume = useCallback(() => {
+    audio.triggerPlay();
+    handleResume();
+  }, [audio, handleResume]);
+
   // audioStatus za PassageDisplay (samo read-only)
   const audioStatus = useMemo(
     () =>
@@ -785,8 +795,8 @@ export function QuizPage() {
         isPauseSyncing={isPauseSyncing}
         isSyncing={isSyncing}
         isSubmitting={isSubmitting}
-        onPause={handlePause}
-        onResume={handleResume}
+        onPause={wrappedHandlePause}
+        onResume={wrappedHandleResume}
         answeredCount={answeredCount}
         totalVisible={totalVisible}
         onSubmit={() => setShowSubmitModal(true)}

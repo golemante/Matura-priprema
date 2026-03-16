@@ -55,7 +55,9 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const [duration, setDuration] = useState(0);
   const [hasError, setHasError] = useState(false);
   const [isDone, setIsDone] = useState(saved?.isDone ?? false);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [hasStarted, setHasStarted] = useState(
+    () => (saved?.currentTime ?? 0) > 0 || (saved?.isDone ?? false),
+  );
   const [hasBlockedAutoplay, setHasBlockedAutoplay] = useState(false);
 
   const audioRef = useRef(null);
@@ -65,9 +67,11 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const queueRef = useRef(queue);
   const isDoneRef = useRef(saved?.isDone ?? false);
   const hasAudioRef = useRef(hasAudio);
+  const hasErrorRef = useRef(false);
   const examIdRef = useRef(examId);
   const initDoneRef = useRef(null);
   const pendingLoadedMetadataRef = useRef(null);
+  const isPausedEffectMountedRef = useRef(false);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -143,6 +147,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     trackIndexRef.current = index;
     setDuration(0);
     setHasError(false);
+    hasErrorRef.current = false;
     isDoneRef.current = false;
     setIsDone(false);
 
@@ -184,6 +189,28 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     }
   }, [playTrackAtIndex]);
 
+  const triggerPlay = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || isDoneRef.current || !hasAudioRef.current) return;
+    if (
+      audio.paused &&
+      audio.src &&
+      audio.src !== window.location.href &&
+      !audio.ended
+    ) {
+      setHasBlockedAutoplay(false);
+      audio.play().catch(() => setHasBlockedAutoplay(true));
+    }
+  }, []);
+
+  const triggerPause = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && !audio.paused) {
+      audio.pause();
+      saveProgressRef.current?.();
+    }
+  }, []);
+
   useEffect(() => {
     if (!hasAudio) return;
     if (initDoneRef.current === examId) return;
@@ -221,6 +248,11 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     const audio = audioRef.current;
     if (!audio) return;
 
+    if (!isPausedEffectMountedRef.current) {
+      isPausedEffectMountedRef.current = true;
+      return;
+    }
+
     if (isPaused) {
       audio.pause();
       saveProgressRef.current?.();
@@ -228,7 +260,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
       if (
         hasAudioRef.current &&
         !isDoneRef.current &&
-        !hasError &&
+        !hasErrorRef.current &&
         audio.src &&
         audio.src !== window.location.href &&
         audio.paused &&
@@ -237,7 +269,6 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
         audio.play().catch(() => setHasBlockedAutoplay(true));
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPaused]);
 
   useEffect(() => {
@@ -281,6 +312,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     const onError = () => {
       const url = queueRef.current[trackIndexRef.current]?.url;
       console.error("[useListeningAudio] Audio greška na traci:", url);
+      hasErrorRef.current = true;
       setHasError(true);
       setIsPlaying(false);
     };
@@ -374,6 +406,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     hasError,
     hasBlockedAutoplay,
     manualStart,
+    triggerPlay,
+    triggerPause,
     currentTime,
     duration,
     progressPct,
