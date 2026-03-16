@@ -71,6 +71,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const examIdRef = useRef(examId);
   const initDoneRef = useRef(null);
   const pendingLoadedMetadataRef = useRef(null);
+  const pendingTimeoutRef = useRef(null);
   const isPausedEffectMountedRef = useRef(false);
 
   useEffect(() => {
@@ -116,26 +117,22 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const playTrackAtIndex = useCallback((index, startTime = 0) => {
     const audio = audioRef.current;
     const track = queueRef.current[index];
+
     if (!audio || !track) {
-      console.warn(
-        `[useListeningAudio] playTrackAtIndex(${index}) bail:`,
-        !audio
-          ? "no audio element"
-          : `no track at ${index} (queue size ${queueRef.current.length})`,
-      );
+      console.warn(`[useListeningAudio] playTrackAtIndex(${index}) bail`);
       return;
     }
 
     if (pendingLoadedMetadataRef.current) {
-      audio.removeEventListener(
-        "loadedmetadata",
-        pendingLoadedMetadataRef.current,
-      );
+      audio.removeEventListener("canplay", pendingLoadedMetadataRef.current);
       pendingLoadedMetadataRef.current = null;
+    }
+    if (pendingTimeoutRef.current) {
+      clearTimeout(pendingTimeoutRef.current);
+      pendingTimeoutRef.current = null;
     }
 
     currentTimeRef.current = startTime;
-
     audioProgressStorage.save(examIdRef.current, {
       trackIndex: index,
       trackUrl: track.url,
@@ -156,21 +153,49 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     const doPlay = () => {
       pendingLoadedMetadataRef.current = null;
-      audio.currentTime = startTime;
-      if (!isPausedRef.current) {
-        audio.play().catch((err) => {
-          console.warn("[useListeningAudio] Autoplay blokiran:", err.message);
-          setHasBlockedAutoplay(true);
-        });
+      if (pendingTimeoutRef.current) {
+        clearTimeout(pendingTimeoutRef.current);
+        pendingTimeoutRef.current = null;
       }
+      if (isPausedRef.current) return;
+      audio.currentTime = startTime;
+
+      const attemptPlay = (retries = 0) => {
+        audio.play().catch((err) => {
+          if (err.name === "AbortError" && retries < 3) {
+            setTimeout(() => attemptPlay(retries + 1), 150 * (retries + 1));
+          } else if (err.name === "NotAllowedError") {
+            console.warn(
+              "[useListeningAudio] Autoplay blokiran — čekam user gesture",
+            );
+            setHasBlockedAutoplay(true);
+          } else {
+            console.error(
+              `[useListeningAudio] play() greška (${err.name}): ${err.message}`,
+            );
+            hasErrorRef.current = true;
+            setHasError(true);
+          }
+        });
+      };
+      attemptPlay();
     };
 
-    if (audio.readyState >= 1) {
-      doPlay();
-    } else {
-      pendingLoadedMetadataRef.current = doPlay;
-      audio.addEventListener("loadedmetadata", doPlay, { once: true });
-    }
+    pendingLoadedMetadataRef.current = doPlay;
+    audio.addEventListener("canplay", doPlay, { once: true });
+
+    pendingTimeoutRef.current = setTimeout(() => {
+      pendingTimeoutRef.current = null;
+      if (pendingLoadedMetadataRef.current === doPlay) {
+        audio.removeEventListener("canplay", doPlay);
+        pendingLoadedMetadataRef.current = null;
+        console.error(
+          `[useListeningAudio] Timeout na canplay za: ${track.url}`,
+        );
+        hasErrorRef.current = true;
+        setHasError(true);
+      }
+    }, 10000);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const manualStart = useCallback(() => {
@@ -274,9 +299,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   useEffect(() => {
     return () => {
       const audio = audioRef.current;
-      if (audio && !audio.paused) {
-        audio.pause();
-      }
+      if (audio && !audio.paused) audio.pause();
+      if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
       saveProgressRef.current?.();
     };
   }, []);
@@ -311,11 +335,31 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     const onError = () => {
       const url = queueRef.current[trackIndexRef.current]?.url;
-      console.error("[useListeningAudio] Audio greška na traci:", url);
-      hasErrorRef.current = true;
-      setHasError(true);
-      setIsPlaying(false);
+      console.error(`[useListeningAudio] Audio load greška na traci: ${url}`);
+
+      const q = queueRef.current;
+      const nextIndex = trackIndexRef.current + 1;
+
+      if (nextIndex < q.length) {
+        console.warn(
+          `[useListeningAudio] Preskačem pokvarenu traku → track ${nextIndex}`,
+        );
+        setTimeout(() => playTrackAtIndex(nextIndex, 0), 300);
+      } else {
+        hasErrorRef.current = true;
+        setHasError(true);
+        setIsPlaying(false);
+      }
     };
+
+    if (pendingLoadedMetadataRef.current) {
+      audio.removeEventListener("canplay", pendingLoadedMetadataRef.current);
+      pendingLoadedMetadataRef.current = null;
+    }
+    if (pendingTimeoutRef.current) {
+      clearTimeout(pendingTimeoutRef.current);
+      pendingTimeoutRef.current = null;
+    }
 
     const onEnded = () => {
       setIsPlaying(false);
