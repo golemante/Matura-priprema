@@ -278,30 +278,42 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (!isPausedEffectMountedRef.current) {
-      isPausedEffectMountedRef.current = true;
-      return;
-    }
+    const prev = prevIsPausedRef.current;
+    prevIsPausedRef.current = isPaused;
+    if (isPaused === prev) return;
 
     if (isPaused) {
       audio.pause();
       saveProgressRef.current?.();
     } else {
-      if (
+      const canAttemptResume =
         hasAudioRef.current &&
         !isDoneRef.current &&
         !hasErrorRef.current &&
         audio.src &&
         audio.src !== window.location.href &&
         audio.paused &&
-        !audio.ended &&
-        audio.readyState >= 3
-      ) {
+        !audio.ended;
+
+      if (!canAttemptResume) return;
+
+      if (audio.readyState >= 3) {
         audio.play().catch((err) => {
           if (err.name !== "AbortError") {
             setHasBlockedAutoplay(true);
           }
         });
+      } else {
+        const onCanPlay = () => {
+          if (isPausedRef.current) return;
+          audio.play().catch((err) => {
+            if (err.name !== "AbortError") {
+              setHasBlockedAutoplay(true);
+            }
+          });
+        };
+        audio.addEventListener("canplay", onCanPlay, { once: true });
+        return () => audio.removeEventListener("canplay", onCanPlay);
       }
     }
   }, [isPaused]);
@@ -392,8 +404,16 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
       if (q.length === 0) {
         console.warn(
-          "[useListeningAudio] onEnded s praznim queue-om — ignoriram.",
+          "[useListeningAudio] onEnded s praznim queue-om — markiram kao done.",
         );
+        isDoneRef.current = true;
+        setIsDone(true);
+        audioProgressStorage.save(examIdRef.current, {
+          trackIndex: trackIndexRef.current,
+          trackUrl: null,
+          currentTime: 0,
+          isDone: true,
+        });
         return;
       }
 
@@ -454,7 +474,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   }, [hasAudio]);
 
   const completedDuration = queue
-    .slice(0, trackIndexRef.current)
+    .slice(0, trackIndex)
     .reduce((sum, t) => sum + (trackDurationsRef.current[t.url] ?? 0), 0);
   const totalKnownDuration = queue.reduce(
     (sum, t) => sum + (trackDurationsRef.current[t.url] ?? 0),
