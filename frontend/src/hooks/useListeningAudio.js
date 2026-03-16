@@ -60,6 +60,9 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   );
   const [hasBlockedAutoplay, setHasBlockedAutoplay] = useState(false);
   const [isLoadingTrack, setIsLoadingTrack] = useState(false);
+  const [currentTrack, setCurrentTrack] = useState(
+    () => queue[saved?.trackIndex ?? 0] ?? null,
+  );
 
   const audioRef = useRef(null);
   const currentTimeRef = useRef(saved?.currentTime ?? 0);
@@ -82,9 +85,6 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   useEffect(() => {
     queueRef.current = queue;
   }, [queue]);
-  useEffect(() => {
-    trackIndexRef.current = trackIndex;
-  }, [trackIndex]);
   useEffect(() => {
     isDoneRef.current = isDone;
   }, [isDone]);
@@ -143,6 +143,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     });
 
     setTrackIndex(index);
+    setCurrentTrack(queueRef.current[index] ?? null);
     trackIndexRef.current = index;
     setDuration(0);
     setHasError(false);
@@ -453,7 +454,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   }, [hasAudio]);
 
   const completedDuration = queue
-    .slice(0, trackIndex)
+    .slice(0, trackIndexRef.current)
     .reduce((sum, t) => sum + (trackDurationsRef.current[t.url] ?? 0), 0);
   const totalKnownDuration = queue.reduce(
     (sum, t) => sum + (trackDurationsRef.current[t.url] ?? 0),
@@ -474,7 +475,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     totalTracks: queue.length,
     trackIndex,
     currentTrack,
-    activePassageId: currentTrack?.passageId ?? null,
+    activePassageId: isDone ? null : (currentTrack?.passageId ?? null),
     isPlaying,
     isLoadingTrack,
     hasStarted,
