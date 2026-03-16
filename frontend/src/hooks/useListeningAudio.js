@@ -465,7 +465,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
           100,
           ((completedDuration + currentTime) / totalKnownDuration) * 100,
         )
-      : null;
+      : 0;
 
   return {
     audioRef,

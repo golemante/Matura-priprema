@@ -82,6 +82,7 @@ export function QuestionDisplay({
   isFlagged,
   index,
   isPaused,
+  isGlobalPlaying = false,
 }) {
   if (!question) return null;
 
@@ -142,6 +143,7 @@ export function QuestionDisplay({
               examId={question.examId ?? question.exam_id ?? null}
               questionId={question.id}
               isPaused={isPaused}
+              isGlobalPlaying={isGlobalPlaying}
               compact
             />
           </div>

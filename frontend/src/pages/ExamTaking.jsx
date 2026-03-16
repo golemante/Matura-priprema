@@ -738,11 +738,11 @@ export function QuizPage() {
 
   const wrappedHandlePause = useCallback(() => {
     handlePause();
-  }, [audio, handlePause]);
+  }, [handlePause]);
 
   const wrappedHandleResume = useCallback(() => {
     handleResume();
-  }, [audio, handleResume]);
+  }, [handleResume]);
 
   // audioStatus za PassageDisplay (samo read-only)
   const audioStatus = useMemo(
@@ -901,6 +901,7 @@ export function QuizPage() {
                   onFlag={handleToggleFlag}
                   index={currentIndex}
                   isPaused={isPaused}
+                  isGlobalPlaying={audio.isPlaying}
                 />
               </motion.div>
             </AnimatePresence>
