@@ -486,7 +486,6 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     triggerPause,
     currentTime,
     duration,
-    progressPct,
     totalProgressPct,
     formattedTime: formatTime(currentTime),
     formattedDuration: formatTime(duration),
