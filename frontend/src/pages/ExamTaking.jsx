@@ -128,7 +128,7 @@ function GlobalAudioBar({ audio }) {
             "h-full transition-all duration-500 ease-linear",
             isIntro ? "bg-amber-400" : "bg-sky-500",
           )}
-          style={{ width: `${audio.progressPct}%` }}
+          style={{ width: `${audio.totalProgressPct}%` }}
         />
       </div>
       <div className="px-3.5 py-2.5 flex items-center gap-2.5">
@@ -173,11 +173,20 @@ function GlobalAudioBar({ audio }) {
           </span>
         )}
 
-        {hasStarted && !isPlaying && !isDone && !hasBlockedAutoplay && (
+        {audio.isLoadingTrack && (
           <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
-            pauzirano
+            učitava...
           </span>
         )}
+        {!audio.isLoadingTrack &&
+          hasStarted &&
+          !isPlaying &&
+          !isDone &&
+          !hasBlockedAutoplay && (
+            <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
+              pauzirano
+            </span>
+          )}
 
         {audio.duration > 0 && (
           <span
@@ -708,13 +717,13 @@ export function QuizPage() {
     for (const q of questions) {
       if (q.passageId && !seen.has(q.passageId)) {
         const p = passages[q.passageId];
-        if (p && (p.audioUrl || p.audioIntroUrl)) {
+        if (p?.audioUrl || p?.audioIntroUrl) {
           result.push(p);
           seen.add(q.passageId);
         }
       }
     }
-    return result;
+    return result.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   }, [questions, passages]);
 
   const audio = useListeningAudio(examId, orderedAudioPassages, isPaused);
@@ -728,12 +737,10 @@ export function QuizPage() {
   }, [audio, sessionHandleSubmit]);
 
   const wrappedHandlePause = useCallback(() => {
-    audio.triggerPause();
     handlePause();
   }, [audio, handlePause]);
 
   const wrappedHandleResume = useCallback(() => {
-    audio.triggerPlay();
     handleResume();
   }, [audio, handleResume]);
 
@@ -860,6 +867,7 @@ export function QuizPage() {
                   }
                   isPaused={isPaused}
                   audioStatus={audioStatus}
+                  isGlobalPlaying={audio.isPlaying}
                   className="lg:flex-1 lg:overflow-hidden"
                 />
               ) : (

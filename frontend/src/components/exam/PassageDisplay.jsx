@@ -147,6 +147,7 @@ export function AudioPlayer({
   label = null,
   compact = false,
   isPaused = false,
+  isGlobalPlaying = false,
 }) {
   const audioRef = useRef(null);
   const wasPlayingBeforePauseRef = useRef(false);
@@ -172,7 +173,7 @@ export function AudioPlayer({
 
   const handlePlay = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio || !canPlay) return;
+    if (!audio || !canPlay || isGlobalPlaying) return;
     if (isPlaying) {
       // Pauza između reprodukcija je dozvoljena — samo toggle
       audio.pause();
@@ -183,7 +184,7 @@ export function AudioPlayer({
       setPlaysLeft((n) => n - 1);
     }
     audio.play().catch(() => setError(true));
-  }, [canPlay, isPlaying]);
+  }, [canPlay, isPlaying, isGlobalPlaying]);
 
   // Sync s globalnim pauziranjem ispita
   useEffect(() => {

@@ -59,6 +59,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     () => (saved?.currentTime ?? 0) > 0 || (saved?.isDone ?? false),
   );
   const [hasBlockedAutoplay, setHasBlockedAutoplay] = useState(false);
+  const [isLoadingTrack, setIsLoadingTrack] = useState(false);
 
   const audioRef = useRef(null);
   const currentTimeRef = useRef(saved?.currentTime ?? 0);
@@ -73,6 +74,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const pendingLoadedMetadataRef = useRef(null);
   const pendingTimeoutRef = useRef(null);
   const isPausedEffectMountedRef = useRef(false);
+  const trackDurationsRef = useRef({});
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -150,8 +152,10 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     audio.src = track.url;
     audio.load();
+    setIsLoadingTrack(true);
 
     const doPlay = () => {
+      setIsLoadingTrack(false);
       pendingLoadedMetadataRef.current = null;
       if (pendingTimeoutRef.current) {
         clearTimeout(pendingTimeoutRef.current);
@@ -289,9 +293,14 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
         audio.src &&
         audio.src !== window.location.href &&
         audio.paused &&
-        !audio.ended
+        !audio.ended &&
+        audio.readyState >= 3
       ) {
-        audio.play().catch(() => setHasBlockedAutoplay(true));
+        audio.play().catch((err) => {
+          if (err.name !== "AbortError") {
+            setHasBlockedAutoplay(true);
+          }
+        });
       }
     }
   }, [isPaused]);
@@ -331,9 +340,23 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
       }
     };
 
-    const onLoadedMetadata = () => setDuration(audio.duration);
+    const onLoadedMetadata = () => {
+      const url = queueRef.current[trackIndexRef.current]?.url;
+      if (url) trackDurationsRef.current[url] = audio.duration;
+      setDuration(audio.duration);
+    };
 
     const onError = () => {
+      setIsLoadingTrack(false);
+      if (pendingLoadedMetadataRef.current) {
+        audio.removeEventListener("canplay", pendingLoadedMetadataRef.current);
+        pendingLoadedMetadataRef.current = null;
+      }
+      if (pendingTimeoutRef.current) {
+        clearTimeout(pendingTimeoutRef.current);
+        pendingTimeoutRef.current = null;
+      }
+
       const url = queueRef.current[trackIndexRef.current]?.url;
       console.error(`[useListeningAudio] Audio load greška na traci: ${url}`);
 
@@ -429,22 +452,31 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasAudio]);
 
-  const currentTrack = queue[trackIndex] ?? null;
-  const progressPct =
-    duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const completedDuration = queue
+    .slice(0, trackIndex)
+    .reduce((sum, t) => sum + (trackDurationsRef.current[t.url] ?? 0), 0);
+  const totalKnownDuration = queue.reduce(
+    (sum, t) => sum + (trackDurationsRef.current[t.url] ?? 0),
+    0,
+  );
+  const totalProgressPct =
+    totalKnownDuration > 0
+      ? Math.min(
+          100,
+          ((completedDuration + currentTime) / totalKnownDuration) * 100,
+        )
+      : progressPct;
 
   return {
     audioRef,
-
     hasAudio,
     queue,
     totalTracks: queue.length,
-
     trackIndex,
     currentTrack,
     activePassageId: currentTrack?.passageId ?? null,
-
     isPlaying,
+    isLoadingTrack,
     hasStarted,
     isDone,
     hasError,
@@ -455,9 +487,9 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     currentTime,
     duration,
     progressPct,
+    totalProgressPct,
     formattedTime: formatTime(currentTime),
     formattedDuration: formatTime(duration),
-
     saveProgress,
     clearProgress,
   };
