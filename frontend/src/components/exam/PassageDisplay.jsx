@@ -151,8 +151,12 @@ export function AudioPlayer({
 }) {
   const audioRef = useRef(null);
   const wasPlayingBeforePauseRef = useRef(false);
+  const isDecrementingRef = useRef(false);
+  const isGlobalPlayingRef = useRef(isGlobalPlaying);
+  useEffect(() => {
+    isGlobalPlayingRef.current = isGlobalPlaying;
+  }, [isGlobalPlaying]);
 
-  // Inicijalizacija playsLeft iz storage-a — sprječava replay nakon refresha
   const [playsLeft, setPlaysLeft] = useState(() => {
     if (
       examId &&
@@ -175,51 +179,59 @@ export function AudioPlayer({
     const audio = audioRef.current;
     if (!audio || !canPlay || isGlobalPlaying) return;
     if (isPlaying) {
-      // Pauza između reprodukcija je dozvoljena — samo toggle
       audio.pause();
       return;
     }
-    // Dekrementiramo samo pri pokretanju od početka ili od "ended" stanja
     if (audio.currentTime === 0 || audio.ended) {
+      if (isDecrementingRef.current) return;
+      isDecrementingRef.current = true;
       setPlaysLeft((n) => n - 1);
     }
-    audio.play().catch(() => setError(true));
+    audio.play().catch(() => {
+      setError(true);
+      isDecrementingRef.current = false;
+    });
   }, [canPlay, isPlaying, isGlobalPlaying]);
 
-  // Sync s globalnim pauziranjem ispita
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     if (isPaused) {
-      // Zapamti je li svirao da znamo hoćemo li nastaviti
       wasPlayingBeforePauseRef.current = !audio.paused && !audio.ended;
       audio.pause();
     } else {
-      // Nastavi samo ako je bio aktivan i u sredini snimke
-      if (
-        wasPlayingBeforePauseRef.current &&
-        audio.currentTime > 0 &&
-        !audio.ended &&
-        audio.paused
-      ) {
-        audio.play().catch(() => setError(true));
-      }
+      const willResume = wasPlayingBeforePauseRef.current;
       wasPlayingBeforePauseRef.current = false;
+
+      if (
+        !willResume ||
+        audio.currentTime === 0 ||
+        audio.ended ||
+        !audio.paused
+      )
+        return;
+
+      const rafId = requestAnimationFrame(() => {
+        if (isGlobalPlayingRef.current) return;
+        audio.play().catch(() => setError(true));
+      });
+      return () => cancelAnimationFrame(rafId);
     }
   }, [isPaused]);
 
-  // Audio event listeneri
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const h = {
-      play: () => setIsPlaying(true),
+      play: () => {
+        setIsPlaying(true);
+        isDecrementingRef.current = false;
+      },
       pause: () => setIsPlaying(false),
       ended: () => {
         setIsPlaying(false);
-        // Trajno označi kao reproducirano
         if (examId && questionId) {
           questionAudioStorage.markPlayed(examId, questionId);
         }

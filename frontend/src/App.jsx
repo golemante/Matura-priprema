@@ -12,7 +12,7 @@ import { resetServerTimeCache } from "@/hooks/useExamInit";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 min
+      staleTime: 1000 * 60 * 5,
       retry: 1,
       refetchOnWindowFocus: false,
     },
@@ -23,7 +23,7 @@ function extractName(user) {
   return (
     user.user_metadata?.full_name ??
     user.user_metadata?.name ??
-    user.email?.split("@")[0] ??
+    user.email?.split("@")[0]?.trim() ??
     "Korisnik"
   );
 }
