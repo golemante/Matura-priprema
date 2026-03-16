@@ -76,7 +76,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const initDoneRef = useRef(null);
   const pendingLoadedMetadataRef = useRef(null);
   const pendingTimeoutRef = useRef(null);
-  const isPausedEffectMountedRef = useRef(false);
+  const prevIsPausedRef = useRef(isPaused);
   const trackDurationsRef = useRef({});
 
   useEffect(() => {
