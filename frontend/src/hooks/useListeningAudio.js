@@ -101,10 +101,12 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     if (!eid || !hasAudioRef.current) return;
     const q = queueRef.current;
     const idx = trackIndexRef.current;
+    const ct = audioRef.current?.currentTime ?? currentTimeRef.current;
+    currentTimeRef.current = ct;
     audioProgressStorage.save(eid, {
       trackIndex: idx,
       trackUrl: q[idx]?.url ?? null,
-      currentTime: currentTimeRef.current,
+      currentTime: ct,
       isDone: isDoneRef.current,
     });
   };
@@ -320,7 +322,10 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
       setHasBlockedAutoplay(false);
     };
 
-    const onPause = () => setIsPlaying(false);
+    const onPause = () => {
+      setIsPlaying(false);
+      saveProgressRef.current?.();
+    };
 
     const onTimeUpdate = () => {
       currentTimeRef.current = audio.currentTime;
@@ -329,6 +334,10 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
         currentTimeRef._lastSec = nowSec;
         setCurrentTime(audio.currentTime);
       }
+    };
+
+    const onSeeked = () => {
+      currentTimeRef.current = audio.currentTime;
     };
 
     const onLoadedMetadata = () => {
@@ -414,6 +423,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     audio.addEventListener("play", onPlay);
     audio.addEventListener("pause", onPause);
+    audio.addEventListener("seeked", onSeeked);
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("loadedmetadata", onLoadedMetadata);
     audio.addEventListener("error", onError);
@@ -422,6 +432,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     return () => {
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("seeked", onSeeked);
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("loadedmetadata", onLoadedMetadata);
       audio.removeEventListener("error", onError);
