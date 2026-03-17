@@ -1,6 +1,6 @@
 // pages/ExamTaking.jsx
 import { useParams, Link } from "react-router-dom";
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -759,198 +759,246 @@ export function QuizPage() {
     [questions],
   );
 
-  if (isCheckingLock) return <ExamSkeleton showPassage={false} />;
-  if (isBlockedByOtherTab) return <BlockedByTabScreen backLink={backLink} />;
-  if (fetchError)
-    return <ExamErrorState error={fetchError} backLink={backLink} />;
-  if (isLoading || !isInitialized) return <ExamSkeleton showPassage={false} />;
-  if (questions.length === 0)
-    return <ExamEmptyState backLink={backLink} examMeta={examMeta} />;
-  if (!current)
+  const audioElement = (
+    <audio
+      ref={audio.audioRef}
+      preload={audio.hasAudio ? "auto" : "none"}
+      style={{ display: "none" }}
+    />
+  );
+
+  if (isCheckingLock) {
     return (
-      <ExamErrorState
-        error={new Error("Neispravno stanje pitanja. Osvježi stranicu.")}
-        backLink={backLink}
-      />
+      <>
+        {audioElement}
+        <ExamSkeleton showPassage={false} />
+      </>
     );
+  }
+
+  if (isBlockedByOtherTab) {
+    return (
+      <>
+        {audioElement}
+        <BlockedByTabScreen backLink={backLink} />
+      </>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <>
+        {audioElement}
+        <ExamErrorState error={fetchError} backLink={backLink} />
+      </>
+    );
+  }
+
+  if (isLoading || !isInitialized) {
+    return (
+      <>
+        {audioElement}
+        <ExamSkeleton showPassage={false} />
+      </>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <>
+        {audioElement}
+        <ExamEmptyState backLink={backLink} examMeta={examMeta} />
+      </>
+    );
+  }
+
+  if (!current) {
+    return (
+      <>
+        {audioElement}
+        <ExamErrorState
+          error={new Error("Neispravno stanje pitanja. Osvježi stranicu.")}
+          backLink={backLink}
+        />
+      </>
+    );
+  }
 
   return (
-    <div className="min-h-dvh bg-warm-100 flex flex-col">
-      <audio
-        ref={audio.audioRef}
-        preload={audio.hasAudio ? "auto" : "none"}
-        style={{ display: "none" }}
-      />
+    <>
+      {audioElement}
 
-      <ExamTopBar
-        backLink={backLink}
-        examTitle={buildExamTitle(examMeta)}
-        timer={timer}
-        isPaused={isPaused}
-        isPauseSyncing={isPauseSyncing}
-        isSyncing={isSyncing}
-        isSubmitting={isSubmitting}
-        onPause={wrappedHandlePause}
-        onResume={wrappedHandleResume}
-        answeredCount={answeredCount}
-        totalVisible={totalVisible}
-        onSubmit={() => setShowSubmitModal(true)}
-        onOpenNav={() => setMobileNavOpen(true)}
-      />
+      <div className="min-h-dvh bg-warm-100 flex flex-col">
+        <ExamTopBar
+          backLink={backLink}
+          examTitle={buildExamTitle(examMeta)}
+          timer={timer}
+          isPaused={isPaused}
+          isPauseSyncing={isPauseSyncing}
+          isSyncing={isSyncing}
+          isSubmitting={isSubmitting}
+          onPause={wrappedHandlePause}
+          onResume={wrappedHandleResume}
+          answeredCount={answeredCount}
+          totalVisible={totalVisible}
+          onSubmit={() => setShowSubmitModal(true)}
+          onOpenNav={() => setMobileNavOpen(true)}
+        />
 
-      <SubmitModal
-        open={showSubmitModal}
-        onClose={() => setShowSubmitModal(false)}
-        onConfirm={handleSubmit}
-        answeredCount={answeredCount}
-        totalVisible={totalVisible}
-        isSubmitting={isSubmitting}
-        isSyncing={isSyncing}
-      />
-      <DraftModal
-        open={showDraftModal}
-        onConfirm={confirmRestoreDraft}
-        onDiscard={discardDraft}
-      />
-      <MobileNavDrawer
-        show={mobileNavOpen}
-        onClose={() => setMobileNavOpen(false)}
-        questions={questions}
-        answers={answers}
-        flagged={flagged}
-        currentIndex={currentIndex}
-        onGoTo={handleGoTo}
-        onSubmit={() => setShowSubmitModal(true)}
-        answeredCount={answeredCount}
-        isSyncing={isSyncing}
-        isSubmitting={isSubmitting}
-      />
+        <SubmitModal
+          open={showSubmitModal}
+          onClose={() => setShowSubmitModal(false)}
+          onConfirm={handleSubmit}
+          answeredCount={answeredCount}
+          totalVisible={totalVisible}
+          isSubmitting={isSubmitting}
+          isSyncing={isSyncing}
+        />
+        <DraftModal
+          open={showDraftModal}
+          onConfirm={confirmRestoreDraft}
+          onDiscard={discardDraft}
+        />
+        <MobileNavDrawer
+          show={mobileNavOpen}
+          onClose={() => setMobileNavOpen(false)}
+          questions={questions}
+          answers={answers}
+          flagged={flagged}
+          currentIndex={currentIndex}
+          onGoTo={handleGoTo}
+          onSubmit={() => setShowSubmitModal(true)}
+          answeredCount={answeredCount}
+          isSyncing={isSyncing}
+          isSubmitting={isSubmitting}
+        />
 
-      <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
-        <div className="flex flex-col lg:flex-row gap-5 h-full">
-          {/* ── Lijeva kolona: GlobalAudioBar + passage ──────────────────── */}
-          {hasAnyPassage && (
-            <div
-              className={cn(
-                "lg:w-[42%] xl:w-[38%] flex-shrink-0",
-                "lg:sticky lg:top-[4.5rem] lg:self-start",
-                "lg:max-h-[calc(100dvh-5.5rem)]",
-                "flex flex-col gap-3",
-              )}
-            >
-              <GlobalAudioBar audio={audio} />
-
-              {currentPassage && !isAudioOnly ? (
-                <PassageDisplay
-                  passage={currentPassage}
-                  className="lg:flex-1 lg:overflow-hidden"
-                />
-              ) : !isAudioOnly ? (
-                <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 min-h-[180px]">
-                  <p className="text-xs text-warm-400 font-medium text-center px-4">
-                    Ovo pitanje nema polazni tekst
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          )}
-
-          {/* ── Desna kolona: pitanje ─────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 flex flex-col gap-4">
-            <AnimatePresence custom={direction} mode="wait">
-              <motion.div
-                key={current?.id}
-                custom={direction}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.16, ease: "easeInOut" }}
-              >
-                <QuestionDisplay
-                  question={current}
-                  parentQuestion={parentQuestion}
-                  selectedAnswer={answers[current?.id] ?? null}
-                  isFlagged={isCurrentFlagged}
-                  onAnswer={handleAnswer}
-                  onFlag={handleToggleFlag}
-                  index={currentIndex}
-                  isPaused={isPaused}
-                />
-              </motion.div>
-            </AnimatePresence>
-
-            <div className="hidden lg:flex items-center justify-between gap-3 mt-auto pt-1">
-              <Button
-                variant="secondary"
-                leftIcon={ArrowLeft}
-                disabled={!hasPrev}
-                onClick={handlePrev}
-              >
-                Prethodno
-              </Button>
-              <div className="flex items-center gap-2.5">
-                {isLastVisible ? (
-                  <Button
-                    variant="primary"
-                    leftIcon={isSubmitting ? undefined : Send}
-                    onClick={() => setShowSubmitModal(true)}
-                    disabled={isSyncing}
-                    loading={isSubmitting}
-                  >
-                    {isSubmitting ? "Predaje se..." : "Predaj ispit"}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="primary"
-                    rightIcon={ArrowRight}
-                    onClick={handleNext}
-                  >
-                    Sljedeće
-                  </Button>
+        <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
+          <div className="flex flex-col lg:flex-row gap-5 h-full">
+            {/* ── Lijeva kolona: GlobalAudioBar + passage ──────────────────── */}
+            {hasAnyPassage && (
+              <div
+                className={cn(
+                  "lg:w-[42%] xl:w-[38%] flex-shrink-0",
+                  "lg:sticky lg:top-[4.5rem] lg:self-start",
+                  "lg:max-h-[calc(100dvh-5.5rem)]",
+                  "flex flex-col gap-3",
                 )}
+              >
+                <GlobalAudioBar audio={audio} />
+
+                {currentPassage && !isAudioOnly ? (
+                  <PassageDisplay
+                    passage={currentPassage}
+                    className="lg:flex-1 lg:overflow-hidden"
+                  />
+                ) : !isAudioOnly ? (
+                  <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 min-h-[180px]">
+                    <p className="text-xs text-warm-400 font-medium text-center px-4">
+                      Ovo pitanje nema polazni tekst
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* ── Desna kolona: pitanje ─────────────────────────────────────── */}
+            <div className="flex-1 min-w-0 flex flex-col gap-4">
+              <AnimatePresence custom={direction} mode="wait">
+                <motion.div
+                  key={current?.id}
+                  custom={direction}
+                  variants={slideVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: 0.16, ease: "easeInOut" }}
+                >
+                  <QuestionDisplay
+                    question={current}
+                    parentQuestion={parentQuestion}
+                    selectedAnswer={answers[current?.id] ?? null}
+                    isFlagged={isCurrentFlagged}
+                    onAnswer={handleAnswer}
+                    onFlag={handleToggleFlag}
+                    index={currentIndex}
+                    isPaused={isPaused}
+                  />
+                </motion.div>
+              </AnimatePresence>
+
+              <div className="hidden lg:flex items-center justify-between gap-3 mt-auto pt-1">
+                <Button
+                  variant="secondary"
+                  leftIcon={ArrowLeft}
+                  disabled={!hasPrev}
+                  onClick={handlePrev}
+                >
+                  Prethodno
+                </Button>
+                <div className="flex items-center gap-2.5">
+                  {isLastVisible ? (
+                    <Button
+                      variant="primary"
+                      leftIcon={isSubmitting ? undefined : Send}
+                      onClick={() => setShowSubmitModal(true)}
+                      disabled={isSyncing}
+                      loading={isSubmitting}
+                    >
+                      {isSubmitting ? "Predaje se..." : "Predaj ispit"}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      rightIcon={ArrowRight}
+                      onClick={handleNext}
+                    >
+                      Sljedeće
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* ── Nav sidebar (samo desktop) ──────────────────────────────── */}
-          <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
-            <QuestionNav
-              questions={questions}
-              answers={answers}
-              flagged={flagged}
-              currentIndex={currentIndex}
-              onGoTo={handleGoTo}
-              onSubmit={() => setShowSubmitModal(true)}
-              answeredCount={answeredCount}
-            />
+            {/* ── Nav sidebar (samo desktop) ──────────────────────────────── */}
+            <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
+              <QuestionNav
+                questions={questions}
+                answers={answers}
+                flagged={flagged}
+                currentIndex={currentIndex}
+                onGoTo={handleGoTo}
+                onSubmit={() => setShowSubmitModal(true)}
+                answeredCount={answeredCount}
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      {!isPaused && (
-        <MobileBottomBar
-          currentIndex={currentIndex}
-          totalVisible={totalVisible}
-          hasPrev={hasPrev}
-          isLast={isLastVisible}
-          onPrev={handlePrev}
-          onNext={handleNext}
-          onOpenNav={() => setMobileNavOpen(true)}
-          answeredCount={answeredCount}
-          onSubmit={() => setShowSubmitModal(true)}
-        />
-      )}
-
-      <AnimatePresence>
-        {isPaused && (
-          <PausedOverlay
-            key="paused-overlay"
-            onResume={handleResume}
-            isSyncing={isSyncing}
+        {!isPaused && (
+          <MobileBottomBar
+            currentIndex={currentIndex}
+            totalVisible={totalVisible}
+            hasPrev={hasPrev}
+            isLast={isLastVisible}
+            onPrev={handlePrev}
+            onNext={handleNext}
+            onOpenNav={() => setMobileNavOpen(true)}
+            answeredCount={answeredCount}
+            onSubmit={() => setShowSubmitModal(true)}
           />
         )}
-      </AnimatePresence>
-    </div>
+
+        <AnimatePresence>
+          {isPaused && (
+            <PausedOverlay
+              key="paused-overlay"
+              onResume={handleResume}
+              isSyncing={isSyncing}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    </>
   );
 }

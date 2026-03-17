@@ -160,8 +160,10 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
         clearTimeout(pendingTimeoutRef.current);
         pendingTimeoutRef.current = null;
       }
-      if (isPausedRef.current) return;
+
       audio.currentTime = startTime;
+
+      if (isPausedRef.current) return;
 
       const attemptPlay = (retries = 0) => {
         audio.play().catch((err) => {
