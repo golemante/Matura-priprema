@@ -710,6 +710,8 @@ export function QuizPage() {
 
   usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
 
+  const isAudioOnly = currentPassage?.contentType === "audio";
+
   // ── Globalni audio za ispit slušanja ──────────────────────────────────────
   const orderedAudioPassages = useMemo(() => {
     const seen = new Set();
@@ -756,8 +758,6 @@ export function QuizPage() {
     () => questions.some((q) => q.passageId),
     [questions],
   );
-
-  const isAudioOnly = currentPassage?.contentType === "audio";
 
   if (isCheckingLock) return <ExamSkeleton showPassage={false} />;
   if (isBlockedByOtherTab) return <BlockedByTabScreen backLink={backLink} />;
