@@ -71,12 +71,13 @@ export function PassageDisplay({ passage }) {
   const contentRef = useRef(null);
 
   if (!passage) return null;
-  if (isAudioOnly) return null;
 
   const typeKey = passage.contentType ?? "other";
   const typeConfig = CONTENT_TYPES[typeKey] ?? CONTENT_TYPES.other;
   const isAudioOnly = typeKey === "audio";
   const hasText = !isAudioOnly && !!passage.content;
+
+  if (isAudioOnly) return null;
 
   return (
     <div
