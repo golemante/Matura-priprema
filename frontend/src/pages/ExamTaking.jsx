@@ -25,6 +25,7 @@ import { ProgressBar } from "@/components/exam/ProgressBar";
 import { ExamTimer } from "@/components/exam/Timer";
 import { useExamSession } from "@/hooks/useExamSession";
 import { useListeningAudio } from "@/hooks/useListeningAudio";
+import { useExamStore } from "@/store/examStore";
 import { EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 import { cn } from "@/utils/cn";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -728,7 +729,12 @@ export function QuizPage() {
     return result.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   }, [questions, passages]);
 
-  const audio = useListeningAudio(examId, orderedAudioPassages, isPaused);
+  const storeAttemptId = useExamStore((s) => s.attemptId);
+  const audio = useListeningAudio(
+    storeAttemptId ? examId : null,
+    orderedAudioPassages,
+    isPaused,
+  );
 
   const handleSubmit = useCallback(() => {
     if (audio.audioRef.current) {
