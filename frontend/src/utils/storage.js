@@ -84,7 +84,7 @@ export const draftStorage = {
 };
 
 export const audioProgressStorage = {
-  _key: (examId) => `audio_${getUserId()}_${examId}`,
+  _key: (examId) => `audio_${examId}`,
 
   save: (
     examId,

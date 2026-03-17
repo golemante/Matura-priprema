@@ -83,6 +83,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const pendingTimeoutRef = useRef(null);
   const prevIsPausedRef = useRef(isPaused);
   const trackDurationsRef = useRef({});
+  const isLoadingTrackRef = useRef(false);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -109,7 +110,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     const audio = audioRef.current;
     const ct =
-      audio && audio.readyState >= 1
+      !isLoadingTrackRef.current && audio && audio.readyState >= 1
         ? audio.currentTime
         : currentTimeRef.current;
 
@@ -164,6 +165,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     setIsDone(false);
 
     audio.src = track.url;
+    isLoadingTrackRef.current = true;
     audio.load();
     setIsLoadingTrack(true);
 
@@ -176,6 +178,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
       }
 
       audio.currentTime = startTime;
+      isLoadingTrackRef.current = false;
 
       if (isPausedRef.current) return;
 
@@ -238,15 +241,21 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     if (initDoneRef.current === examId) return;
     initDoneRef.current = examId;
 
-    const s = savedProgressRef.current;
-
     for (const t of queue) {
       if (t.knownDuration && !trackDurationsRef.current[t.url]) {
         trackDurationsRef.current[t.url] = t.knownDuration;
       }
     }
 
-    if (s?.isDone) {
+    const s = audioProgressStorage.load(examId) ?? {
+      trackIndex: 0,
+      trackUrl: null,
+      currentTime: 0,
+      isDone: false,
+    };
+    savedProgressRef.current = s;
+
+    if (s.isDone) {
       isDoneRef.current = true;
       setIsDone(true);
       console.info(
@@ -256,14 +265,14 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     }
 
     let startIndex = 0;
-    if (s?.trackUrl) {
+    if (s.trackUrl) {
       const byUrl = queue.findIndex((t) => t.url === s.trackUrl);
       startIndex =
-        byUrl !== -1 ? byUrl : Math.min(s?.trackIndex ?? 0, queue.length - 1);
+        byUrl !== -1 ? byUrl : Math.min(s.trackIndex ?? 0, queue.length - 1);
     } else {
-      startIndex = Math.min(s?.trackIndex ?? 0, queue.length - 1);
+      startIndex = Math.min(s.trackIndex ?? 0, queue.length - 1);
     }
-    const startTime = s?.currentTime ?? 0;
+    const startTime = s.currentTime ?? 0;
 
     console.info(
       `[useListeningAudio] Init: track ${startIndex}/${queue.length - 1} @ ${startTime.toFixed(1)}s`,
@@ -364,6 +373,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     };
 
     const onError = () => {
+      isLoadingTrackRef.current = false;
       setIsLoadingTrack(false);
       if (pendingLoadedMetadataRef.current) {
         audio.removeEventListener("canplay", pendingLoadedMetadataRef.current);
