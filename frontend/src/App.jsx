@@ -86,8 +86,11 @@ function App() {
 
   if (!authReady) {
     return (
-      <div className="min-h-dvh bg-warm-100 flex items-center justify-center">
-        <div className="w-6 h-6 rounded-full border-2 border-primary-300 border-t-primary-600 animate-spin" />
+      <div className="min-h-dvh bg-warm-100 flex flex-col items-center justify-center gap-4">
+        <div className="w-8 h-8 rounded-full border-4 border-primary-200 border-t-primary-600 animate-spin" />
+        <p className="text-warm-600 font-medium animate-pulse">
+          Provjera prijave...
+        </p>
       </div>
     );
   }

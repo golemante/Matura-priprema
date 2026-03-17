@@ -272,15 +272,11 @@ export function ResultsPage() {
     resetExam();
     draftStorage.clear(examId);
     audioProgressStorage.clear(examId);
-    questionAudioStorage.clear(examId);
     navigate(`/ispit/${examId}`);
   };
 
   const handleNewExam = () => {
-    if (examId) {
-      audioProgressStorage.clear(examId);
-      questionAudioStorage.clear(examId);
-    }
+    if (examId) audioProgressStorage.clear(examId);
     resetExam();
     navigate("/predmeti/" + (subject?.id ?? subjectId));
   };

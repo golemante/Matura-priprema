@@ -109,8 +109,6 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     });
   };
 
-  const saveProgress = useCallback(() => saveProgressRef.current?.(), []);
-
   const clearProgress = useCallback(() => {
     const eid = examIdRef.current;
     if (eid) audioProgressStorage.clear(eid);
@@ -218,28 +216,6 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
       playTrackAtIndex(trackIndexRef.current, currentTimeRef.current);
     }
   }, [playTrackAtIndex]);
-
-  const triggerPlay = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || isDoneRef.current || !hasAudioRef.current) return;
-    if (
-      audio.paused &&
-      audio.src &&
-      audio.src !== window.location.href &&
-      !audio.ended
-    ) {
-      setHasBlockedAutoplay(false);
-      audio.play().catch(() => setHasBlockedAutoplay(true));
-    }
-  }, []);
-
-  const triggerPause = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio && !audio.paused) {
-      audio.pause();
-      saveProgressRef.current?.();
-    }
-  }, []);
 
   useEffect(() => {
     if (!hasAudio) return;
@@ -503,14 +479,11 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     hasError,
     hasBlockedAutoplay,
     manualStart,
-    triggerPlay,
-    triggerPause,
     currentTime,
     duration,
     totalProgressPct,
     formattedTime: formatTime(currentTime),
     formattedDuration: formatTime(duration),
-    saveProgress,
     clearProgress,
   };
 }
