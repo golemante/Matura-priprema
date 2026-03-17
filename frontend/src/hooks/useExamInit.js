@@ -3,11 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useExamStore } from "@/store/examStore";
 import { useExamWithQuestions } from "@/hooks/useExam";
-import {
-  draftStorage,
-  audioProgressStorage,
-  questionAudioStorage,
-} from "@/utils/storage";
+import { draftStorage, audioProgressStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
 import { attemptApi } from "@/api/attemptApi";
 
@@ -207,7 +203,6 @@ export function useExamInit(examId, { enabled = true } = {}) {
       const created = await attemptApi.create(examId);
       if (created?.id) {
         setAttemptId(created.id);
-        questionAudioStorage.clear(examId);
         audioProgressStorage.clear(examId);
         draftStorage.save(
           examId,

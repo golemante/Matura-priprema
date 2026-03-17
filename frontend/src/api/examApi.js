@@ -18,9 +18,6 @@ function mapQuestionRows(rows) {
       points: row.points ?? 1,
       passageId: row.passage_id ?? null,
       imageUrl: row.image_url ?? null,
-      audioUrl: row.question_audio_url ?? row.audio_url ?? null,
-      audioDurationSeconds:
-        row.question_audio_duration ?? row.audio_duration_seconds ?? null,
       options: Array.isArray(row.options) ? row.options : [],
     }));
 }
@@ -123,7 +120,6 @@ export const examApi = {
           `id, exam_id, passage_id, parent_question_id, position,
            position_label, section_label, question_type, text,
            inline_text, points, image_url,
-           audio_url, audio_duration_seconds,
            options (id, letter, text)`,
         )
         .eq("exam_id", examId)

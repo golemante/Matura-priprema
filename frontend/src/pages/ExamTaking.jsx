@@ -744,20 +744,6 @@ export function QuizPage() {
     handleResume();
   }, [handleResume]);
 
-  // audioStatus za PassageDisplay (samo read-only)
-  const audioStatus = useMemo(
-    () =>
-      audio.hasAudio
-        ? {
-            activePassageId: audio.activePassageId,
-            isPlaying: audio.isPlaying,
-            currentTrack: audio.currentTrack,
-            isDone: audio.isDone,
-          }
-        : null,
-    [audio],
-  );
-
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
 
@@ -770,6 +756,8 @@ export function QuizPage() {
     () => questions.some((q) => q.passageId),
     [questions],
   );
+
+  const isAudioOnly = currentPassage?.contentType === "audio";
 
   if (isCheckingLock) return <ExamSkeleton showPassage={false} />;
   if (isBlockedByOtherTab) return <BlockedByTabScreen backLink={backLink} />;
@@ -852,31 +840,18 @@ export function QuizPage() {
             >
               <GlobalAudioBar audio={audio} />
 
-              {currentPassage ? (
+              {currentPassage && !isAudioOnly ? (
                 <PassageDisplay
                   passage={currentPassage}
-                  activeGapPosition={
-                    current?.questionType === "fill_blank_child"
-                      ? current.position
-                      : null
-                  }
-                  selectedPersonLetter={
-                    current?.questionType === "multiple_choice"
-                      ? (answers[current?.id] ?? null)
-                      : null
-                  }
-                  isPaused={isPaused}
-                  audioStatus={audioStatus}
-                  isGlobalPlaying={audio.isPlaying}
                   className="lg:flex-1 lg:overflow-hidden"
                 />
-              ) : (
+              ) : !isAudioOnly ? (
                 <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 min-h-[180px]">
                   <p className="text-xs text-warm-400 font-medium text-center px-4">
                     Ovo pitanje nema polazni tekst
                   </p>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 
@@ -901,7 +876,6 @@ export function QuizPage() {
                   onFlag={handleToggleFlag}
                   index={currentIndex}
                   isPaused={isPaused}
-                  isGlobalPlaying={audio.isPlaying}
                 />
               </motion.div>
             </AnimatePresence>

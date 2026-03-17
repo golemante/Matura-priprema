@@ -3,7 +3,6 @@ import { useCallback } from "react";
 import { motion } from "framer-motion";
 import { Flag, Check } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
-import { AudioPlayer } from "@/components/exam/PassageDisplay";
 import { cn } from "@/utils/utils";
 
 function OptionButton({ option, selected, onSelect, disabled }) {
@@ -82,7 +81,6 @@ export function QuestionDisplay({
   isFlagged,
   index,
   isPaused,
-  isGlobalPlaying = false,
 }) {
   if (!question) return null;
 
@@ -134,20 +132,6 @@ export function QuestionDisplay({
             </button>
           )}
         </div>
-
-        {question.audioUrl && (
-          <div className="mb-4">
-            <AudioPlayer
-              audioUrl={question.audioUrl}
-              maxPlays={1}
-              examId={question.examId ?? question.exam_id ?? null}
-              questionId={question.id}
-              isPaused={isPaused}
-              isGlobalPlaying={isGlobalPlaying}
-              compact
-            />
-          </div>
-        )}
 
         {/* Tekst pitanja */}
         <SafeHtml

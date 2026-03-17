@@ -16,11 +16,7 @@ import { SUBJECTS } from "@/utils/constants";
 import { useExamStore } from "@/store/examStore";
 import { examApi } from "@/api/examApi";
 import { attemptApi } from "@/api/attemptApi";
-import {
-  draftStorage,
-  audioProgressStorage,
-  questionAudioStorage,
-} from "@/utils/storage";
+import { draftStorage, audioProgressStorage } from "@/utils/storage";
 import { ScoreHero } from "@/components/results/ScoreHero";
 import { SectionReview } from "@/components/results/SectionReview";
 import { FilterTabs } from "@/components/results/FilterTabs";

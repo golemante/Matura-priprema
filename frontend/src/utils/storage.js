@@ -117,38 +117,3 @@ export const audioProgressStorage = {
 
   clear: (examId) => storage.remove(audioProgressStorage._key(examId)),
 };
-
-export const questionAudioStorage = {
-  _key: (examId) => `qaud_${getUserId()}_${examId}`,
-
-  _load: (examId) => {
-    const data = storage.get(questionAudioStorage._key(examId));
-    if (!data) return new Set();
-    if (Date.now() > (data.expiresAt ?? 0)) {
-      storage.remove(questionAudioStorage._key(examId));
-      return new Set();
-    }
-    return new Set(Array.isArray(data.played) ? data.played : []);
-  },
-
-  markPlayed: (examId, questionId) => {
-    if (!examId || !questionId) return;
-    const played = questionAudioStorage._load(examId);
-    played.add(questionId);
-    storage.set(questionAudioStorage._key(examId), {
-      played: [...played],
-      savedAt: Date.now(),
-      expiresAt: Date.now() + DRAFT_TTL_MS,
-    });
-  },
-
-  hasPlayed: (examId, questionId) => {
-    if (!examId || !questionId) return false;
-    return questionAudioStorage._load(examId).has(questionId);
-  },
-
-  clear: (examId) => {
-    if (!examId) return;
-    storage.remove(questionAudioStorage._key(examId));
-  },
-};
