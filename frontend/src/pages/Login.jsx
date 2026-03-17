@@ -7,7 +7,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Mail, Lock } from "lucide-react";
 // eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";

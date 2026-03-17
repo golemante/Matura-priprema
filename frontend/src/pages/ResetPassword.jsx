@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { authApi } from "@/api/authApi";
 import { toast } from "@/store/toastStore";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { resetPasswordSchema as schema } from "@/utils/validators";

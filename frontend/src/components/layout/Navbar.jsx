@@ -10,7 +10,7 @@ import {
   User,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { useAuthStore } from "@/store/authStore";
 import { useLogout } from "@/hooks/useAuth";
 

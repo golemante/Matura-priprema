@@ -1,7 +1,7 @@
 // components/exam/QuestionNav.jsx
 import { motion } from "framer-motion";
 import { Send, Flag } from "lucide-react";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 function NavButton({
   question,

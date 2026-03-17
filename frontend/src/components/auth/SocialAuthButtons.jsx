@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/store/toastStore";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 function GoogleIcon({ size = 18 }) {
   return (

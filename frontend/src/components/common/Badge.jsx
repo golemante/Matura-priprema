@@ -1,4 +1,4 @@
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 const variants = {
   default: "bg-warm-100 text-warm-700 border-warm-200",

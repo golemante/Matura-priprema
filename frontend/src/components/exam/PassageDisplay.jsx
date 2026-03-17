@@ -5,7 +5,7 @@ import {
   PassageSafeHtml,
   FootnoteSafeHtml,
 } from "@/components/common/SafeHtml";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 const CONTENT_TYPES = {
   poem: {

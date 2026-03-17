@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { QuestionReview } from "@/components/results/QuestionReview";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 /**
  * @param {object}  props

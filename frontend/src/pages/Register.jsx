@@ -10,7 +10,7 @@ import { authApi } from "@/api/authApi";
 import { toast } from "@/store/toastStore";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, User } from "lucide-react";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";

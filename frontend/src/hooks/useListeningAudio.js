@@ -19,6 +19,7 @@ function buildQueue(orderedPassages) {
         type: "intro",
         passageId: p.id,
         label: p.title ? `${p.title} — upute` : "Upute",
+        knownDuration: null,
       });
     }
     if (p.audioUrl) {
@@ -27,6 +28,7 @@ function buildQueue(orderedPassages) {
         type: "content",
         passageId: p.id,
         label: p.title ?? "Snimka",
+        knownDuration: p.audioDurationSeconds ?? null,
       });
     }
   }
@@ -101,8 +103,13 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     if (!eid || !hasAudioRef.current) return;
     const q = queueRef.current;
     const idx = trackIndexRef.current;
-    const ct = audioRef.current?.currentTime ?? currentTimeRef.current;
-    currentTimeRef.current = ct;
+
+    const audio = audioRef.current;
+    const ct =
+      audio && audio.readyState >= 1
+        ? audio.currentTime
+        : currentTimeRef.current;
+
     audioProgressStorage.save(eid, {
       trackIndex: idx,
       trackUrl: q[idx]?.url ?? null,
@@ -227,6 +234,12 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     initDoneRef.current = examId;
 
     const s = savedProgressRef.current;
+
+    for (const t of queue) {
+      if (t.knownDuration && !trackDurationsRef.current[t.url]) {
+        trackDurationsRef.current[t.url] = t.knownDuration;
+      }
+    }
 
     if (s?.isDone) {
       isDoneRef.current = true;

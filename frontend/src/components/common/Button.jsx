@@ -1,4 +1,4 @@
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { Loader2 } from "lucide-react";
 
 const variants = {

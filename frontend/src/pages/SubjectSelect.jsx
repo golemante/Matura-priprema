@@ -11,7 +11,7 @@ import {
   normalizeSession,
 } from "@/utils/constants";
 import { useExams } from "@/hooks/useExam";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 function transformExam(dbExam) {

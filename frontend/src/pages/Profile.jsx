@@ -10,7 +10,6 @@ import { PageWrapper } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
 import { useCurrentUser } from "@/hooks/useAuth";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
-import { use } from "react";
 
 function formatJoinDate(dateValue) {
   if (!dateValue) return "Nije dostupno";

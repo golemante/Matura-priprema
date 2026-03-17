@@ -20,7 +20,6 @@ import { draftStorage, audioProgressStorage } from "@/utils/storage";
 import { ScoreHero } from "@/components/results/ScoreHero";
 import { SectionReview } from "@/components/results/SectionReview";
 import { FilterTabs } from "@/components/results/FilterTabs";
-import { cn } from "@/utils/utils";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 function Confetti({ active }) {

@@ -1,5 +1,5 @@
 // components/common/Skeleton.jsx
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 export function Skeleton({ className }) {
   return (

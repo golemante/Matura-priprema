@@ -1,5 +1,5 @@
 // components/common/Input.jsx
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useState, forwardRef } from "react";
 

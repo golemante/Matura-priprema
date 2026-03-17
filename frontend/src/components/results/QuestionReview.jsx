@@ -10,7 +10,7 @@ import {
   Lightbulb,
 } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 function OptionSkeleton({ count = 4 }) {
   return (

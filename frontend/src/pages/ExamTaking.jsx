@@ -26,7 +26,7 @@ import { ExamTimer } from "@/components/exam/Timer";
 import { useExamSession } from "@/hooks/useExamSession";
 import { useListeningAudio } from "@/hooks/useListeningAudio";
 import { EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 const slideVariants = {

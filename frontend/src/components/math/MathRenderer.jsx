@@ -3,7 +3,7 @@ import "katex/dist/katex.min.css";
 import { memo, useMemo } from "react";
 import { InlineMath, BlockMath } from "react-katex";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 const MATH_SPLIT_REGEX = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g;
 

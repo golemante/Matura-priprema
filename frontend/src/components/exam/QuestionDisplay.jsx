@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import { motion } from "framer-motion";
 import { Flag, Check } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 function OptionButton({ option, selected, onSelect, disabled }) {
   return (

@@ -6,7 +6,7 @@ import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 import { authApi } from "@/api/authApi";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { forgotPasswordSchema } from "@/utils/validators";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";

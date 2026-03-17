@@ -1,6 +1,6 @@
 // components/results/FilterTabs.jsx
 import { Filter, XCircle, Minus, Flag } from "lucide-react";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 const FILTERS = [
   { id: "all", label: "Sva", Icon: Filter },

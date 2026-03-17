@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 import { motion, useSpring, useTransform, useMotionValue } from "framer-motion";
 import { Clock, TrendingUp } from "lucide-react";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 export function getScoreConfig(pct) {
   if (pct >= 90)

@@ -1,5 +1,5 @@
 // components/exam/ExamSkeleton.jsx
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 function Bone({ className }) {
   return <div className={cn("skeleton-shimmer rounded-lg", className)} />;

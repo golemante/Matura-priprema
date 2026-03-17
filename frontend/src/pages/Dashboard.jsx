@@ -29,7 +29,7 @@ import { SUBJECTS, EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 import { useCurrentUser } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { attemptApi } from "@/api/attemptApi";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 function useAttempts() {

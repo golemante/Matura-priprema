@@ -16,7 +16,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { SUBJECTS } from "@/utils/constants";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },

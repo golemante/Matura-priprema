@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 const SIZES = {
   sm: "max-w-sm",

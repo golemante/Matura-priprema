@@ -8,7 +8,7 @@ import {
   Users,
   Target,
 } from "lucide-react";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 // ── Community score boja ──────────────────────────────────────────────────────
 function communityScoreColor(pct) {

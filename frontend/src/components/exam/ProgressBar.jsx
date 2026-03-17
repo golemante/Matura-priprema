@@ -1,6 +1,6 @@
 // components/exam/ProgressBar.jsx
 import { motion } from "framer-motion";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 export function ProgressBar({ value, max, className, showLabel = false }) {
   const pct = max > 0 ? Math.min(Math.round((value / max) * 100), 100) : 0;

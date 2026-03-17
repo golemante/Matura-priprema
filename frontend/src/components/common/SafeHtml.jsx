@@ -1,7 +1,7 @@
 // components/common/SafeHtml.jsx
 import { useMemo } from "react";
 import { sanitizeInline, containsHtml } from "@/utils/sanitize";
-import { cn } from "@/utils/utils";
+import { cn } from "@/utils/cn";
 
 // Lazy import KaTeX — samo kad je potreban
 let katexLoaded = false;
