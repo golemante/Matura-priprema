@@ -51,10 +51,13 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
   const saved = savedProgressRef.current;
 
+  const savedTrack = queue[saved?.trackIndex ?? 0] ?? null;
+  const seedDuration = savedTrack?.knownDuration ?? 0;
+
   const [trackIndex, setTrackIndex] = useState(saved?.trackIndex ?? 0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(saved?.currentTime ?? 0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(seedDuration);
   const [hasError, setHasError] = useState(false);
   const [isDone, setIsDone] = useState(saved?.isDone ?? false);
   const [hasStarted, setHasStarted] = useState(
@@ -142,6 +145,7 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     }
 
     currentTimeRef.current = startTime;
+    setCurrentTime(startTime);
     audioProgressStorage.save(examIdRef.current, {
       trackIndex: index,
       trackUrl: track.url,
@@ -152,7 +156,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     setTrackIndex(index);
     setCurrentTrack(queueRef.current[index] ?? null);
     trackIndexRef.current = index;
-    setDuration(0);
+    const nextKnown = queueRef.current[index]?.knownDuration ?? 0;
+    setDuration(nextKnown);
     setHasError(false);
     hasErrorRef.current = false;
     isDoneRef.current = false;
@@ -277,7 +282,6 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
 
     if (isPaused) {
       audio.pause();
-      saveProgressRef.current?.();
     } else {
       const canAttemptResume =
         hasAudioRef.current &&
