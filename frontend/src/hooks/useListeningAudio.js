@@ -82,6 +82,12 @@ export function useListeningAudio(
     () => queue[saved?.trackIndex ?? 0] ?? null,
   );
 
+  const [totalKnownDuration, setTotalKnownDuration] = useState(() =>
+    calcTotalKnownDuration(queue),
+  );
+
+  const [trackSkipWarning, setTrackSkipWarning] = useState(null);
+
   const audioRef = useRef(null);
   const progressBarRef = useRef(null);
   const rafRef = useRef(null);
@@ -442,6 +448,7 @@ export function useListeningAudio(
       setIsPlaying(true);
       setHasStarted(true);
       setHasBlockedAutoplay(false);
+      setTrackSkipWarning(null);
     };
 
     const onPause = () => {
@@ -478,17 +485,22 @@ export function useListeningAudio(
         trackDurationsRef.current,
       );
       totalKnownDurationRef.current = newTotal;
+      setTotalKnownDuration(newTotal);
 
       scheduleProgressBarUpdate();
     };
 
+    let skipWarningTimerRef_local = null;
     const onError = () => {
       isLoadingTrackRef.current = false;
       setIsLoadingTrack(false);
       cleanupPendingPlay();
 
-      const url = queueRef.current[trackIndexRef.current]?.url;
-      console.error(`[useListeningAudio] Audio load greška na traci: ${url}`);
+      const failedTrack = queueRef.current[trackIndexRef.current];
+      const failedUrl = failedTrack?.url;
+      console.error(
+        `[useListeningAudio] Audio load greška na traci: ${failedUrl}`,
+      );
 
       const q = queueRef.current;
       const nextIndex = trackIndexRef.current + 1;
@@ -497,6 +509,13 @@ export function useListeningAudio(
         console.warn(
           `[useListeningAudio] Preskačem pokvarenu traku → track ${nextIndex}`,
         );
+        const warningLabel = failedTrack?.label ?? "Snimka";
+        setTrackSkipWarning(warningLabel);
+        if (skipWarningTimerRef_local) clearTimeout(skipWarningTimerRef_local);
+        skipWarningTimerRef_local = setTimeout(() => {
+          setTrackSkipWarning(null);
+        }, 4_000);
+
         setTimeout(() => playTrackAtIndex(nextIndex, 0), 300);
       } else {
         hasErrorRef.current = true;
@@ -504,6 +523,7 @@ export function useListeningAudio(
         setIsPlaying(false);
       }
     };
+
     const onEnded = () => {
       setIsPlaying(false);
       const q = queueRef.current;
@@ -631,13 +651,11 @@ export function useListeningAudio(
         sum + (trackDurationsRef.current[t.url] ?? t.knownDuration ?? 0),
       0,
     );
-  const totalKnownDurationSnapshot = totalKnownDurationRef.current;
   const totalProgressPct =
-    totalKnownDurationSnapshot > 0
+    totalKnownDuration > 0
       ? Math.min(
           100,
-          ((completedDuration + currentTime) / totalKnownDurationSnapshot) *
-            100,
+          ((completedDuration + currentTime) / totalKnownDuration) * 100,
         )
       : 0;
 
@@ -656,6 +674,7 @@ export function useListeningAudio(
     isDone,
     hasError,
     hasBlockedAutoplay,
+    trackSkipWarning,
     manualStart,
     currentTime,
     duration,
