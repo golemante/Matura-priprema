@@ -173,22 +173,3 @@ export function ExamSkeleton({ showPassage = false }) {
     </div>
   );
 }
-
-export function ExamListSkeleton({ count = 6 }) {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          className="bg-white rounded-2xl border border-warm-200 p-4 flex items-center justify-between"
-        >
-          <div className="flex-1">
-            <Bone className="h-4 w-48 mb-2" />
-            <Bone className="h-3 w-32" />
-          </div>
-          <Bone className="h-9 w-24 rounded-xl ml-4 flex-shrink-0" />
-        </div>
-      ))}
-    </div>
-  );
-}

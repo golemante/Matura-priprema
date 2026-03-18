@@ -153,15 +153,80 @@ function useCountUp(target, duration = 900) {
 function DashboardSkeleton() {
   return (
     <div className="space-y-5">
-      <Bone className="h-36 rounded-2xl" />
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-700 via-primary-600 to-indigo-600 p-5">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="space-y-2">
+            <Bone className="h-3.5 w-24 bg-white/20" />
+            <Bone className="h-6 w-40 bg-white/30" />
+            <Bone className="h-3 w-28 bg-white/20" />
+          </div>
+          <Bone className="h-14 w-20 rounded-xl bg-white/20 flex-shrink-0" />
+        </div>
+        <div className="flex items-end gap-1.5 mt-4">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <Bone className="w-8 h-8 rounded-lg bg-white/20" />
+              <Bone className="h-2 w-4 bg-white/15" />
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[...Array(4)].map((_, i) => (
-          <Bone key={i} className="h-24 rounded-2xl" />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="bg-white rounded-2xl border border-warm-200 shadow-card p-4"
+          >
+            <Bone className="w-9 h-9 rounded-xl mb-3" />
+            <Bone className="h-7 w-16 mb-1.5" />
+            <Bone className="h-3 w-24" />
+          </div>
         ))}
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Bone className="lg:col-span-2 h-64 rounded-2xl" />
-        <Bone className="h-64 rounded-2xl" />
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-warm-200 shadow-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <Bone className="h-3.5 w-28" />
+            <Bone className="h-3.5 w-12" />
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 bg-warm-50 rounded-xl border border-warm-200 mb-3">
+            <div className="space-y-1.5">
+              <Bone className="h-3 w-24" />
+              <Bone className="h-6 w-16" />
+            </div>
+            <Bone className="h-9 w-24 rounded-lg" />
+          </div>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 py-2.5 border-b border-warm-100 last:border-0"
+            >
+              <Bone className="w-8 h-8 rounded-lg flex-shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <Bone className="h-3.5 w-40" />
+                <Bone className="h-3 w-20" />
+              </div>
+              <Bone className="h-6 w-14 rounded-full flex-shrink-0" />
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-warm-200 shadow-card p-5">
+          <Bone className="h-3.5 w-28 mb-5" />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="mb-4 last:mb-0">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Bone className="w-7 h-7 rounded-lg flex-shrink-0" />
+                <Bone className="h-3.5 flex-1" />
+                <Bone className="h-3.5 w-10 flex-shrink-0" />
+              </div>
+              <Bone className="h-1.5 w-full rounded-full" />
+            </div>
+          ))}
+          <Bone className="h-9 w-full rounded-lg mt-4" />
+        </div>
       </div>
     </div>
   );
