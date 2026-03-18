@@ -1,19 +1,22 @@
-// store/toastStore.js
 import { create } from "zustand";
 
-// Timeout map živi VAN stora da ne trigerira reaktivnost Zustand-a
 const timeoutIds = new Map();
 
-const useToastStore = create((set) => ({
+const useToastStore = create((set, get) => ({
   toasts: [],
 
   add: (toastConfig) => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const duration = toastConfig.duration ?? 4000;
+
+    const exists = get().toasts.some(
+      (t) => t.message === toastConfig.message && t.type === toastConfig.type,
+    );
+    if (exists) return;
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     set((s) => ({ toasts: [...s.toasts, { ...toastConfig, id }] }));
 
-    // Pohrani timeout id da ga možemo cancelati ako se toast ručno zatvori
     const timeoutId = setTimeout(() => {
       timeoutIds.delete(id);
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
@@ -23,7 +26,6 @@ const useToastStore = create((set) => ({
   },
 
   remove: (id) => {
-    // Cancel timeout — spriječi beskoristan re-render nakon ručnog zatvaranja
     const timeoutId = timeoutIds.get(id);
     if (timeoutId != null) {
       clearTimeout(timeoutId);
@@ -32,7 +34,6 @@ const useToastStore = create((set) => ({
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
   },
 
-  // Korisno za testove ili "dismiss all" UI gumb
   removeAll: () => {
     timeoutIds.forEach((id) => clearTimeout(id));
     timeoutIds.clear();

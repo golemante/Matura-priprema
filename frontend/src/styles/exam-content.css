@@ -356,10 +356,3 @@ mark.fill-blank-active {
 .passage-scroll-area::-webkit-scrollbar-thumb:hover {
   background: #a8a49e;
 }
-
-/* ── xs breakpoint helper ────────────────────────────────────────────────── */
-@media (min-width: 475px) {
-  .xs\:inline {
-    display: inline;
-  }
-}

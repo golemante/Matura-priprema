@@ -128,7 +128,6 @@ function GlobalAudioBar({ audio }) {
         <div
           ref={audio.progressBarRef}
           className={cn("h-full", isIntro ? "bg-amber-400" : "bg-sky-500")}
-          style={{ width: `${audio.totalProgressPct}%` }}
         />
       </div>
 
@@ -709,7 +708,6 @@ export function QuizPage() {
 
   const isAudioOnly = currentPassage?.contentType === "audio";
 
-  // ── Globalni audio za ispit slušanja ──────────────────────────────────────
   const orderedAudioPassages = useMemo(() => {
     const seen = new Set();
     const result = [];
@@ -717,12 +715,14 @@ export function QuizPage() {
       if (q.passageId && !seen.has(q.passageId)) {
         const p = passages[q.passageId];
         if (p?.audioUrl || p?.audioIntroUrl) {
-          result.push(p);
+          result.push({ ...p, _firstQuestionPosition: q.position ?? 0 });
           seen.add(q.passageId);
         }
       }
     }
-    return result.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    return result.sort(
+      (a, b) => a._firstQuestionPosition - b._firstQuestionPosition,
+    );
   }, [questions, passages]);
 
   const storeAttemptId = useExamStore((s) => s.attemptId);

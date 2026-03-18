@@ -1,5 +1,3 @@
-// components/common/Toast.jsx — koristeći Framer Motion
-// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Info, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/utils/cn";

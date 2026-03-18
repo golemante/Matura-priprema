@@ -6,19 +6,11 @@ import {
   LayoutDashboard,
   BarChart2,
 } from "lucide-react";
-import { PageWrapper } from "@/components/layout/Wrapper";
+import { PageWrapper, PageHeader } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
 import { useCurrentUser } from "@/hooks/useAuth";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
-
-function formatJoinDate(dateValue) {
-  if (!dateValue) return "Nije dostupno";
-  return new Intl.DateTimeFormat("hr-HR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(dateValue));
-}
+import { formatDate } from "@/utils/formatters";
 
 function ProfileAvatar({ user }) {
   const initials = (user?.name ?? user?.email ?? "?")
@@ -51,10 +43,12 @@ export function ProfilePage() {
   const displayName = user?.name ?? user?.email?.split("@")[0] ?? "Korisnik";
 
   return (
-    <PageWrapper
-      title="Moj profil"
-      subtitle="Pregled vaših osnovnih podataka i brzi pristup ključnim stranicama."
-    >
+    <PageWrapper>
+      <PageHeader
+        title="Moj profil"
+        subtitle="Pregled tvojih osnovnih podataka."
+      />
+
       <div className="max-w-3xl mx-auto space-y-5">
         <Card className="p-5 sm:p-6 border border-warm-200">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
@@ -64,7 +58,7 @@ export function ProfilePage() {
                 {displayName}
               </h2>
               <p className="text-sm text-warm-500">
-                Ovdje su vaši osnovni korisnički podaci.
+                Ovdje su tvoji osnovni korisnički podaci.
               </p>
             </div>
           </div>
@@ -96,7 +90,9 @@ export function ProfilePage() {
               </p>
               <p className="mt-1 text-sm font-medium text-warm-800 flex items-center gap-2">
                 <CalendarDays size={14} className="text-warm-500" />
-                {formatJoinDate(user?.created_at)}
+                {user?.created_at
+                  ? formatDate(user.created_at)
+                  : "Nije dostupno"}
               </p>
             </div>
           </div>
@@ -107,7 +103,7 @@ export function ProfilePage() {
             Brza navigacija
           </h3>
           <p className="text-sm text-warm-500 mt-1">
-            Nastavite tamo gdje vam je najkorisnije.
+            Nastavi tamo gdje ti je najkorisnije.
           </p>
 
           <div className="mt-4 grid sm:grid-cols-2 gap-3">

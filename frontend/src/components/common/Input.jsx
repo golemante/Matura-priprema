@@ -1,7 +1,6 @@
-// components/common/Input.jsx
 import { cn } from "@/utils/cn";
-import { AlertCircle, Eye, EyeOff } from "lucide-react";
-import { useState, forwardRef } from "react";
+import { AlertCircle } from "lucide-react";
+import { forwardRef } from "react";
 
 export const Input = forwardRef(function Input(
   {
@@ -10,17 +9,12 @@ export const Input = forwardRef(function Input(
     hint,
     leftIcon: LeftIcon,
     rightIcon: RightIcon,
-    type = "text",
     className,
     wrapperClassName,
     ...props
   },
   ref,
 ) {
-  const [showPassword, setShowPassword] = useState(false);
-  const isPassword = type === "password";
-  const inputType = isPassword ? (showPassword ? "text" : "password") : type;
-
   return (
     <div className={cn("space-y-1.5", wrapperClassName)}>
       {label && (
@@ -36,7 +30,6 @@ export const Input = forwardRef(function Input(
         )}
         <input
           ref={ref}
-          type={inputType}
           className={cn(
             "w-full px-4 py-2.5 text-sm",
             "border-2 border-warm-300 rounded-xl",
@@ -46,22 +39,13 @@ export const Input = forwardRef(function Input(
             error &&
               "border-error-500 focus:border-error-500 focus:ring-red-100",
             LeftIcon && "pl-10",
-            (RightIcon || isPassword) && "pr-10",
+            RightIcon && "pr-10",
             "disabled:bg-warm-50 disabled:text-warm-400 disabled:cursor-not-allowed",
             className,
           )}
           {...props}
         />
-        {isPassword && (
-          <button
-            type="button"
-            onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-700"
-          >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        )}
-        {RightIcon && !isPassword && (
+        {RightIcon && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400">
             <RightIcon size={16} />
           </div>

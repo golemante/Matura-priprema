@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { audioProgressStorage } from "@/utils/storage";
 import { attemptApi } from "@/api/attemptApi";
+import { supabase } from "@/lib/supabase";
 
 function formatTime(s) {
   if (!s || isNaN(s) || !isFinite(s)) return "0:00";
@@ -82,7 +83,6 @@ export function useListeningAudio(
   );
 
   const audioRef = useRef(null);
-
   const progressBarRef = useRef(null);
   const rafRef = useRef(null);
 
@@ -99,16 +99,14 @@ export function useListeningAudio(
   const isLoadingTrackRef = useRef(false);
 
   const trackDurationsRef = useRef({});
-
   const totalKnownDurationRef = useRef(calcTotalKnownDuration(queue));
-
   const lastSecRef = useRef(-1);
-
   const iosWatchdogRef = useRef(null);
-
   const pendingPlayHandlerRef = useRef(null);
   const pendingTimeoutRef = useRef(null);
   const attemptIdRef = useRef(attemptId);
+
+  const authTokenRef = useRef(null);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -128,6 +126,18 @@ export function useListeningAudio(
   useEffect(() => {
     attemptIdRef.current = attemptId;
   }, [attemptId]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      authTokenRef.current = data.session?.access_token ?? null;
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_, session) => {
+      authTokenRef.current = session?.access_token ?? null;
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     totalKnownDurationRef.current = calcTotalKnownDuration(
@@ -324,6 +334,7 @@ export function useListeningAudio(
   const manualStart = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || isDoneRef.current) return;
+    if (isPausedRef.current) return;
     setHasBlockedAutoplay(false);
     if (
       audio.src &&
@@ -493,31 +504,9 @@ export function useListeningAudio(
         setIsPlaying(false);
       }
     };
-
     const onEnded = () => {
       setIsPlaying(false);
       const q = queueRef.current;
-      if (q.length === 0) {
-        isDoneRef.current = true;
-        setIsDone(true);
-        audioProgressStorage.save(examIdRef.current, {
-          trackIndex: trackIndexRef.current,
-          trackUrl: null,
-          currentTime: 0,
-          isDone: true,
-        });
-
-        const aid = attemptIdRef.current;
-        if (aid) {
-          attemptApi.syncAudioStatus(aid, {
-            isDone: true,
-            currentTimeS: 0,
-            trackIndex: trackIndexRef.current,
-          });
-        }
-        return;
-      }
-
       const nextIndex = trackIndexRef.current + 1;
 
       if (nextIndex < q.length) {
@@ -596,34 +585,41 @@ export function useListeningAudio(
       cleanupPendingPlay();
 
       const audio = audioRef.current;
-      if (audio && !audio.paused) audio.pause();
 
-      saveProgressRef.current?.();
+      if (audio && !audio.paused) {
+        audio.pause();
+      } else {
+        saveProgressRef.current?.();
+      }
 
       const eid = examIdRef.current;
       const aid = attemptIdRef.current;
-      if (aid && eid && hasAudioRef.current && navigator.sendBeacon) {
-        try {
-          const beaconPayload = JSON.stringify({
-            audio_is_done: isDoneRef.current,
-            audio_current_time_s: currentTimeRef.current,
-            audio_track_index: trackIndexRef.current,
+
+      if (aid && eid && hasAudioRef.current && !isDoneRef.current) {
+        const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+        const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        const token = authTokenRef.current ?? SUPABASE_ANON_KEY;
+
+        if (SUPABASE_URL && SUPABASE_ANON_KEY && token) {
+          const rpcPayload = JSON.stringify({
+            p_attempt_id: aid,
+            p_audio_is_done: isDoneRef.current,
+            p_current_time_s: Math.round(currentTimeRef.current * 100) / 100,
+            p_track_index: Math.max(0, Math.floor(trackIndexRef.current)),
           });
 
-          const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-          const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-          if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-            const blob = new Blob([beaconPayload], {
-              type: "application/json",
-            });
-            const url =
-              SUPABASE_URL + "/rest/v1/attempts?id=eq." + aid + "&select=id";
-            console.debug(
-              "[useListeningAudio] sendBeacon: localStorage fallback aktivan.",
-            );
-          }
-        } catch {}
+          fetch(`${SUPABASE_URL}/rest/v1/rpc/sync_audio_status`, {
+            method: "POST",
+            body: rpcPayload,
+            keepalive: true,
+            headers: {
+              "Content-Type": "application/json",
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${token}`,
+            },
+          }).catch(() => {});
+        }
       }
     };
   }, [cleanupPendingPlay]);
