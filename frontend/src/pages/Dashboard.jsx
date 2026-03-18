@@ -31,6 +31,7 @@ import { supabase } from "@/lib/supabase";
 import { attemptApi } from "@/api/attemptApi";
 import { cn } from "@/utils/cn";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
+import { Bone } from "@/components/common/Skeleton";
 
 function useAttempts() {
   return useQuery({
@@ -147,12 +148,6 @@ function useCountUp(target, duration = 900) {
     return () => cancelAnimationFrame(frame);
   }, [target, duration]);
   return val;
-}
-
-function Bone({ className }) {
-  return (
-    <div className={cn("bg-warm-200 rounded-xl animate-pulse", className)} />
-  );
 }
 
 function DashboardSkeleton() {

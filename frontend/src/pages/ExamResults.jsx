@@ -21,6 +21,7 @@ import { ScoreHero } from "@/components/results/ScoreHero";
 import { SectionReview } from "@/components/results/SectionReview";
 import { FilterTabs } from "@/components/results/FilterTabs";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
+import { PageSpinner } from "@/components/common/LoadingSpinner";
 
 function Confetti({ active }) {
   useEffect(() => {
@@ -201,10 +202,7 @@ export function ResultsPage() {
   if (!hasStoreResult && (loadingAttempt || loadingExam)) {
     return (
       <PageWrapper className="max-w-2xl mx-auto py-12">
-        <div className="flex items-center gap-2 text-warm-600 text-sm">
-          <div className="w-4 h-4 rounded-full border-2 border-primary-300 border-t-primary-600 animate-spin" />
-          Učitavanje rezultata...
-        </div>
+        <PageSpinner message="Učitavanje rezultata..." />
       </PageWrapper>
     );
   }

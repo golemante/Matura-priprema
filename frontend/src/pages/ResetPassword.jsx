@@ -10,6 +10,7 @@ import { AuthLayout } from "@/components/layout/AuthLayout";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { resetPasswordSchema as schema } from "@/utils/validators";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
+import { Spinner } from "@/components/common/LoadingSpinner";
 
 export function ResetPasswordPage() {
   usePageTitle(PAGE_TITLES.resetPassword);
@@ -77,8 +78,8 @@ export function ResetPasswordPage() {
         >
           {isPending ? (
             <>
-              <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-              Postavljanje...
+              <Spinner size="sm" variant="white" />
+              <span>Postavljanje...</span>
             </>
           ) : (
             "Postavi novu lozinku"

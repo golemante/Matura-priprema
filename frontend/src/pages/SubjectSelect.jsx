@@ -13,6 +13,7 @@ import {
 import { useExams } from "@/hooks/useExam";
 import { cn } from "@/utils/cn";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
+import { ExamListSkeleton } from "@/components/common/Skeleton";
 
 function transformExam(dbExam) {
   const session = EXAM_SESSIONS.find((s) => s.id === dbExam.session) ?? {
@@ -101,40 +102,6 @@ function ActiveFiltersBadge({ count, filterYear, filterLevel, onReset }) {
         Ukloni filtre
       </button>
     </motion.div>
-  );
-}
-
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-function ExamCardSkeleton() {
-  return (
-    <div className="bg-white rounded-2xl border border-warm-200 p-4 animate-pulse">
-      <div className="flex gap-2 mb-3">
-        <div className="h-5 w-16 bg-warm-200 rounded-md" />
-        <div className="h-5 w-14 bg-warm-100 rounded-md" />
-      </div>
-      <div className="h-4 w-32 bg-warm-100 rounded mb-1" />
-      <div className="h-3 w-20 bg-warm-100 rounded" />
-    </div>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-8">
-      {[2025, 2024].map((year) => (
-        <div key={year}>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="h-4 w-10 bg-warm-200 rounded animate-pulse" />
-            <div className="h-px flex-1 bg-warm-200" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {[1, 2].map((i) => (
-              <ExamCardSkeleton key={i} />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -407,7 +374,7 @@ export function SubjectsPage() {
 
       {/* Content */}
       {isLoading ? (
-        <LoadingSkeleton />
+        <ExamListSkeleton count={2} />
       ) : error ? (
         <ErrorState onRetry={refetch} />
       ) : (

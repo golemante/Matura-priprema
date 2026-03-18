@@ -9,6 +9,7 @@ import { cn } from "@/utils/cn";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { forgotPasswordSchema } from "@/utils/validators";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
+import { Spinner } from "@/components/common/LoadingSpinner";
 
 export function ForgotPasswordPage() {
   usePageTitle(PAGE_TITLES.forgotPassword);
@@ -116,8 +117,8 @@ export function ForgotPasswordPage() {
               >
                 {isPending ? (
                   <>
-                    <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                    Slanje...
+                    <Spinner size="sm" variant="white" />
+                    <span>Slanje...</span>
                   </>
                 ) : (
                   "Pošalji reset link"

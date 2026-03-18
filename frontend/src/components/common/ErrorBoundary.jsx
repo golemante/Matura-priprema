@@ -1,4 +1,3 @@
-// components/common/ErrorBoundary.jsx
 import { Component } from "react";
 import { Button } from "@/components/common/Button";
 import { AlertTriangle, RefreshCw } from "lucide-react";
@@ -28,12 +27,10 @@ export class ErrorBoundary extends Component {
     if (!this.state.hasError) return this.props.children;
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] p-8 text-center animate-in fade-in duration-500">
-        {/* Icon container */}
         <div className="w-16 h-16 bg-error-50 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
           <AlertTriangle size={32} className="text-error-600" />
         </div>
 
-        {/* Text content */}
         <h2 className="text-xl font-bold text-warm-900 mb-2">
           Ups! Nešto nije u redu
         </h2>
@@ -43,7 +40,6 @@ export class ErrorBoundary extends Component {
             "Došlo je do neočekivane pogreške u aplikaciji. Pokušaj ponovno ili osvježi stranicu."}
         </p>
 
-        {/* Action button */}
         <Button
           leftIcon={RefreshCw}
           onClick={this.handleReset}

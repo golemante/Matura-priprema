@@ -12,6 +12,7 @@ import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Input } from "@/components/common/Input";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
+import { Spinner } from "@/components/common/LoadingSpinner";
 
 function PasswordStrength({ password = "" }) {
   const checks = [
@@ -172,7 +173,7 @@ export function RegisterPage() {
         >
           {isPending ? (
             <>
-              <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              <Spinner size="sm" variant="white" />
               <span>Kreiranje računa...</span>
             </>
           ) : (

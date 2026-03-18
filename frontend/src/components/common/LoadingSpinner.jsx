@@ -7,12 +7,19 @@ const sizes = {
   xl: "w-12 h-12 border-4",
 };
 
-export function Spinner({ size = "md", className }) {
+const variants = {
+  default: "border-warm-200 border-t-primary-600",
+  white: "border-white/30 border-t-white",
+  light: "border-primary-200 border-t-primary-600",
+};
+
+export function Spinner({ size = "md", variant = "default", className }) {
   return (
     <div
       className={cn(
-        "rounded-full border-warm-200 border-t-primary-600 animate-spin",
+        "rounded-full animate-spin flex-shrink-0",
         sizes[size],
+        variants[variant],
         className,
       )}
       role="status"
@@ -28,6 +35,15 @@ export function PageSpinner() {
         <Spinner size="lg" />
         <p className="text-sm text-warm-500 font-medium">Učitavanje...</p>
       </div>
+    </div>
+  );
+}
+
+export function FullScreenSpinner({ message = "Učitavanje..." }) {
+  return (
+    <div className="min-h-dvh bg-warm-100 flex flex-col items-center justify-center gap-4">
+      <Spinner size="xl" variant="light" />
+      <p className="text-warm-600 font-medium animate-pulse">{message}</p>
     </div>
   );
 }

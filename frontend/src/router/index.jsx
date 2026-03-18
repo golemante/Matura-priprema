@@ -4,6 +4,7 @@ import { createBrowserRouter } from "react-router-dom";
 import { RootLayout } from "@/components/layout/Layout";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
+import { Spinner } from "@/components/common/LoadingSpinner";
 
 const HomePage = lazy(() =>
   import("@/pages/Landing").then((m) => ({ default: m.HomePage })),
@@ -59,18 +60,20 @@ const QuizPage = lazy(() =>
   import("@/pages/ExamTaking").then((m) => ({ default: m.QuizPage })),
 );
 
-// ── Suspense fallback ────────────────────────────────────────────
-// Minimalan loading state — ne treba spinner svugdje, blank je ok za brze veze
 function PageLoader() {
   return (
     <div className="min-h-dvh bg-warm-100 flex items-center justify-center">
-      <div className="w-6 h-6 rounded-full border-2 border-primary-300 border-t-primary-600 animate-spin" />
+      <Spinner size="md" variant="light" />
     </div>
   );
 }
 
 function withSuspense(element) {
-  return <Suspense fallback={<PageLoader />}>{element}</Suspense>;
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>{element}</Suspense>
+    </ErrorBoundary>
+  );
 }
 
 export const router = createBrowserRouter([

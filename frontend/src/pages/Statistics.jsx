@@ -29,10 +29,7 @@ import { supabase } from "@/lib/supabase";
 import { attemptApi } from "@/api/attemptApi";
 import { cn } from "@/utils/cn";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
+import { Bone } from "@/components/common/Skeleton";
 
 function getPctColor(pct) {
   if (pct == null) return "text-warm-400";
@@ -153,15 +150,6 @@ function useSubjectStats() {
     },
     staleTime: 1000 * 60 * 5,
   });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SKELETON
-// ─────────────────────────────────────────────────────────────────────────────
-function Bone({ className }) {
-  return (
-    <div className={cn("bg-warm-200 rounded-xl animate-pulse", className)} />
-  );
 }
 
 function StatsSkeleton() {

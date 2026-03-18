@@ -8,6 +8,7 @@ import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase";
 import { draftStorage } from "@/utils/storage";
 import { resetServerTimeCache } from "@/hooks/useExamInit";
+import { FullScreenSpinner } from "@/components/common/LoadingSpinner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,14 +86,7 @@ function App() {
   }, [setAuth, clearAuth]);
 
   if (!authReady) {
-    return (
-      <div className="min-h-dvh bg-warm-100 flex flex-col items-center justify-center gap-4">
-        <div className="w-8 h-8 rounded-full border-4 border-primary-200 border-t-primary-600 animate-spin" />
-        <p className="text-warm-600 font-medium animate-pulse">
-          Provjera prijave...
-        </p>
-      </div>
-    );
+    return <FullScreenSpinner message="Provjera prijave..." />;
   }
 
   return (
