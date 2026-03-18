@@ -155,6 +155,33 @@ export function useExamInit(examId, { enabled = true } = {}) {
             } catch {
               toast.info("Pronađen pauziran ispit. Nastavljamo.");
             }
+            try {
+              const serverAudio = await attemptApi.getAudioStatus(candidateId);
+              if (serverAudio?.audioIsDone) {
+                audioProgressStorage.save(examId, {
+                  trackIndex: serverAudio.audioTrackIndex ?? 0,
+                  trackUrl: null,
+                  currentTime: 0,
+                  isDone: true,
+                });
+              } else if (serverAudio?.audioCurrentTimeS != null) {
+                const local = audioProgressStorage.load(examId);
+                if (
+                  serverAudio.audioCurrentTimeS >
+                  (local?.currentTime ?? 0) + 2
+                ) {
+                  audioProgressStorage.save(examId, {
+                    trackIndex:
+                      serverAudio.audioTrackIndex ?? local?.trackIndex ?? 0,
+                    trackUrl: local?.trackUrl ?? null,
+                    currentTime: serverAudio.audioCurrentTimeS,
+                    isDone: false,
+                  });
+                }
+              }
+            } catch (err) {
+              console.warn("[useExamInit] getAudioStatus pao:", err?.message);
+            }
             return { id: candidateId, alreadyRestored: true };
           }
         } catch (err) {

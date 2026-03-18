@@ -1,5 +1,5 @@
 // pages/ExamTaking.jsx
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useBeforeUnload } from "react-router-dom";
 import { useMemo, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -29,6 +29,7 @@ import { useExamStore } from "@/store/examStore";
 import { EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 import { cn } from "@/utils/cn";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { attemptApi } from "@/api/attemptApi";
 
 const slideVariants = {
   enter: (dir) => ({ x: dir > 0 ? 28 : -28, opacity: 0 }),
@@ -125,13 +126,12 @@ function GlobalAudioBar({ audio }) {
     >
       <div className={cn("h-1", isIntro ? "bg-amber-100" : "bg-sky-100")}>
         <div
-          className={cn(
-            "h-full transition-all duration-500 ease-linear",
-            isIntro ? "bg-amber-400" : "bg-sky-500",
-          )}
+          ref={audio.progressBarRef}
+          className={cn("h-full", isIntro ? "bg-amber-400" : "bg-sky-500")}
           style={{ width: `${audio.totalProgressPct}%` }}
         />
       </div>
+
       <div className="px-3.5 py-2.5 flex items-center gap-2.5">
         <Headphones
           size={13}
@@ -199,10 +199,6 @@ function GlobalAudioBar({ audio }) {
             {audio.formattedTime} / {audio.formattedDuration}
           </span>
         )}
-
-        <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
-          {audio.trackIndex + 1}/{audio.totalTracks}
-        </span>
       </div>
     </div>
   );
@@ -734,19 +730,61 @@ export function QuizPage() {
     storeAttemptId ? examId : null,
     orderedAudioPassages,
     isPaused,
+    { attemptId: storeAttemptId ?? null },
+  );
+
+  useBeforeUnload(
+    useCallback(() => {
+      if (audio.hasAudio && !audio.isDone) {
+        const audioState = audio.getAudioState?.();
+        if (audioState) {
+          const { isDone, trackIndex, currentTimeS } = audioState;
+          const aid = storeAttemptId;
+          if (aid && !isDone) {
+            attemptApi.syncAudioStatus(aid, {
+              isDone,
+              currentTimeS,
+              trackIndex,
+            });
+          }
+        }
+      }
+    }, [audio, storeAttemptId]),
   );
 
   const handleSubmit = useCallback(() => {
     if (audio.audioRef.current) {
       audio.audioRef.current.pause();
     }
+    const aid = storeAttemptId;
+    if (aid && audio.hasAudio) {
+      const audioState = audio.getAudioState?.();
+      if (audioState) {
+        attemptApi.syncAudioStatus(aid, {
+          isDone: audioState.isDone,
+          currentTimeS: audioState.currentTimeS,
+          trackIndex: audioState.trackIndex,
+        });
+      }
+    }
     audio.clearProgress();
     sessionHandleSubmit();
-  }, [audio, sessionHandleSubmit]);
+  }, [audio, storeAttemptId, sessionHandleSubmit]);
 
   const wrappedHandlePause = useCallback(() => {
     handlePause();
-  }, [handlePause]);
+    const aid = storeAttemptId;
+    if (aid && audio.hasAudio && !audio.isDone) {
+      const audioState = audio.getAudioState?.();
+      if (audioState) {
+        attemptApi.syncAudioStatus(aid, {
+          isDone: audioState.isDone,
+          currentTimeS: audioState.currentTimeS,
+          trackIndex: audioState.trackIndex,
+        });
+      }
+    }
+  }, [handlePause, storeAttemptId, audio]);
 
   const wrappedHandleResume = useCallback(() => {
     handleResume();

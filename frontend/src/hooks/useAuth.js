@@ -1,4 +1,3 @@
-// hooks/useAuth.js
 import { useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";

@@ -12,7 +12,8 @@ export const attemptApi = {
     const { data, error } = await supabase
       .from("attempts")
       .select(
-        "id, status, started_at, elapsed_seconds, total_paused_seconds, paused_at",
+        "id, status, started_at, elapsed_seconds, total_paused_seconds, paused_at, " +
+          "audio_is_done, audio_current_time_s, audio_track_index",
       )
       .eq("exam_id", examId)
       .eq("user_id", user.id)
@@ -25,7 +26,6 @@ export const attemptApi = {
     const [latest, ...older] = data;
 
     const ghostIds = older.map((a) => a.id);
-
     if (ghostIds.length > 0) {
       console.info(
         `[attemptApi.checkActive] Pronađeno ${ghostIds.length} starijih attempt(a) za examId="${examId}". Abandoniranje...`,
@@ -162,7 +162,7 @@ export const attemptApi = {
         );
         return null;
       }
-      return new Date(data).getTime(); // → ms
+      return new Date(data).getTime();
     } catch (err) {
       console.warn(
         "[attemptApi.getServerTime] Neočekivana greška:",
@@ -188,6 +188,88 @@ export const attemptApi = {
     } catch (err) {
       console.warn(
         `[attemptApi.abandon] Neočekivana greška za ${attemptId}:`,
+        err?.message,
+      );
+      return null;
+    }
+  },
+
+  syncAudioStatus: async (
+    attemptId,
+    { isDone = false, currentTimeS = null, trackIndex = null } = {},
+  ) => {
+    if (!attemptId) return;
+
+    try {
+      const { error } = await supabase.rpc("sync_audio_status", {
+        p_attempt_id: attemptId,
+        p_audio_is_done: isDone,
+        p_current_time_s:
+          currentTimeS != null ? Math.round(currentTimeS * 100) / 100 : null,
+        p_track_index:
+          trackIndex != null ? Math.max(0, Math.floor(trackIndex)) : null,
+      });
+
+      if (error) {
+        if (error.code === "42883") {
+          console.warn(
+            "[attemptApi.syncAudioStatus] RPC sync_audio_status ne postoji. " +
+              "Pokreni migration_audio_is_done.sql da aktiviraš server-side audio tracking.",
+          );
+        } else {
+          console.warn(
+            "[attemptApi.syncAudioStatus] RPC greška:",
+            error.message,
+          );
+        }
+      } else {
+        console.debug(
+          `[attemptApi.syncAudioStatus] OK — isDone=${isDone}, ` +
+            `t=${currentTimeS?.toFixed(1) ?? "?"}s, track=${trackIndex ?? "?"}`,
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[attemptApi.syncAudioStatus] Neočekivana greška:",
+        err?.message,
+      );
+    }
+  },
+
+  getAudioStatus: async (attemptId) => {
+    if (!attemptId) return null;
+
+    try {
+      const { data, error } = await supabase.rpc("get_audio_status", {
+        p_attempt_id: attemptId,
+      });
+
+      if (error) {
+        if (error.code === "42883") {
+          console.warn(
+            "[attemptApi.getAudioStatus] RPC get_audio_status ne postoji. " +
+              "Koristim lokalnu pohranu kao fallback.",
+          );
+        } else {
+          console.warn(
+            "[attemptApi.getAudioStatus] RPC greška:",
+            error.message,
+          );
+        }
+        return null;
+      }
+
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) return null;
+
+      return {
+        audioIsDone: row.audio_is_done ?? false,
+        audioCurrentTimeS: row.audio_current_time_s ?? null,
+        audioTrackIndex: row.audio_track_index ?? null,
+      };
+    } catch (err) {
+      console.warn(
+        "[attemptApi.getAudioStatus] Neočekivana greška:",
         err?.message,
       );
       return null;
