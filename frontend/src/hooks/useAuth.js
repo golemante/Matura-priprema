@@ -21,6 +21,28 @@ export function useLogin() {
   });
 }
 
+export function useRegister() {
+  const { setAuth } = useAuthStore();
+  const navigate = useNavigate();
+
+  return useMutation({
+    mutationFn: authApi.register,
+    onSuccess: ({ user, token, requiresConfirmation }) => {
+      if (requiresConfirmation) {
+        toast.info(
+          `Provjeri inbox za ${user.email} i klikni na link za potvrdu računa.`,
+        );
+        navigate("/login");
+        return;
+      }
+      if (token) setAuth(user, token);
+      toast.success(`Dobrodošao, ${user.name}! Račun je kreiran. 🎉`);
+      navigate("/");
+    },
+    onError: (err) => toast.error(err.message ?? "Greška pri registraciji"),
+  });
+}
+
 export function useLogout() {
   const navigate = useNavigate();
   const { clearAuth } = useAuthStore();

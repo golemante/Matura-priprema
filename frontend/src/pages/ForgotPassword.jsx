@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router-dom";
 import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
-// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 import { authApi } from "@/api/authApi";
 import { cn } from "@/utils/cn";
@@ -33,7 +32,6 @@ export function ForgotPasswordPage() {
       setSubmittedEmail(email);
       setSent(true);
     } catch {
-      // Namjerno ne prikazujemo grešku ako email ne postoji (sigurnost)
       setSubmittedEmail(email);
       setSent(true);
     } finally {

@@ -1,20 +1,16 @@
-// pages/Register.jsx
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema } from "@/utils/validators";
-// eslint-disable-next-line no-unused-vars
+import { useRegister } from "@/hooks/useAuth";
+import { Link } from "react-router-dom";
+import { Mail, User } from "lucide-react";
 import { motion } from "framer-motion";
-import { useMutation } from "@tanstack/react-query";
-import { useAuthStore } from "@/store/authStore";
-import { authApi } from "@/api/authApi";
-import { toast } from "@/store/toastStore";
-import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock, User } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { Input } from "@/components/common/Input";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 
 function PasswordStrength({ password = "" }) {
@@ -84,58 +80,9 @@ function PasswordStrength({ password = "" }) {
   );
 }
 
-function FormInput({ label, error, leftIcon: Icon, className, ...props }) {
-  return (
-    <div className="space-y-1.5">
-      {label && (
-        <label className="block text-sm font-medium text-warm-700">
-          {label}
-        </label>
-      )}
-      <div className="relative">
-        {Icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 pointer-events-none">
-            <Icon size={15} />
-          </div>
-        )}
-        <input
-          className={cn(
-            "w-full py-2.5 text-sm rounded-xl border bg-white",
-            "text-warm-900 placeholder:text-warm-400",
-            "transition-all duration-150 outline-none",
-            Icon ? "pl-9 pr-4" : "px-4",
-            error
-              ? "border-error-400 focus:border-error-500 focus:ring-2 focus:ring-error-100"
-              : "border-warm-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-100",
-            className,
-          )}
-          {...props}
-        />
-      </div>
-      {error && (
-        <p className="text-xs text-error-600 flex items-center gap-1.5">
-          <span className="inline-block w-1 h-1 rounded-full bg-error-500 flex-shrink-0" />
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
 export function RegisterPage() {
-  const { setAuth } = useAuthStore();
-  const navigate = useNavigate();
+  const { mutate: register, isPending } = useRegister();
   usePageTitle(PAGE_TITLES.register);
-
-  const { mutate: register, isPending } = useMutation({
-    mutationFn: authApi.register,
-    onSuccess: ({ user, token }) => {
-      if (token) setAuth(user, token);
-      toast.success(`Dobrodošao, ${user.name}! Račun je kreiran. 🎉`);
-      navigate("/");
-    },
-    onError: (err) => toast.error(err.message ?? "Greška pri registraciji"),
-  });
 
   const {
     register: formRegister,
@@ -151,7 +98,6 @@ export function RegisterPage() {
 
   return (
     <AuthLayout mode="register">
-      {/* Header */}
       <div className="mb-7">
         <h1 className="text-2xl font-bold text-warm-900 tracking-tight mb-1.5">
           Kreiraj račun
@@ -171,9 +117,8 @@ export function RegisterPage() {
 
       <AuthDivider />
 
-      {/* Form */}
       <form onSubmit={handleSubmit(register)} className="space-y-4" noValidate>
-        <FormInput
+        <Input
           label="Ime i prezime"
           type="text"
           placeholder="Pero Perić"
@@ -183,7 +128,7 @@ export function RegisterPage() {
           {...formRegister("name")}
         />
 
-        <FormInput
+        <Input
           label="Email adresa"
           type="email"
           placeholder="ime@email.com"
@@ -236,7 +181,6 @@ export function RegisterPage() {
         </motion.button>
       </form>
 
-      {/* Footer */}
       <p className="text-xs text-warm-400 text-center mt-6 leading-relaxed">
         Registracijom prihvaćaš{" "}
         <Link

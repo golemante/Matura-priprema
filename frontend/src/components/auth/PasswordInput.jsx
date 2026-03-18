@@ -1,4 +1,3 @@
-// features/auth/components/PasswordInput.jsx
 import { useState, forwardRef } from "react";
 import { Eye, EyeOff, Lock } from "lucide-react";
 import { cn } from "@/utils/cn";

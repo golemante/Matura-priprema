@@ -1,4 +1,3 @@
-// components/auth/SocialAuthButtons.jsx
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/store/toastStore";
@@ -51,7 +50,6 @@ export function SocialAuthButtons({ mode = "login" }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Google */}
       <button
         onClick={handleGoogle}
         disabled={loadingGoogle}

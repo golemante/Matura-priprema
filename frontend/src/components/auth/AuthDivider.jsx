@@ -1,4 +1,3 @@
-// features/auth/components/AuthDivider.jsx
 export function AuthDivider({ text = "ili nastavi s" }) {
   return (
     <div className="flex items-center gap-3 my-5">
