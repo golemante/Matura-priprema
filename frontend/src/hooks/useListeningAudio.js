@@ -42,13 +42,10 @@ export function useListeningAudio(
   examId,
   orderedPassages,
   isPaused,
-  { attemptId = null, maxPlaysPerTrack = 2 } = {},
+  { attemptId = null } = {},
 ) {
   const queue = useMemo(() => buildQueue(orderedPassages), [orderedPassages]);
   const hasAudio = queue.length > 0;
-
-  const playCountRef = useRef({});
-  const [playCountMap, setPlayCountMap] = useState({});
 
   const savedProgressRef = useRef(null);
   if (savedProgressRef.current === null && examId) {
@@ -338,14 +335,6 @@ export function useListeningAudio(
     if (!audio || isDoneRef.current) return;
     if (isPausedRef.current) return;
 
-    const url = queueRef.current[trackIndexRef.current]?.url;
-    if (url && (playCountRef.current[url] ?? 0) >= maxPlaysPerTrack) {
-      console.info(
-        `[useListeningAudio] manualStart blokiran: traka "${url}" odslušana ${maxPlaysPerTrack}× (NCVVO limit).`,
-      );
-      return;
-    }
-
     setHasBlockedAutoplay(false);
     if (
       audio.src &&
@@ -357,7 +346,7 @@ export function useListeningAudio(
     } else {
       playTrackAtIndex(trackIndexRef.current, currentTimeRef.current);
     }
-  }, [playTrackAtIndex, maxPlaysPerTrack]);
+  }, [playTrackAtIndex]);
 
   useEffect(() => {
     if (!hasAudio) return;
@@ -454,15 +443,6 @@ export function useListeningAudio(
       setHasStarted(true);
       setHasBlockedAutoplay(false);
       setTrackSkipWarning(null);
-
-      const url = queueRef.current[trackIndexRef.current]?.url;
-      if (url) {
-        const prev = playCountRef.current[url] ?? 0;
-        if ((audioRef.current?.currentTime ?? 0) < 2) {
-          playCountRef.current[url] = prev + 1;
-          setPlayCountMap((m) => ({ ...m, [url]: prev + 1 }));
-        }
-      }
     };
 
     const onPause = () => {
@@ -542,21 +522,6 @@ export function useListeningAudio(
       setIsPlaying(false);
       const q = queueRef.current;
       const idx = trackIndexRef.current;
-      const currentTrackUrl = q[idx]?.url;
-
-      const timesPlayed = currentTrackUrl
-        ? (playCountRef.current[currentTrackUrl] ?? 0)
-        : maxPlaysPerTrack;
-
-      if (timesPlayed < maxPlaysPerTrack) {
-        setTimeout(() => {
-          if (!isPausedRef.current) {
-            playTrackAtIndex(idx, 0);
-          }
-        }, 1500);
-        return;
-      }
-
       const nextIndex = idx + 1;
 
       if (nextIndex < q.length) {
@@ -674,11 +639,6 @@ export function useListeningAudio(
     };
   }, [cleanupPendingPlay]);
 
-  const currentTrackPlays = currentTrack
-    ? (playCountMap[currentTrack.url] ?? 0)
-    : 0;
-  const currentTrackLimitReached = currentTrackPlays >= maxPlaysPerTrack;
-
   const isIntroPlaying = !isDone && currentTrack?.type === "intro" && isPlaying;
 
   return {
@@ -696,9 +656,6 @@ export function useListeningAudio(
     hasError,
     hasBlockedAutoplay,
     trackSkipWarning,
-    currentTrackPlays,
-    currentTrackLimitReached,
-    maxPlaysPerTrack,
     manualStart,
     currentTime,
     duration,

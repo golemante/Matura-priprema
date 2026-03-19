@@ -1,6 +1,6 @@
 // components/exam/QuestionNav.jsx
 import { motion } from "framer-motion";
-import { Send, Flag, Volume2 } from "lucide-react";
+import { Send, Flag } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 function NavButton({
@@ -9,7 +9,6 @@ function NavButton({
   isAnswered,
   isFlagged,
   isCurrent,
-  isAudioActive,
   onGoTo,
 }) {
   const label = question.positionLabel ?? String(idx + 1);
@@ -23,23 +22,19 @@ function NavButton({
       whileTap={{ scale: 0.88 }}
       onClick={() => onGoTo(idx)}
       aria-current={isCurrent ? "step" : undefined}
-      aria-label={`Pitanje ${label}${isAnswered ? ", odgovoreno" : ""}${isFlagged ? ", označeno" : ""}${isAudioActive ? ", audio aktivan" : ""}`}
-      title={`Pitanje ${label}${isAudioActive ? " — audio se reproducira" : ""}`}
+      aria-label={`Pitanje ${label}${isAnswered ? ", odgovoreno" : ""}${isFlagged ? ", označeno" : ""}`}
+      title={`Pitanje ${label}`}
       className={cn(
         "w-full aspect-square rounded-lg text-[11px] font-bold transition-all duration-100 relative",
         isCurrent
           ? "bg-primary-600 text-white shadow-sm"
-          : isAudioActive && !isAnswered
-            ? "bg-sky-100 text-sky-700 border border-sky-300 hover:bg-sky-200 ring-1 ring-sky-400 ring-offset-1"
-            : isAudioActive && isAnswered
-              ? "bg-sky-200 text-sky-800 border border-sky-400 hover:bg-sky-300 ring-1 ring-sky-500 ring-offset-1"
-              : isAnswered && isFlagged
-                ? "bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200"
-                : isAnswered
-                  ? "bg-primary-100 text-primary-700 border border-primary-200 hover:bg-primary-200"
-                  : isFlagged
-                    ? "bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100"
-                    : "bg-warm-50 text-warm-500 border border-warm-200 hover:bg-warm-100 hover:text-warm-700",
+          : isAnswered && isFlagged
+            ? "bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200"
+            : isAnswered
+              ? "bg-primary-100 text-primary-700 border border-primary-200 hover:bg-primary-200"
+              : isFlagged
+                ? "bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100"
+                : "bg-warm-50 text-warm-500 border border-warm-200 hover:bg-warm-100 hover:text-warm-700",
       )}
     >
       {label}
@@ -48,15 +43,6 @@ function NavButton({
           className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 border-2 border-white"
           aria-hidden="true"
         />
-      )}
-      {/* Audio active indicator: mali zvučnik ikona u donjem desnom kutu */}
-      {isAudioActive && !isCurrent && (
-        <span
-          className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-sky-500 border border-white flex items-center justify-center"
-          aria-hidden="true"
-        >
-          <Volume2 size={6} className="text-white" />
-        </span>
       )}
     </motion.button>
   );
@@ -70,7 +56,6 @@ export function QuestionNav({
   onGoTo,
   onSubmit,
   answeredCount,
-  audioActivePassageId = null,
 }) {
   const visibleQuestions = questions.filter(
     (q) => q.questionType !== "fill_blank_mc",
@@ -131,10 +116,6 @@ export function QuestionNav({
             isAnswered={!!answers?.[q.id]}
             isFlagged={flagged?.has(q.id) ?? false}
             isCurrent={idx === currentIndex}
-            isAudioActive={
-              audioActivePassageId != null &&
-              q.passageId === audioActivePassageId
-            }
             onGoTo={onGoTo}
           />
         ))}
@@ -154,14 +135,6 @@ export function QuestionNav({
               cls: "bg-warm-50 border border-warm-200",
               label: "Nije odgovoreno",
             },
-            ...(audioActivePassageId
-              ? [
-                  {
-                    cls: "bg-sky-100 border border-sky-300 ring-1 ring-sky-400 ring-offset-1",
-                    label: "Audio aktivan",
-                  },
-                ]
-              : []),
           ].map(({ cls, label }) => (
             <div key={label} className="flex items-center gap-1.5">
               <span className={cn("w-3 h-3 rounded flex-shrink-0", cls)} />

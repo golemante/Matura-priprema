@@ -65,16 +65,8 @@ function GlobalAudioBar({ audio }) {
 
   const track = audio.currentTrack;
   const isIntro = track?.type === "intro";
-  const {
-    isDone,
-    isPlaying,
-    hasStarted,
-    hasBlockedAutoplay,
-    manualStart,
-    currentTrackPlays,
-    currentTrackLimitReached,
-    maxPlaysPerTrack,
-  } = audio;
+  const { isDone, isPlaying, hasStarted, hasBlockedAutoplay, manualStart } =
+    audio;
 
   if (audio.hasError) {
     return (
@@ -111,13 +103,7 @@ function GlobalAudioBar({ audio }) {
           </div>
           <button
             onClick={manualStart}
-            disabled={currentTrackLimitReached}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold",
-              currentTrackLimitReached
-                ? "bg-warm-200 text-warm-400 cursor-not-allowed"
-                : "bg-sky-600 hover:bg-sky-700 text-white transition-colors active:scale-95",
-            )}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white transition-colors active:scale-95"
           >
             <Play size={11} />
             Pokreni
@@ -140,14 +126,13 @@ function GlobalAudioBar({ audio }) {
         </div>
       )}
 
-      {/* ── Progress bar + track info ─────────────────────────────────────── */}
       <div
         className={cn(
           "rounded-xl border overflow-hidden",
           isIntro ? "bg-amber-50 border-amber-200" : "bg-sky-50 border-sky-200",
         )}
       >
-        {/* RAF-only progress bar — nema React style prop (bug #3 fix) */}
+        {/* RAF-only progress bar */}
         <div className={cn("h-1", isIntro ? "bg-amber-100" : "bg-sky-100")}>
           <div
             ref={audio.progressBarRef}
@@ -191,22 +176,7 @@ function GlobalAudioBar({ audio }) {
             </p>
           </div>
 
-          {/* ── NCVVO: playback counter (N/maxPlaysPerTrack) ──────────────── */}
-          {maxPlaysPerTrack > 1 && (
-            <span
-              className={cn(
-                "text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-none flex-shrink-0 tabular-nums",
-                currentTrackLimitReached
-                  ? "bg-warm-200 text-warm-500"
-                  : "bg-sky-100 text-sky-600 border border-sky-200",
-              )}
-              title={`Slušanje ${currentTrackPlays}/${maxPlaysPerTrack} (NCVVO limit)`}
-            >
-              {currentTrackPlays}/{maxPlaysPerTrack}×
-            </span>
-          )}
-
-          {/* ── Intro: blokiraj pitanja dok traju upute ───────────────────── */}
+          {/* Intro: blokiraj pitanja dok traju upute */}
           {isIntro && isPlaying && (
             <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold leading-none flex-shrink-0">
               slušaj upute
@@ -568,7 +538,6 @@ function MobileNavDrawer({
   answeredCount,
   isSyncing,
   isSubmitting,
-  audioActivePassageId,
 }) {
   return (
     <AnimatePresence>
@@ -611,7 +580,6 @@ function MobileNavDrawer({
                 }}
                 onSubmit={onSubmit}
                 answeredCount={answeredCount}
-                audioActivePassageId={audioActivePassageId}
               />
             </div>
             <div className="p-4 border-t border-warm-200">
@@ -783,7 +751,6 @@ export function QuizPage() {
   );
 
   const isIntroPlaying = audio.isIntroPlaying;
-  const audioActivePassageId = audio.activePassageId;
 
   useBeforeUnload(
     useCallback(() => {
@@ -967,7 +934,6 @@ export function QuizPage() {
           answeredCount={answeredCount}
           isSyncing={isSyncing}
           isSubmitting={isSubmitting}
-          audioActivePassageId={audioActivePassageId}
         />
 
         <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
@@ -1068,7 +1034,6 @@ export function QuizPage() {
                 onGoTo={handleGoTo}
                 onSubmit={() => setShowSubmitModal(true)}
                 answeredCount={answeredCount}
-                audioActivePassageId={audioActivePassageId}
               />
             </div>
           </div>
