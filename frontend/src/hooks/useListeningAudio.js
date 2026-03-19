@@ -1,8 +1,6 @@
 // hooks/useListeningAudio.js
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { audioProgressStorage } from "@/utils/storage";
-import { attemptApi } from "@/api/attemptApi";
-import { supabase } from "@/lib/supabase";
 import { formatTime } from "@/utils/formatters";
 
 function buildQueue(orderedPassages) {
@@ -15,7 +13,6 @@ function buildQueue(orderedPassages) {
         type: "intro",
         passageId: p.id,
         label: p.title ? `${p.title} — upute` : "Upute",
-        knownDuration: null,
       });
     }
     if (p.audioUrl) {
@@ -24,42 +21,10 @@ function buildQueue(orderedPassages) {
         type: "content",
         passageId: p.id,
         label: p.title ?? "Snimka",
-        knownDuration: p.audioDurationSeconds ?? null,
       });
     }
   }
   return tracks;
-}
-
-function calcProgressPct(queue, trackIdx, currentTime, trackDurationsRuntime) {
-  if (queue.length === 0) return 0;
-
-  const resolved = queue.map(
-    (t) => trackDurationsRuntime[t.url] ?? t.knownDuration ?? null,
-  );
-
-  const knownValues = resolved.filter((d) => d !== null);
-
-  if (knownValues.length === 0) {
-    return Math.min(100, ((trackIdx + 0.5) / queue.length) * 100);
-  }
-
-  const avgKnown = knownValues.reduce((s, d) => s + d, 0) / knownValues.length;
-  const effective = resolved.map((d) => d ?? avgKnown);
-  const total = effective.reduce((s, d) => s + d, 0);
-  if (total <= 0) return 0;
-
-  const completedBefore = effective
-    .slice(0, trackIdx)
-    .reduce((s, d) => s + d, 0);
-  const currentTrackDur = effective[trackIdx] ?? avgKnown;
-  const subPct =
-    currentTrackDur > 0 ? Math.min(1, currentTime / currentTrackDur) : 0.5;
-
-  return Math.min(
-    100,
-    ((completedBefore + currentTrackDur * subPct) / total) * 100,
-  );
 }
 
 const EMPTY_PROGRESS = {
@@ -69,12 +34,7 @@ const EMPTY_PROGRESS = {
   isDone: false,
 };
 
-export function useListeningAudio(
-  examId,
-  orderedPassages,
-  isPaused,
-  { attemptId = null } = {},
-) {
+export function useListeningAudio(examId, orderedPassages, isPaused) {
   const queue = useMemo(() => buildQueue(orderedPassages), [orderedPassages]);
   const hasAudio = queue.length > 0;
 
@@ -85,12 +45,9 @@ export function useListeningAudio(
   }
   const saved = savedProgressRef.current ?? EMPTY_PROGRESS;
 
-  const savedTrack = queue[saved.trackIndex] ?? null;
-  const seedDuration = savedTrack?.knownDuration ?? 0;
-
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(saved.currentTime);
-  const [duration, setDuration] = useState(seedDuration);
+  const [duration, setDuration] = useState(0);
   const [hasError, setHasError] = useState(false);
   const [isDone, setIsDone] = useState(saved.isDone);
   const [hasStarted, setHasStarted] = useState(
@@ -119,13 +76,10 @@ export function useListeningAudio(
   const prevIsPausedRef = useRef(isPaused);
   const isLoadingTrackRef = useRef(false);
 
-  const trackDurationsRef = useRef({});
   const lastSecRef = useRef(-1);
   const iosWatchdogRef = useRef(null);
   const pendingPlayHandlerRef = useRef(null);
   const pendingTimeoutRef = useRef(null);
-  const attemptIdRef = useRef(attemptId);
-  const authTokenRef = useRef(null);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -142,41 +96,20 @@ export function useListeningAudio(
   useEffect(() => {
     examIdRef.current = examId;
   }, [examId]);
-  useEffect(() => {
-    attemptIdRef.current = attemptId;
-  }, [attemptId]);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      authTokenRef.current = data.session?.access_token ?? null;
-    });
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_, session) => {
-      authTokenRef.current = session?.access_token ?? null;
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    for (const t of queue) {
-      if (t.knownDuration && !trackDurationsRef.current[t.url]) {
-        trackDurationsRef.current[t.url] = t.knownDuration;
-      }
-    }
-  }, [queue]);
 
   const scheduleProgressBarUpdate = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       const el = progressBarRef.current;
+      const audio = audioRef.current;
       if (!el) return;
-      const pct = calcProgressPct(
-        queueRef.current,
-        trackIndexRef.current,
-        currentTimeRef.current,
-        trackDurationsRef.current,
-      );
+
+      const dur = audio?.duration;
+      if (!dur || isNaN(dur) || dur <= 0) {
+        el.style.width = "0%";
+        return;
+      }
+      const pct = Math.min(100, (audio.currentTime / dur) * 100);
       el.style.width = `${pct.toFixed(2)}%`;
     });
   }, []);
@@ -234,6 +167,11 @@ export function useListeningAudio(
       }
 
       cleanupPendingPlay();
+
+      if (progressBarRef.current) {
+        progressBarRef.current.style.width = "0%";
+      }
+
       currentTimeRef.current = startTime;
       setCurrentTime(startTime);
 
@@ -247,7 +185,7 @@ export function useListeningAudio(
       trackIndexRef.current = index;
       setCurrentTrack(queueRef.current[index] ?? null);
 
-      setDuration(queueRef.current[index]?.knownDuration ?? 0);
+      setDuration(0);
       setHasError(false);
       hasErrorRef.current = false;
       isDoneRef.current = false;
@@ -463,10 +401,6 @@ export function useListeningAudio(
     };
 
     const onLoadedMetadata = () => {
-      const url = queueRef.current[trackIndexRef.current]?.url;
-      if (url && audio.duration > 0) {
-        trackDurationsRef.current[url] = audio.duration;
-      }
       setDuration(audio.duration);
       scheduleProgressBarUpdate();
     };
@@ -516,14 +450,6 @@ export function useListeningAudio(
           currentTime: 0,
           isDone: true,
         });
-        const aid = attemptIdRef.current;
-        if (aid) {
-          attemptApi.syncAudioStatus(aid, {
-            isDone: true,
-            currentTimeS: 0,
-            trackIndex: idx,
-          });
-        }
         console.info("[useListeningAudio] Sve audio trake završene.");
       }
     };
@@ -581,31 +507,6 @@ export function useListeningAudio(
       if (iosWatchdogRef.current) clearTimeout(iosWatchdogRef.current);
       cleanupPendingPlay();
       saveProgressRef.current?.();
-
-      const eid = examIdRef.current;
-      const aid = attemptIdRef.current;
-      if (aid && eid && hasAudioRef.current && !isDoneRef.current) {
-        const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-        const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-        const token = authTokenRef.current ?? SUPABASE_ANON_KEY;
-        if (SUPABASE_URL && SUPABASE_ANON_KEY && token) {
-          fetch(`${SUPABASE_URL}/rest/v1/rpc/sync_audio_status`, {
-            method: "POST",
-            body: JSON.stringify({
-              p_attempt_id: aid,
-              p_audio_is_done: isDoneRef.current,
-              p_current_time_s: Math.round(currentTimeRef.current * 100) / 100,
-              p_track_index: Math.max(0, Math.floor(trackIndexRef.current)),
-            }),
-            keepalive: true,
-            headers: {
-              "Content-Type": "application/json",
-              apikey: SUPABASE_ANON_KEY,
-              Authorization: `Bearer ${token}`,
-            },
-          }).catch(() => {});
-        }
-      }
     };
   }, [cleanupPendingPlay]);
 

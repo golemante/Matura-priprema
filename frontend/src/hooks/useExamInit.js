@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useExamStore } from "@/store/examStore";
 import { useExamWithQuestions } from "@/hooks/useExam";
-import { draftStorage, audioProgressStorage } from "@/utils/storage";
+import { draftStorage } from "@/utils/storage";
 import { toast } from "@/store/toastStore";
 import { attemptApi } from "@/api/attemptApi";
 
@@ -52,38 +52,6 @@ function calcElapsedFromStatus(data, skewMs = 0) {
 function isAttemptOverdue(statusData, maxDurationSeconds, skewMs = 0) {
   if (!maxDurationSeconds || maxDurationSeconds <= 0) return false;
   return calcElapsedFromStatus(statusData, skewMs) >= maxDurationSeconds;
-}
-
-function seedAudioProgressIfNeeded(examId, serverAudio) {
-  if (!serverAudio) return;
-
-  const local = audioProgressStorage.load(examId);
-  const localTime = local?.currentTime ?? 0;
-  const serverTime = serverAudio.audioCurrentTimeS ?? 0;
-
-  if (serverAudio.audioIsDone) {
-    if (!local?.isDone) {
-      audioProgressStorage.save(examId, {
-        trackIndex: serverAudio.audioTrackIndex ?? 0,
-        trackUrl: null,
-        currentTime: 0,
-        isDone: true,
-      });
-      console.info(
-        `[useExamInit] seedAudioProgress: server kaže isDone=true, ažuriram localStorage.`,
-      );
-    }
-  } else if (serverTime > localTime + 2) {
-    audioProgressStorage.save(examId, {
-      trackIndex: serverAudio.audioTrackIndex ?? local?.trackIndex ?? 0,
-      trackUrl: local?.trackUrl ?? null,
-      currentTime: serverTime,
-      isDone: false,
-    });
-    console.info(
-      `[useExamInit] seedAudioProgress: server=${serverTime.toFixed(1)}s > local=${localTime.toFixed(1)}s, ažuriram localStorage.`,
-    );
-  }
 }
 
 export function useExamInit(examId, { enabled = true } = {}) {
@@ -168,18 +136,6 @@ export function useExamInit(examId, { enabled = true } = {}) {
               draftStorage.clear(examId);
             } else {
               setAttemptId(candidateId);
-
-              try {
-                const serverAudio =
-                  await attemptApi.getAudioStatus(candidateId);
-                seedAudioProgressIfNeeded(examId, serverAudio);
-              } catch (err) {
-                console.warn(
-                  "[useExamInit] in_progress (candidateId) audio restore pao:",
-                  err?.message,
-                );
-              }
-
               return { id: candidateId, alreadyRestored: false };
             }
           } else if (status === "paused") {
@@ -198,12 +154,6 @@ export function useExamInit(examId, { enabled = true } = {}) {
               }
             } catch {
               toast.info("Pronađen pauziran ispit. Nastavljamo.");
-            }
-            try {
-              const serverAudio = await attemptApi.getAudioStatus(candidateId);
-              seedAudioProgressIfNeeded(examId, serverAudio);
-            } catch (err) {
-              console.warn("[useExamInit] getAudioStatus pao:", err?.message);
             }
             return { id: candidateId, alreadyRestored: true };
           }
@@ -243,24 +193,8 @@ export function useExamInit(examId, { enabled = true } = {}) {
             } catch {
               toast.info("Pronađen pauziran ispit. Nastavljamo.");
             }
-            try {
-              const serverAudio = await attemptApi.getAudioStatus(existing.id);
-              seedAudioProgressIfNeeded(examId, serverAudio);
-            } catch (err) {
-              console.warn(
-                "[useExamInit] getAudioStatus (paused checkActive) pao:",
-                err?.message,
-              );
-            }
             return { id: existing.id, alreadyRestored: true };
           }
-
-          const serverAudioFromCheckActive = {
-            audioIsDone: existing.audio_is_done ?? false,
-            audioCurrentTimeS: existing.audio_current_time_s ?? null,
-            audioTrackIndex: existing.audio_track_index ?? null,
-          };
-          seedAudioProgressIfNeeded(examId, serverAudioFromCheckActive);
 
           return { id: existing.id, alreadyRestored: false };
         }
@@ -269,7 +203,6 @@ export function useExamInit(examId, { enabled = true } = {}) {
       const created = await attemptApi.create(examId);
       if (created?.id) {
         setAttemptId(created.id);
-        audioProgressStorage.clear(examId);
         draftStorage.save(
           examId,
           draftStorage.load(examId)?.answers ?? {},

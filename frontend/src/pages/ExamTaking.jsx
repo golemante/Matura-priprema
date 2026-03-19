@@ -29,7 +29,6 @@ import { useExamStore } from "@/store/examStore";
 import { EXAM_SESSIONS, DIFFICULTY_LEVELS } from "@/utils/constants";
 import { cn } from "@/utils/cn";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { attemptApi } from "@/api/attemptApi";
 
 const slideVariants = {
   enter: (dir) => ({ x: dir > 0 ? 28 : -28, opacity: 0 }),
@@ -137,6 +136,7 @@ function GlobalAudioBar({ audio }) {
           <div
             ref={audio.progressBarRef}
             className={cn("h-full", isIntro ? "bg-amber-400" : "bg-sky-500")}
+            style={{ width: "0%" }}
           />
         </div>
 
@@ -176,7 +176,6 @@ function GlobalAudioBar({ audio }) {
             </p>
           </div>
 
-          {/* Intro: blokiraj pitanja dok traju upute */}
           {isIntro && isPlaying && (
             <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold leading-none flex-shrink-0">
               slušaj upute
@@ -740,32 +739,14 @@ export function QuizPage() {
     );
   }, [questions, passages]);
 
-  const storeAttemptId = useExamStore((s) => s.attemptId);
-  const audio = useListeningAudio(
-    storeAttemptId ? examId : null,
-    orderedAudioPassages,
-    isPaused,
-    { attemptId: storeAttemptId ?? null },
-  );
+  const audio = useListeningAudio(examId, orderedAudioPassages, isPaused);
 
   const audioStateRef = useRef(audio);
   audioStateRef.current = audio;
 
   const wrappedHandlePause = useCallback(() => {
     handlePause();
-    const a = audioStateRef.current;
-    const aid = storeAttemptId;
-    if (aid && a.hasAudio && !a.isDone) {
-      const audioState = a.getAudioState?.();
-      if (audioState) {
-        attemptApi.syncAudioStatus(aid, {
-          isDone: audioState.isDone,
-          currentTimeS: audioState.currentTimeS,
-          trackIndex: audioState.trackIndex,
-        });
-      }
-    }
-  }, [handlePause, storeAttemptId]);
+  }, [handlePause]);
 
   const wrappedHandleResume = useCallback(() => {
     handleResume();
@@ -774,20 +755,9 @@ export function QuizPage() {
   const handleSubmit = useCallback(() => {
     const a = audioStateRef.current;
     a.stopAudio();
-    const aid = storeAttemptId;
-    if (aid && a.hasAudio) {
-      const audioState = a.getAudioState?.();
-      if (audioState) {
-        attemptApi.syncAudioStatus(aid, {
-          isDone: audioState.isDone,
-          currentTimeS: audioState.currentTimeS,
-          trackIndex: audioState.trackIndex,
-        });
-      }
-    }
     a.clearProgress();
     sessionHandleSubmit();
-  }, [storeAttemptId, sessionHandleSubmit]);
+  }, [sessionHandleSubmit]);
 
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
@@ -915,7 +885,7 @@ export function QuizPage() {
 
         <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
           <div className="flex flex-col lg:flex-row gap-5 h-full">
-            {/* ── Lijeva kolona: GlobalAudioBar + passage ──────────────────── */}
+            {/* Lijeva kolona: audio bar + passage */}
             {hasAnyPassage && (
               <div
                 className={cn(
@@ -942,7 +912,7 @@ export function QuizPage() {
               </div>
             )}
 
-            {/* ── Desna kolona: pitanje ─────────────────────────────────────── */}
+            {/* Desna kolona: pitanje */}
             <div className="flex-1 min-w-0 flex flex-col gap-4">
               <AnimatePresence custom={direction} mode="wait">
                 <motion.div
@@ -999,7 +969,7 @@ export function QuizPage() {
               </div>
             </div>
 
-            {/* ── Nav sidebar (samo desktop) ──────────────────────────────── */}
+            {/* Nav sidebar — samo desktop */}
             <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
               <QuestionNav
                 questions={questions}
