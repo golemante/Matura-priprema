@@ -33,9 +33,14 @@ function buildQueue(orderedPassages) {
 
 function calcTotalKnownDuration(queue, trackDurationsRuntime = {}) {
   return queue.reduce((sum, t) => {
-    const duration = trackDurationsRuntime[t.url] ?? t.knownDuration ?? 0;
-    return sum + duration;
+    return sum + (trackDurationsRuntime[t.url] ?? t.knownDuration ?? 0);
   }, 0);
+}
+
+function allDurationsKnown(queue, trackDurationsRuntime = {}) {
+  return queue.every(
+    (t) => (trackDurationsRuntime[t.url] ?? t.knownDuration ?? 0) > 0,
+  );
 }
 
 export function useListeningAudio(
@@ -75,7 +80,6 @@ export function useListeningAudio(
   const [currentTrack, setCurrentTrack] = useState(
     () => queue[saved?.trackIndex ?? 0] ?? null,
   );
-
   const [totalKnownDuration, setTotalKnownDuration] = useState(() =>
     calcTotalKnownDuration(queue),
   );
@@ -104,7 +108,6 @@ export function useListeningAudio(
   const pendingPlayHandlerRef = useRef(null);
   const pendingTimeoutRef = useRef(null);
   const attemptIdRef = useRef(attemptId);
-
   const authTokenRef = useRef(null);
 
   useEffect(() => {
@@ -151,24 +154,30 @@ export function useListeningAudio(
       const el = progressBarRef.current;
       if (!el) return;
 
-      const total = totalKnownDurationRef.current;
-      if (total <= 0) return;
-
       const q = queueRef.current;
       const idx = trackIndexRef.current;
+      const ct = currentTimeRef.current;
+      const total = totalKnownDurationRef.current;
+      const reliable = allDurationsKnown(q, trackDurationsRef.current);
 
-      const completedDuration = q
-        .slice(0, idx)
-        .reduce(
-          (sum, t) =>
-            sum + (trackDurationsRef.current[t.url] ?? t.knownDuration ?? 0),
-          0,
-        );
-
-      const pct = Math.min(
-        100,
-        ((completedDuration + currentTimeRef.current) / total) * 100,
-      );
+      let pct;
+      if (total > 0 && reliable) {
+        const completedDuration = q
+          .slice(0, idx)
+          .reduce(
+            (sum, t) =>
+              sum + (trackDurationsRef.current[t.url] ?? t.knownDuration ?? 0),
+            0,
+          );
+        pct = Math.min(100, ((completedDuration + ct) / total) * 100);
+      } else if (q.length > 0) {
+        const trackDur =
+          trackDurationsRef.current[q[idx]?.url] ?? q[idx]?.knownDuration ?? 0;
+        const subProgress = trackDur > 0 ? Math.min(1, ct / trackDur) : 0.5;
+        pct = Math.min(100, ((idx + subProgress) / q.length) * 100);
+      } else {
+        pct = 0;
+      }
 
       el.style.width = `${pct.toFixed(2)}%`;
     });
@@ -185,7 +194,6 @@ export function useListeningAudio(
       !isLoadingTrackRef.current && audio && audio.readyState >= 1
         ? audio.currentTime
         : currentTimeRef.current;
-
     audioProgressStorage.save(eid, {
       trackIndex: idx,
       trackUrl: q[idx]?.url ?? null,
@@ -222,14 +230,12 @@ export function useListeningAudio(
     (index, startTime = 0) => {
       const audio = audioRef.current;
       const track = queueRef.current[index];
-
       if (!audio || !track) {
         console.warn(`[useListeningAudio] playTrackAtIndex(${index}) bail`);
         return;
       }
 
       cleanupPendingPlay();
-
       currentTimeRef.current = startTime;
       setCurrentTime(startTime);
 
@@ -260,12 +266,10 @@ export function useListeningAudio(
         cleanupPendingPlay();
         setIsLoadingTrack(false);
         isLoadingTrackRef.current = false;
-
         if (isPausedRef.current) return;
 
         if (startTime > 0) {
           audio.currentTime = startTime;
-
           iosWatchdogRef.current = setTimeout(() => {
             iosWatchdogRef.current = null;
             if (
@@ -299,7 +303,6 @@ export function useListeningAudio(
             }
           });
         };
-
         attemptPlay();
       };
 
@@ -330,11 +333,17 @@ export function useListeningAudio(
     [cleanupPendingPlay],
   );
 
+  const stopAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!audio.paused) audio.pause();
+    audio.src = "";
+    audio.load();
+  }, []);
+
   const manualStart = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio || isDoneRef.current) return;
-    if (isPausedRef.current) return;
-
+    if (!audio || isDoneRef.current || isPausedRef.current) return;
     setHasBlockedAutoplay(false);
     if (
       audio.src &&
@@ -364,7 +373,6 @@ export function useListeningAudio(
     );
 
     const s = savedProgressRef.current;
-
     if (s?.isDone) {
       isDoneRef.current = true;
       setIsDone(true);
@@ -387,13 +395,11 @@ export function useListeningAudio(
     console.info(
       `[useListeningAudio] Init: track ${startIndex}/${queue.length - 1} @ ${startTime.toFixed(1)}s`,
     );
-
     playTrackAtIndex(startIndex, startTime);
   }, [hasAudio, examId, queue, playTrackAtIndex]);
 
   useEffect(() => {
     const audio = audioRef.current;
-
     const prev = prevIsPausedRef.current;
     prevIsPausedRef.current = isPaused;
     if (isPaused === prev) return;
@@ -444,72 +450,54 @@ export function useListeningAudio(
       setHasBlockedAutoplay(false);
       setTrackSkipWarning(null);
     };
-
     const onPause = () => {
       setIsPlaying(false);
       saveProgressRef.current?.();
     };
-
     const onTimeUpdate = () => {
       currentTimeRef.current = audio.currentTime;
-
       const nowSec = Math.floor(audio.currentTime);
       if (nowSec !== lastSecRef.current) {
         lastSecRef.current = nowSec;
         setCurrentTime(audio.currentTime);
       }
-
       scheduleProgressBarUpdate();
     };
-
     const onSeeked = () => {
       currentTimeRef.current = audio.currentTime;
       scheduleProgressBarUpdate();
     };
-
     const onLoadedMetadata = () => {
       const url = queueRef.current[trackIndexRef.current]?.url;
-      if (url) {
-        trackDurationsRef.current[url] = audio.duration;
-      }
+      if (url) trackDurationsRef.current[url] = audio.duration;
       setDuration(audio.duration);
-
       const newTotal = calcTotalKnownDuration(
         queueRef.current,
         trackDurationsRef.current,
       );
       totalKnownDurationRef.current = newTotal;
       setTotalKnownDuration(newTotal);
-
       scheduleProgressBarUpdate();
     };
 
-    let skipWarningTimerRef_local = null;
+    let skipWarningTimer = null;
     const onError = () => {
       isLoadingTrackRef.current = false;
       setIsLoadingTrack(false);
       cleanupPendingPlay();
-
       const failedTrack = queueRef.current[trackIndexRef.current];
-      const failedUrl = failedTrack?.url;
       console.error(
-        `[useListeningAudio] Audio load greška na traci: ${failedUrl}`,
+        `[useListeningAudio] Audio load greška na traci: ${failedTrack?.url}`,
       );
-
       const q = queueRef.current;
       const nextIndex = trackIndexRef.current + 1;
-
       if (nextIndex < q.length) {
         console.warn(
           `[useListeningAudio] Preskačem pokvarenu traku → track ${nextIndex}`,
         );
-        const warningLabel = failedTrack?.label ?? "Snimka";
-        setTrackSkipWarning(warningLabel);
-        if (skipWarningTimerRef_local) clearTimeout(skipWarningTimerRef_local);
-        skipWarningTimerRef_local = setTimeout(() => {
-          setTrackSkipWarning(null);
-        }, 4_000);
-
+        setTrackSkipWarning(failedTrack?.label ?? "Snimka");
+        if (skipWarningTimer) clearTimeout(skipWarningTimer);
+        skipWarningTimer = setTimeout(() => setTrackSkipWarning(null), 4_000);
         setTimeout(() => playTrackAtIndex(nextIndex, 0), 300);
       } else {
         hasErrorRef.current = true;
@@ -523,22 +511,17 @@ export function useListeningAudio(
       const q = queueRef.current;
       const idx = trackIndexRef.current;
       const nextIndex = idx + 1;
-
       if (nextIndex < q.length) {
         playTrackAtIndex(nextIndex, 0);
       } else {
         isDoneRef.current = true;
         setIsDone(true);
-
-        const lastUrl = q[idx]?.url ?? null;
-
         audioProgressStorage.save(examIdRef.current, {
           trackIndex: idx,
-          trackUrl: lastUrl,
+          trackUrl: q[idx]?.url ?? null,
           currentTime: 0,
           isDone: true,
         });
-
         const aid = attemptIdRef.current;
         if (aid) {
           attemptApi.syncAudioStatus(aid, {
@@ -547,7 +530,6 @@ export function useListeningAudio(
             trackIndex: idx,
           });
         }
-
         console.info("[useListeningAudio] Sve audio trake završene.");
       }
     };
@@ -568,6 +550,12 @@ export function useListeningAudio(
       audio.removeEventListener("loadedmetadata", onLoadedMetadata);
       audio.removeEventListener("error", onError);
       audio.removeEventListener("ended", onEnded);
+
+      if (!audio.paused) audio.pause();
+      audio.src = "";
+      audio.load();
+
+      if (skipWarningTimer) clearTimeout(skipWarningTimer);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -598,35 +586,23 @@ export function useListeningAudio(
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (iosWatchdogRef.current) clearTimeout(iosWatchdogRef.current);
       cleanupPendingPlay();
-
-      const audio = audioRef.current;
-
-      if (audio && !audio.paused) {
-        audio.pause();
-      } else {
-        saveProgressRef.current?.();
-      }
+      saveProgressRef.current?.();
 
       const eid = examIdRef.current;
       const aid = attemptIdRef.current;
-
       if (aid && eid && hasAudioRef.current && !isDoneRef.current) {
         const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
         const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
         const token = authTokenRef.current ?? SUPABASE_ANON_KEY;
-
         if (SUPABASE_URL && SUPABASE_ANON_KEY && token) {
-          const rpcPayload = JSON.stringify({
-            p_attempt_id: aid,
-            p_audio_is_done: isDoneRef.current,
-            p_current_time_s: Math.round(currentTimeRef.current * 100) / 100,
-            p_track_index: Math.max(0, Math.floor(trackIndexRef.current)),
-          });
-
           fetch(`${SUPABASE_URL}/rest/v1/rpc/sync_audio_status`, {
             method: "POST",
-            body: rpcPayload,
+            body: JSON.stringify({
+              p_attempt_id: aid,
+              p_audio_is_done: isDoneRef.current,
+              p_current_time_s: Math.round(currentTimeRef.current * 100) / 100,
+              p_track_index: Math.max(0, Math.floor(trackIndexRef.current)),
+            }),
             keepalive: true,
             headers: {
               "Content-Type": "application/json",
@@ -657,6 +633,7 @@ export function useListeningAudio(
     hasBlockedAutoplay,
     trackSkipWarning,
     manualStart,
+    stopAudio,
     currentTime,
     duration,
     formattedTime: formatTime(currentTime),

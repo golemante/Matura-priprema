@@ -772,9 +772,7 @@ export function QuizPage() {
   );
 
   const handleSubmit = useCallback(() => {
-    if (audio.audioRef.current) {
-      audio.audioRef.current.pause();
-    }
+    audio.stopAudio();
     const aid = storeAttemptId;
     if (aid && audio.hasAudio) {
       const audioState = audio.getAudioState?.();
@@ -985,8 +983,7 @@ export function QuizPage() {
                     onAnswer={handleAnswer}
                     onFlag={handleToggleFlag}
                     index={currentIndex}
-                    isPaused={isPaused || isIntroPlaying}
-                    isIntroPlaying={isIntroPlaying}
+                    isPaused={isPaused}
                   />
                 </motion.div>
               </AnimatePresence>

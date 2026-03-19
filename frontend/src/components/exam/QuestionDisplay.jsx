@@ -1,26 +1,20 @@
 // components/exam/QuestionDisplay.jsx
 import { useCallback } from "react";
 import { motion } from "framer-motion";
-import { Flag, Check, Volume2 } from "lucide-react";
+import { Flag, Check } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/cn";
 
-function OptionButton({
-  option,
-  selected,
-  onSelect,
-  disabled,
-  isIntroPlaying,
-}) {
+function OptionButton({ option, selected, onSelect, disabled }) {
   const handleClick = useCallback(() => {
-    if (!disabled && !isIntroPlaying) onSelect?.(option.letter);
-  }, [disabled, isIntroPlaying, onSelect, option.letter]);
+    if (!disabled) onSelect?.(option.letter);
+  }, [disabled, onSelect, option.letter]);
 
   return (
     <motion.button
       layout
       onClick={handleClick}
-      disabled={disabled || isIntroPlaying}
+      disabled={disabled}
       className={cn(
         "w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-150 text-left group",
         selected
@@ -28,15 +22,13 @@ function OptionButton({
               "border-primary-500 bg-primary-50",
               "shadow-[0_0_0_3px_rgba(45,84,232,0.12)]",
             ]
-          : isIntroPlaying
-            ? "border-sky-100 bg-sky-50/50 opacity-60 cursor-not-allowed"
-            : !disabled
-              ? [
-                  "border-warm-200 bg-white",
-                  "hover:border-primary-300 hover:bg-warm-50",
-                  "hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)]",
-                ]
-              : "border-warm-200 bg-warm-50 opacity-60",
+          : !disabled
+            ? [
+                "border-warm-200 bg-white",
+                "hover:border-primary-300 hover:bg-warm-50",
+                "hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)]",
+              ]
+            : "border-warm-200 bg-warm-50 opacity-60",
       )}
     >
       <div
@@ -45,14 +37,12 @@ function OptionButton({
           "text-xs font-bold transition-all duration-150 border-2",
           selected
             ? "bg-primary-600 border-primary-600 text-white"
-            : isIntroPlaying
-              ? "border-sky-200 text-sky-300"
-              : !disabled
-                ? [
-                    "border-warm-300 text-warm-600",
-                    "group-hover:border-primary-400 group-hover:text-primary-600",
-                  ]
-                : "border-warm-200 text-warm-400",
+            : !disabled
+              ? [
+                  "border-warm-300 text-warm-600",
+                  "group-hover:border-primary-400 group-hover:text-primary-600",
+                ]
+              : "border-warm-200 text-warm-400",
         )}
         aria-hidden="true"
       >
@@ -70,9 +60,7 @@ function OptionButton({
           "text-sm flex-1 text-left leading-snug",
           selected
             ? "font-semibold text-primary-900"
-            : isIntroPlaying
-              ? "text-sky-400"
-              : "font-medium text-warm-800",
+            : "font-medium text-warm-800",
         )}
       />
     </motion.button>
@@ -88,36 +76,6 @@ function InlineTextBlock({ html }) {
   );
 }
 
-// Overlay koji se prikazuje dok se reproducira intro audio (NCVVO pravilo:
-// pitanja nisu dostupna dok traju upute za slušanje)
-function IntroOverlay() {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      className={cn(
-        "absolute inset-0 z-10 flex flex-col items-center justify-center",
-        "bg-white/90 backdrop-blur-[2px] rounded-2xl",
-        "border-2 border-sky-200",
-      )}
-    >
-      <div className="flex flex-col items-center gap-3 px-6 text-center">
-        <div className="w-12 h-12 rounded-full bg-sky-100 flex items-center justify-center">
-          <Volume2 size={22} className="text-sky-500" />
-        </div>
-        <p className="text-sm font-bold text-sky-800">
-          Pažljivo slušajte upute
-        </p>
-        <p className="text-xs text-sky-600 leading-relaxed max-w-[220px]">
-          Pitanja će biti dostupna čim upute završe.
-        </p>
-      </div>
-    </motion.div>
-  );
-}
-
 export function QuestionDisplay({
   question,
   parentQuestion,
@@ -127,25 +85,15 @@ export function QuestionDisplay({
   isFlagged,
   index,
   isPaused,
-  isIntroPlaying = false,
 }) {
   if (!question) return null;
 
   const isParent = question.questionType === "fill_blank_mc";
-  const isChild = question.questionType === "fill_blank_child";
-
   const displayLabel = question.positionLabel ?? String((index ?? 0) + 1);
 
-  // Pitanje je efektivno disabled ako je ispit pauziran ILI se reproducira intro
-  const effectivelyDisabled = isPaused || isIntroPlaying;
-
   return (
-    <div className="relative bg-white rounded-2xl border border-warm-200 shadow-sm overflow-hidden">
-      {/* Intro overlay — blokira interakciju dok traju upute */}
-      {isIntroPlaying && <IntroOverlay />}
-
+    <div className="bg-white rounded-2xl border border-warm-200 shadow-sm overflow-hidden">
       <div className="px-5 py-4">
-        {/* ── Header pitanja ────────────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-bold text-warm-400 uppercase tracking-wider">
@@ -178,7 +126,7 @@ export function QuestionDisplay({
                 isFlagged
                   ? "text-amber-600 bg-amber-100 hover:bg-amber-200"
                   : "text-warm-300 hover:text-amber-600 hover:bg-amber-50",
-                effectivelyDisabled && "opacity-40 pointer-events-none",
+                isPaused && "opacity-40 pointer-events-none",
               )}
             >
               <Flag size={14} />
@@ -186,7 +134,6 @@ export function QuestionDisplay({
           )}
         </div>
 
-        {/* Tekst pitanja */}
         <SafeHtml
           html={question.text}
           className={cn(
@@ -195,10 +142,8 @@ export function QuestionDisplay({
           )}
         />
 
-        {/* Inline tekst (za fill_blank_child) */}
         <InlineTextBlock html={question.inlineText} />
 
-        {/* Opcije */}
         {!isParent && question.options?.length > 0 && (
           <div className="space-y-2 mt-4">
             {question.options.map((option) => (
@@ -208,7 +153,6 @@ export function QuestionDisplay({
                 selected={selectedAnswer === option.letter}
                 onSelect={onAnswer}
                 disabled={isPaused || !onAnswer}
-                isIntroPlaying={isIntroPlaying}
               />
             ))}
           </div>
