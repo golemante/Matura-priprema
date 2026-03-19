@@ -22,6 +22,7 @@ import { SectionReview } from "@/components/results/SectionReview";
 import { FilterTabs } from "@/components/results/FilterTabs";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 import { PageSpinner } from "@/components/common/LoadingSpinner";
+import { AudioTranscriptPanel } from "@/components/exam/AudioTranscriptPanel";
 
 function Confetti({ active }) {
   useEffect(() => {
@@ -321,6 +322,8 @@ export function ResultsPage() {
         )}
 
         {keyError && <AnswerKeyError onRetry={retryKey} />}
+
+        <AudioTranscriptPanel passages={passages} />
 
         <div className="mt-5">
           <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">

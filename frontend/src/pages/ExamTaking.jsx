@@ -65,8 +65,16 @@ function GlobalAudioBar({ audio }) {
 
   const track = audio.currentTrack;
   const isIntro = track?.type === "intro";
-  const { isDone, isPlaying, hasStarted, hasBlockedAutoplay, manualStart } =
-    audio;
+  const {
+    isDone,
+    isPlaying,
+    hasStarted,
+    hasBlockedAutoplay,
+    manualStart,
+    currentTrackPlays,
+    currentTrackLimitReached,
+    maxPlaysPerTrack,
+  } = audio;
 
   if (audio.hasError) {
     return (
@@ -103,10 +111,12 @@ function GlobalAudioBar({ audio }) {
           </div>
           <button
             onClick={manualStart}
+            disabled={currentTrackLimitReached}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold",
-              "bg-sky-600 hover:bg-sky-700 text-white",
-              "transition-colors active:scale-95",
+              currentTrackLimitReached
+                ? "bg-warm-200 text-warm-400 cursor-not-allowed"
+                : "bg-sky-600 hover:bg-sky-700 text-white transition-colors active:scale-95",
             )}
           >
             <Play size={11} />
@@ -119,6 +129,7 @@ function GlobalAudioBar({ audio }) {
 
   return (
     <div className="flex flex-col gap-1.5">
+      {/* Track skip warning */}
       {audio.trackSkipWarning && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
           <AlertCircle size={12} className="text-amber-500 flex-shrink-0" />
@@ -128,12 +139,15 @@ function GlobalAudioBar({ audio }) {
           </p>
         </div>
       )}
+
+      {/* ── Progress bar + track info ─────────────────────────────────────── */}
       <div
         className={cn(
           "rounded-xl border overflow-hidden",
           isIntro ? "bg-amber-50 border-amber-200" : "bg-sky-50 border-sky-200",
         )}
       >
+        {/* RAF-only progress bar — nema React style prop (bug #3 fix) */}
         <div className={cn("h-1", isIntro ? "bg-amber-100" : "bg-sky-100")}>
           <div
             ref={audio.progressBarRef}
@@ -177,8 +191,29 @@ function GlobalAudioBar({ audio }) {
             </p>
           </div>
 
-          {isIntro && (
-            <span className="text-[10px] bg-amber-100 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-md font-medium leading-none flex-shrink-0">
+          {/* ── NCVVO: playback counter (N/maxPlaysPerTrack) ──────────────── */}
+          {maxPlaysPerTrack > 1 && (
+            <span
+              className={cn(
+                "text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-none flex-shrink-0 tabular-nums",
+                currentTrackLimitReached
+                  ? "bg-warm-200 text-warm-500"
+                  : "bg-sky-100 text-sky-600 border border-sky-200",
+              )}
+              title={`Slušanje ${currentTrackPlays}/${maxPlaysPerTrack} (NCVVO limit)`}
+            >
+              {currentTrackPlays}/{maxPlaysPerTrack}×
+            </span>
+          )}
+
+          {/* ── Intro: blokiraj pitanja dok traju upute ───────────────────── */}
+          {isIntro && isPlaying && (
+            <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold leading-none flex-shrink-0">
+              slušaj upute
+            </span>
+          )}
+          {isIntro && !isPlaying && !isDone && (
+            <span className="text-[10px] bg-amber-50 text-amber-500 border border-amber-200 px-1.5 py-0.5 rounded-md font-medium leading-none flex-shrink-0">
               pričekaj
             </span>
           )}
@@ -189,6 +224,7 @@ function GlobalAudioBar({ audio }) {
             </span>
           )}
           {!audio.isLoadingTrack &&
+            !isIntro &&
             hasStarted &&
             !isPlaying &&
             !isDone &&
@@ -532,6 +568,7 @@ function MobileNavDrawer({
   answeredCount,
   isSyncing,
   isSubmitting,
+  audioActivePassageId,
 }) {
   return (
     <AnimatePresence>
@@ -574,6 +611,7 @@ function MobileNavDrawer({
                 }}
                 onSubmit={onSubmit}
                 answeredCount={answeredCount}
+                audioActivePassageId={audioActivePassageId}
               />
             </div>
             <div className="p-4 border-t border-warm-200">
@@ -743,6 +781,9 @@ export function QuizPage() {
     isPaused,
     { attemptId: storeAttemptId ?? null },
   );
+
+  const isIntroPlaying = audio.isIntroPlaying;
+  const audioActivePassageId = audio.activePassageId;
 
   useBeforeUnload(
     useCallback(() => {
@@ -926,6 +967,7 @@ export function QuizPage() {
           answeredCount={answeredCount}
           isSyncing={isSyncing}
           isSubmitting={isSubmitting}
+          audioActivePassageId={audioActivePassageId}
         />
 
         <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
@@ -977,7 +1019,8 @@ export function QuizPage() {
                     onAnswer={handleAnswer}
                     onFlag={handleToggleFlag}
                     index={currentIndex}
-                    isPaused={isPaused}
+                    isPaused={isPaused || isIntroPlaying}
+                    isIntroPlaying={isIntroPlaying}
                   />
                 </motion.div>
               </AnimatePresence>
@@ -1025,6 +1068,7 @@ export function QuizPage() {
                 onGoTo={handleGoTo}
                 onSubmit={() => setShowSubmitModal(true)}
                 answeredCount={answeredCount}
+                audioActivePassageId={audioActivePassageId}
               />
             </div>
           </div>

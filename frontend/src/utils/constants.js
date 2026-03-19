@@ -16,6 +16,7 @@ export const SUBJECTS = [
     shortName: "MAT",
     description: "Algebra, analiza, geometrija i statistika",
     icon: Calculator,
+    examCount: 30,
     color: {
       bg: "bg-primary-50",
       text: "text-primary-600",
@@ -32,6 +33,7 @@ export const SUBJECTS = [
     shortName: "HRV",
     description: "Književnost, jezično izražavanje i analiza teksta",
     icon: BookOpen,
+    examCount: 28,
     color: {
       bg: "bg-success-50",
       text: "text-success-600",
@@ -48,6 +50,7 @@ export const SUBJECTS = [
     shortName: "ENG",
     description: "Čitanje, pisanje, gramatika i komunikacija",
     icon: Globe,
+    examCount: 30,
     color: {
       bg: "bg-warning-50",
       text: "text-amber-700",
@@ -64,6 +67,7 @@ export const SUBJECTS = [
     shortName: "POV",
     description: "Hrvatska i svjetska povijest od antike do danas",
     icon: ScrollText,
+    examCount: 24,
     color: {
       bg: "bg-error-50",
       text: "text-error-600",
@@ -80,6 +84,7 @@ export const SUBJECTS = [
     shortName: "KEM",
     description: "Organska i anorganska kemija, reakcije i formule",
     icon: FlaskConical,
+    examCount: 22,
     color: {
       bg: "bg-cyan-50",
       text: "text-cyan-700",
@@ -96,6 +101,7 @@ export const SUBJECTS = [
     shortName: "FIZ",
     description: "Mehanika, termodinamika, elektromagnetizam i optika",
     icon: Atom,
+    examCount: 22,
     color: {
       bg: "bg-fuchsia-50",
       text: "text-fuchsia-700",
@@ -112,6 +118,7 @@ export const SUBJECTS = [
     shortName: "BIO",
     description: "Stanica, genetika, evolucija i ekosustavi",
     icon: Leaf,
+    examCount: 22,
     color: {
       bg: "bg-violet-50",
       text: "text-violet-700",
@@ -128,6 +135,7 @@ export const SUBJECTS = [
     shortName: "GEO",
     description: "Fizička, regionalna i socioekonomska geografija",
     icon: Map,
+    examCount: 22,
     color: {
       bg: "bg-emerald-50",
       text: "text-emerald-700",
