@@ -202,17 +202,11 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
         isLoadingTrackRef.current = false;
         setIsLoadingTrack(false);
 
-        if (isPausedRef.current) return;
-
         if (startTime > 0) {
           audio.currentTime = startTime;
           iosWatchdogRef.current = setTimeout(() => {
             iosWatchdogRef.current = null;
-            if (
-              audio &&
-              !audio.paused &&
-              Math.abs(audio.currentTime - startTime) > 1.5
-            ) {
+            if (audio && Math.abs(audio.currentTime - startTime) > 1.5) {
               console.warn(
                 `[useListeningAudio] iOS watchdog: korigiram currentTime ` +
                   `${audio.currentTime.toFixed(1)}s → ${startTime.toFixed(1)}s`,
@@ -221,6 +215,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
             }
           }, 200);
         }
+
+        if (isPausedRef.current) return;
 
         const attemptPlay = (retries = 0) => {
           audio.play().catch((err) => {
@@ -346,6 +342,14 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
         !audio.ended;
 
       if (!canAttemptResume || !audio) return;
+
+      if (currentTimeRef.current > 1 && audio.currentTime < 0.5) {
+        console.info(
+          `[useListeningAudio] Resume: korigiram poziciju ` +
+            `${audio.currentTime.toFixed(1)}s → ${currentTimeRef.current.toFixed(1)}s`,
+        );
+        audio.currentTime = currentTimeRef.current;
+      }
 
       if (audio.readyState >= 3) {
         audio.play().catch((err) => {
