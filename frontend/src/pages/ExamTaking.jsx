@@ -810,11 +810,6 @@ export function QuizPage() {
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
 
-  const parentQuestion = useMemo(() => {
-    if (!current || current.questionType !== "fill_blank_child") return null;
-    return questions.find((q) => q.id === current.parentQuestionId) ?? null;
-  }, [current, questions]);
-
   const hasAnyPassage = useMemo(
     () => questions.some((q) => q.passageId),
     [questions],
@@ -977,7 +972,6 @@ export function QuizPage() {
                 >
                   <QuestionDisplay
                     question={current}
-                    parentQuestion={parentQuestion}
                     selectedAnswer={answers[current?.id] ?? null}
                     isFlagged={isCurrentFlagged}
                     onAnswer={handleAnswer}

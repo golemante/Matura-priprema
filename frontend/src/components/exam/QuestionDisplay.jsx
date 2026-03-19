@@ -78,7 +78,6 @@ function InlineTextBlock({ html }) {
 
 export function QuestionDisplay({
   question,
-  parentQuestion,
   selectedAnswer,
   onAnswer,
   onFlag,

@@ -31,15 +31,34 @@ function buildQueue(orderedPassages) {
   return tracks;
 }
 
-function calcTotalKnownDuration(queue, trackDurationsRuntime = {}) {
-  return queue.reduce((sum, t) => {
-    return sum + (trackDurationsRuntime[t.url] ?? t.knownDuration ?? 0);
-  }, 0);
-}
+function calcProgressPct(queue, trackIdx, currentTime, trackDurationsRuntime) {
+  if (queue.length === 0) return 0;
 
-function allDurationsKnown(queue, trackDurationsRuntime = {}) {
-  return queue.every(
-    (t) => (trackDurationsRuntime[t.url] ?? t.knownDuration ?? 0) > 0,
+  const resolved = queue.map(
+    (t) => trackDurationsRuntime[t.url] ?? t.knownDuration ?? null,
+  );
+
+  const knownValues = resolved.filter((d) => d !== null);
+
+  if (knownValues.length === 0) {
+    return Math.min(100, ((trackIdx + 0.5) / queue.length) * 100);
+  }
+
+  const avgKnown = knownValues.reduce((s, d) => s + d, 0) / knownValues.length;
+  const effective = resolved.map((d) => d ?? avgKnown);
+  const total = effective.reduce((s, d) => s + d, 0);
+  if (total <= 0) return 0;
+
+  const completedBefore = effective
+    .slice(0, trackIdx)
+    .reduce((s, d) => s + d, 0);
+  const currentTrackDur = effective[trackIdx] ?? avgKnown;
+  const subPct =
+    currentTrackDur > 0 ? Math.min(1, currentTime / currentTrackDur) : 0.5;
+
+  return Math.min(
+    100,
+    ((completedBefore + currentTrackDur * subPct) / total) * 100,
   );
 }
 
@@ -66,7 +85,6 @@ export function useListeningAudio(
   const savedTrack = queue[saved?.trackIndex ?? 0] ?? null;
   const seedDuration = savedTrack?.knownDuration ?? 0;
 
-  const [trackIndex, setTrackIndex] = useState(saved?.trackIndex ?? 0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(saved?.currentTime ?? 0);
   const [duration, setDuration] = useState(seedDuration);
@@ -79,9 +97,6 @@ export function useListeningAudio(
   const [isLoadingTrack, setIsLoadingTrack] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(
     () => queue[saved?.trackIndex ?? 0] ?? null,
-  );
-  const [totalKnownDuration, setTotalKnownDuration] = useState(() =>
-    calcTotalKnownDuration(queue),
   );
   const [trackSkipWarning, setTrackSkipWarning] = useState(null);
 
@@ -102,7 +117,6 @@ export function useListeningAudio(
   const isLoadingTrackRef = useRef(false);
 
   const trackDurationsRef = useRef({});
-  const totalKnownDurationRef = useRef(calcTotalKnownDuration(queue));
   const lastSecRef = useRef(-1);
   const iosWatchdogRef = useRef(null);
   const pendingPlayHandlerRef = useRef(null);
@@ -142,10 +156,11 @@ export function useListeningAudio(
   }, []);
 
   useEffect(() => {
-    totalKnownDurationRef.current = calcTotalKnownDuration(
-      queue,
-      trackDurationsRef.current,
-    );
+    for (const t of queue) {
+      if (t.knownDuration && !trackDurationsRef.current[t.url]) {
+        trackDurationsRef.current[t.url] = t.knownDuration;
+      }
+    }
   }, [queue]);
 
   const scheduleProgressBarUpdate = useCallback(() => {
@@ -153,32 +168,12 @@ export function useListeningAudio(
     rafRef.current = requestAnimationFrame(() => {
       const el = progressBarRef.current;
       if (!el) return;
-
-      const q = queueRef.current;
-      const idx = trackIndexRef.current;
-      const ct = currentTimeRef.current;
-      const total = totalKnownDurationRef.current;
-      const reliable = allDurationsKnown(q, trackDurationsRef.current);
-
-      let pct;
-      if (total > 0 && reliable) {
-        const completedDuration = q
-          .slice(0, idx)
-          .reduce(
-            (sum, t) =>
-              sum + (trackDurationsRef.current[t.url] ?? t.knownDuration ?? 0),
-            0,
-          );
-        pct = Math.min(100, ((completedDuration + ct) / total) * 100);
-      } else if (q.length > 0) {
-        const trackDur =
-          trackDurationsRef.current[q[idx]?.url] ?? q[idx]?.knownDuration ?? 0;
-        const subProgress = trackDur > 0 ? Math.min(1, ct / trackDur) : 0.5;
-        pct = Math.min(100, ((idx + subProgress) / q.length) * 100);
-      } else {
-        pct = 0;
-      }
-
+      const pct = calcProgressPct(
+        queueRef.current,
+        trackIndexRef.current,
+        currentTimeRef.current,
+        trackDurationsRef.current,
+      );
       el.style.width = `${pct.toFixed(2)}%`;
     });
   }, []);
@@ -246,12 +241,10 @@ export function useListeningAudio(
         isDone: false,
       });
 
-      setTrackIndex(index);
       setCurrentTrack(queueRef.current[index] ?? null);
       trackIndexRef.current = index;
 
-      const nextKnown = queueRef.current[index]?.knownDuration ?? 0;
-      setDuration(nextKnown);
+      setDuration(queueRef.current[index]?.knownDuration ?? 0);
       setHasError(false);
       hasErrorRef.current = false;
       isDoneRef.current = false;
@@ -278,7 +271,8 @@ export function useListeningAudio(
               Math.abs(audio.currentTime - startTime) > 1.5
             ) {
               console.warn(
-                `[useListeningAudio] iOS watchdog: korigiram currentTime ${audio.currentTime.toFixed(1)}s → ${startTime.toFixed(1)}s`,
+                `[useListeningAudio] iOS watchdog: korigiram currentTime ` +
+                  `${audio.currentTime.toFixed(1)}s → ${startTime.toFixed(1)}s`,
               );
               audio.currentTime = startTime;
             }
@@ -362,16 +356,6 @@ export function useListeningAudio(
     if (initDoneRef.current === examId) return;
     initDoneRef.current = examId;
 
-    for (const t of queue) {
-      if (t.knownDuration && !trackDurationsRef.current[t.url]) {
-        trackDurationsRef.current[t.url] = t.knownDuration;
-      }
-    }
-    totalKnownDurationRef.current = calcTotalKnownDuration(
-      queue,
-      trackDurationsRef.current,
-    );
-
     const s = savedProgressRef.current;
     if (s?.isDone) {
       isDoneRef.current = true;
@@ -450,10 +434,12 @@ export function useListeningAudio(
       setHasBlockedAutoplay(false);
       setTrackSkipWarning(null);
     };
+
     const onPause = () => {
       setIsPlaying(false);
       saveProgressRef.current?.();
     };
+
     const onTimeUpdate = () => {
       currentTimeRef.current = audio.currentTime;
       const nowSec = Math.floor(audio.currentTime);
@@ -463,20 +449,18 @@ export function useListeningAudio(
       }
       scheduleProgressBarUpdate();
     };
+
     const onSeeked = () => {
       currentTimeRef.current = audio.currentTime;
       scheduleProgressBarUpdate();
     };
+
     const onLoadedMetadata = () => {
       const url = queueRef.current[trackIndexRef.current]?.url;
-      if (url) trackDurationsRef.current[url] = audio.duration;
+      if (url && audio.duration > 0) {
+        trackDurationsRef.current[url] = audio.duration;
+      }
       setDuration(audio.duration);
-      const newTotal = calcTotalKnownDuration(
-        queueRef.current,
-        trackDurationsRef.current,
-      );
-      totalKnownDurationRef.current = newTotal;
-      setTotalKnownDuration(newTotal);
       scheduleProgressBarUpdate();
     };
 
@@ -485,10 +469,12 @@ export function useListeningAudio(
       isLoadingTrackRef.current = false;
       setIsLoadingTrack(false);
       cleanupPendingPlay();
+
       const failedTrack = queueRef.current[trackIndexRef.current];
       console.error(
         `[useListeningAudio] Audio load greška na traci: ${failedTrack?.url}`,
       );
+
       const q = queueRef.current;
       const nextIndex = trackIndexRef.current + 1;
       if (nextIndex < q.length) {
@@ -511,6 +497,7 @@ export function useListeningAudio(
       const q = queueRef.current;
       const idx = trackIndexRef.current;
       const nextIndex = idx + 1;
+
       if (nextIndex < q.length) {
         playTrackAtIndex(nextIndex, 0);
       } else {
@@ -622,7 +609,6 @@ export function useListeningAudio(
     progressBarRef,
     hasAudio,
     activePassageId: isDone ? null : (currentTrack?.passageId ?? null),
-    trackIndex,
     currentTrack,
     isPlaying,
     isIntroPlaying,
