@@ -1,6 +1,6 @@
 // router/index.jsx
 import { lazy, Suspense } from "react";
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import { RootLayout } from "@/components/layout/Layout";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
@@ -8,6 +8,9 @@ import { Spinner } from "@/components/common/LoadingSpinner";
 
 const HomePage = lazy(() =>
   import("@/pages/Landing").then((m) => ({ default: m.HomePage })),
+);
+const AllSubjectsPage = lazy(() =>
+  import("@/pages/AllSubjects").then((m) => ({ default: m.AllSubjectsPage })),
 );
 const SubjectsPage = lazy(() =>
   import("@/pages/SubjectSelect").then((m) => ({ default: m.SubjectsPage })),
@@ -33,7 +36,12 @@ const TermsPage = lazy(() =>
 const PrivacyPage = lazy(() =>
   import("@/pages/Privacy").then((m) => ({ default: m.PrivacyPage })),
 );
-// Auth stranice (bez layouta)
+const AboutUsPage = lazy(() =>
+  import("@/pages/AboutUs").then((m) => ({ default: m.AboutUsPage })),
+);
+const ContactPage = lazy(() =>
+  import("@/pages/Contact").then((m) => ({ default: m.ContactPage })),
+);
 const LoginPage = lazy(() =>
   import("@/pages/Login").then((m) => ({ default: m.LoginPage })),
 );
@@ -55,7 +63,6 @@ const AuthCallbackPage = lazy(() =>
     default: m.AuthCallbackPage,
   })),
 );
-// Full-screen exam (bez headera)
 const QuizPage = lazy(() =>
   import("@/pages/ExamTaking").then((m) => ({ default: m.QuizPage })),
 );
@@ -77,7 +84,6 @@ function withSuspense(element) {
 }
 
 export const router = createBrowserRouter([
-  // Auth routes (full-screen, bez headera)
   { path: "/login", element: withSuspense(<LoginPage />) },
   { path: "/register", element: withSuspense(<RegisterPage />) },
   {
@@ -87,13 +93,15 @@ export const router = createBrowserRouter([
   { path: "/reset-password", element: withSuspense(<ResetPasswordPage />) },
   { path: "/auth/callback", element: withSuspense(<AuthCallbackPage />) },
 
-  // Exam route (full-screen, bez headera, s ErrorBoundary)
   {
     path: "/ispit/:examId",
-    element: <ErrorBoundary>{withSuspense(<QuizPage />)}</ErrorBoundary>,
+    element: (
+      <ErrorBoundary>
+        <ProtectedRoute>{withSuspense(<QuizPage />)}</ProtectedRoute>
+      </ErrorBoundary>
+    ),
   },
 
-  // Main app (s RootLayout = Header + Footer)
   {
     path: "/",
     element: <RootLayout />,
@@ -102,28 +110,48 @@ export const router = createBrowserRouter([
         index: true,
         element: withSuspense(<HomePage />),
       },
+
+      {
+        path: "predmeti",
+        element: withSuspense(<AllSubjectsPage />),
+      },
+
       {
         path: "predmeti/:subjectId",
         element: withSuspense(<SubjectsPage />),
       },
+
       {
         path: "rezultati/pokusaj/:attemptId",
         element: withSuspense(<ResultsPage />),
       },
+
+      // DEPRECATED: /rezultati/:examId — redirect na /rezultati
+      // Ostaje privremeno zbog backward compat, ali ne koristimo aktivno
       {
         path: "rezultati/:examId",
-        element: withSuspense(<ResultsPage />),
+        element: <Navigate to="/rezultati" replace />,
       },
+
       {
         path: "rezultati",
         element: (
           <ProtectedRoute>{withSuspense(<StatisticsPage />)}</ProtectedRoute>
         ),
       },
+
       {
         path: "dashboard",
         element: <ProtectedRoute>{withSuspense(<Dashboard />)}</ProtectedRoute>,
       },
+
+      {
+        path: "profil",
+        element: (
+          <ProtectedRoute>{withSuspense(<ProfilePage />)}</ProtectedRoute>
+        ),
+      },
+
       {
         path: "uvjeti",
         element: withSuspense(<TermsPage />),
@@ -132,12 +160,16 @@ export const router = createBrowserRouter([
         path: "privatnost",
         element: withSuspense(<PrivacyPage />),
       },
+
       {
-        path: "profil",
-        element: (
-          <ProtectedRoute>{withSuspense(<ProfilePage />)}</ProtectedRoute>
-        ),
+        path: "o-nama",
+        element: withSuspense(<AboutUsPage />),
       },
+      {
+        path: "kontakt",
+        element: withSuspense(<ContactPage />),
+      },
+
       {
         path: "*",
         element: withSuspense(<NotFoundPage />),

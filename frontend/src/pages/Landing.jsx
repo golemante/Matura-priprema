@@ -1,5 +1,5 @@
-// pages/Landing.jsx
 import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import {
@@ -16,6 +16,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { SUBJECTS } from "@/utils/constants";
+import { useIsAuthenticated } from "@/hooks/useAuth";
 import { cn } from "@/utils/cn";
 
 const fadeUp = {
@@ -63,15 +64,11 @@ function InViewSection({ children, className, delay = 0, threshold = 0.15 }) {
   );
 }
 
-// ─── Floating Exam Preview Card ───────────────────────────────────────────────
-
 function FloatingExamCard() {
   return (
     <div className="relative w-full max-w-sm mx-auto">
-      {/* Glow behind */}
       <div className="absolute inset-0 -m-6 bg-gradient-to-br from-primary-200 via-primary-100 to-transparent rounded-3xl blur-2xl opacity-60 pointer-events-none" />
 
-      {/* Main card */}
       <motion.div
         initial={{ opacity: 0, y: 20, rotateX: 8 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
@@ -79,11 +76,9 @@ function FloatingExamCard() {
         style={{ perspective: "1000px" }}
         className="relative bg-white rounded-2xl border border-warm-200 shadow-[0_8px_40px_-8px_rgba(45,84,232,0.18)] overflow-hidden"
       >
-        {/* Accent bar */}
         <div className="h-1 w-full bg-gradient-to-r from-primary-500 to-primary-700" />
 
         <div className="p-5">
-          {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="flex items-center gap-1.5 mb-0.5">
@@ -101,7 +96,6 @@ function FloatingExamCard() {
             </div>
           </div>
 
-          {/* Fake question */}
           <div className="bg-warm-50 rounded-xl p-4 mb-3 border border-warm-200">
             <p className="text-xs font-semibold text-warm-700 mb-3 leading-relaxed">
               1. Kolika je vrijednost izraza{" "}
@@ -141,7 +135,6 @@ function FloatingExamCard() {
             </div>
           </div>
 
-          {/* Progress bar */}
           <div className="flex items-center justify-between text-[11px] text-warm-500 mb-1.5">
             <span className="font-medium">12 / 40 pitanja</span>
             <span className="text-primary-600 font-bold">30%</span>
@@ -157,7 +150,6 @@ function FloatingExamCard() {
         </div>
       </motion.div>
 
-      {/* Floating result badge */}
       <motion.div
         initial={{ opacity: 0, scale: 0.8, x: 20 }}
         animate={{ opacity: 1, scale: 1, x: 0 }}
@@ -175,7 +167,6 @@ function FloatingExamCard() {
         </div>
       </motion.div>
 
-      {/* Floating timer badge */}
       <motion.div
         initial={{ opacity: 0, scale: 0.8, x: -20 }}
         animate={{ opacity: 1, scale: 1, x: 0 }}
@@ -188,8 +179,6 @@ function FloatingExamCard() {
     </div>
   );
 }
-
-// ─── Stats Counter ────────────────────────────────────────────────────────────
 
 const STATS = [
   { value: "132+", label: "Pravih ispita", icon: BookOpenCheck },
@@ -231,7 +220,6 @@ function StatsBar() {
   );
 }
 
-// ─── How It Works ─────────────────────────────────────────────────────────────
 const STEPS = [
   {
     step: "01",
@@ -244,7 +232,7 @@ const STEPS = [
     step: "02",
     icon: Zap,
     title: "Odaberi pravi ispit",
-    desc: "Filtriraj po godini, roku i razini (A ili B). Riješavaš točno onaj ispit koji te zanima.",
+    desc: "Filtriraj po godini, roku i razini (A ili B). Rješavaš točno onaj ispit koji te zanima.",
     color: "amber",
   },
   {
@@ -262,7 +250,6 @@ function HowItWorks() {
 
   return (
     <div ref={ref} className="relative">
-      {/* Connector line */}
       <div className="hidden md:block absolute top-10 left-[calc(33%_-_1px)] right-[33%] h-px bg-gradient-to-r from-primary-200 via-amber-200 to-success-500/50" />
 
       <motion.div
@@ -279,7 +266,6 @@ function HowItWorks() {
             className="relative"
           >
             <div className="bg-white border border-warm-200 rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-shadow duration-300">
-              {/* Step badge */}
               <div className="flex items-start justify-between mb-4">
                 <div
                   className={cn(
@@ -324,7 +310,6 @@ function HowItWorks() {
 }
 
 // ─── Subject Card ─────────────────────────────────────────────────────────────
-
 function SubjectCard({ subject, featured = false, index = 0 }) {
   const navigate = useNavigate();
   const Icon = subject.icon;
@@ -341,7 +326,6 @@ function SubjectCard({ subject, featured = false, index = 0 }) {
           "transition-all duration-300",
         )}
       >
-        {/* Top gradient line */}
         <div
           className={cn(
             "absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl",
@@ -408,8 +392,6 @@ function SubjectCard({ subject, featured = false, index = 0 }) {
   );
 }
 
-// ─── CTA Section ──────────────────────────────────────────────────────────────
-
 function CTASection() {
   const navigate = useNavigate();
   const ref = useRef(null);
@@ -423,10 +405,8 @@ function CTASection() {
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
       className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 p-8 md:p-12 text-center"
     >
-      {/* Background decoration */}
       <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none" />
       <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-primary-400/20 rounded-full blur-2xl pointer-events-none" />
-      {/* Dot grid pattern */}
       <div
         className="absolute inset-0 opacity-[0.04] pointer-events-none"
         style={{
@@ -458,10 +438,10 @@ function CTASection() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={() => navigate("/predmeti/matematika")}
+            onClick={() => navigate("/predmeti")}
             className="flex items-center gap-2 bg-white text-primary-700 px-6 py-3 rounded-xl font-bold text-sm shadow-[0_4px_20px_rgba(0,0,0,0.2)] hover:shadow-[0_6px_30px_rgba(0,0,0,0.25)] transition-shadow duration-200"
           >
-            Počni odmah
+            Odaberi predmet
             <ArrowRight size={16} />
           </motion.button>
           <motion.button
@@ -474,7 +454,6 @@ function CTASection() {
           </motion.button>
         </div>
 
-        {/* Trust signals */}
         <div className="flex items-center justify-center gap-6 mt-8">
           {[
             { icon: CheckCircle2, text: "Pravi NCVVO ispiti" },
@@ -495,7 +474,6 @@ function CTASection() {
   );
 }
 
-// ─── Section Heading ──────────────────────────────────────────────────────────
 function SectionHeading({ label, title, subtitle }) {
   return (
     <div className="mb-8">
@@ -516,9 +494,16 @@ function SectionHeading({ label, title, subtitle }) {
   );
 }
 
-// ─── HomePage ─────────────────────────────────────────────────────────────────
 export function HomePage() {
   const navigate = useNavigate();
+  const isAuthenticated = useIsAuthenticated();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
   const popularSubjects = SUBJECTS.filter((s) => s.isPopular);
   const otherSubjects = SUBJECTS.filter((s) => !s.isPopular);
 
@@ -528,11 +513,12 @@ export function HomePage() {
     margin: "-50px",
   });
 
+  if (isAuthenticated) return null;
+
   return (
     <main className="flex-1">
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
-        {/* Background gradient mesh */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-primary-100 rounded-full opacity-30 blur-3xl" />
           <div className="absolute top-40 -left-20 w-72 h-72 bg-amber-100 rounded-full opacity-25 blur-3xl" />
@@ -541,9 +527,7 @@ export function HomePage() {
 
         <div className="relative page-container py-14 md:py-20">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            {/* Left: text */}
             <div>
-              {/* Pill badge */}
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -554,7 +538,6 @@ export function HomePage() {
                 Pravi NCVVO ispiti · Odmah dostupno
               </motion.div>
 
-              {/* Headline */}
               <motion.h1
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -569,7 +552,6 @@ export function HomePage() {
                 <br />
                 <span className="relative inline-block">
                   <span className="text-primary-600">državnu maturu</span>
-                  {/* Underline accent */}
                   <motion.span
                     initial={{ scaleX: 0 }}
                     animate={{ scaleX: 1 }}
@@ -583,7 +565,6 @@ export function HomePage() {
                 </span>
               </motion.h1>
 
-              {/* Sub */}
               <motion.p
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -598,7 +579,6 @@ export function HomePage() {
                 grešaka i prati napredak po predmetima.
               </motion.p>
 
-              {/* CTA buttons */}
               <motion.div
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -609,10 +589,11 @@ export function HomePage() {
                 }}
                 className="flex flex-wrap gap-3 mb-10"
               >
+                {/* P0 FIX: CTA vodi na /predmeti, ne direktno na matematiku */}
                 <motion.button
                   whileHover={{ scale: 1.02, y: -1 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => navigate("/predmeti/matematika")}
+                  onClick={() => navigate("/predmeti")}
                   transition={{ type: "spring", stiffness: 400, damping: 17 }}
                   className={cn(
                     "flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-xl font-bold text-sm",
@@ -643,7 +624,6 @@ export function HomePage() {
                 </motion.button>
               </motion.div>
 
-              {/* Inline trust signals */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -665,7 +645,6 @@ export function HomePage() {
               </motion.div>
             </div>
 
-            {/* Right: exam card preview */}
             <div className="hidden lg:block">
               <FloatingExamCard />
             </div>
@@ -694,15 +673,27 @@ export function HomePage() {
         </InViewSection>
       </section>
 
-      {/* ── Popular Subjects ──────────────────────────────────────────────── */}
+      {/* ── Svi predmeti ──────────────────────────────────────────────────── */}
       <section id="predmeti" className="bg-white border-y border-warm-200">
         <div className="page-container py-14 md:py-16">
           <InViewSection>
-            <SectionHeading
-              label="Popularni predmeti"
-              title="Najčešće polagani predmeti"
-              subtitle="Matematika, Hrvatski i Engleski — tri obavezna predmeta s najviše dostupnih ispita."
-            />
+            <div className="flex items-end justify-between gap-4 mb-8">
+              <SectionHeading
+                label="Popularni predmeti"
+                title="Najčešće polagani predmeti"
+                subtitle="Matematika, Hrvatski i Engleski — tri obavezna predmeta s najviše dostupnih ispita."
+              />
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+                onClick={() => navigate("/predmeti")}
+                className="flex-shrink-0 flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 mb-8 transition-colors"
+              >
+                Svi predmeti
+                <ArrowRight size={14} />
+              </motion.button>
+            </div>
           </InViewSection>
 
           <motion.div
@@ -724,7 +715,7 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* ── All Subjects ──────────────────────────────────────────────────── */}
+      {/* ── Ostali predmeti ───────────────────────────────────────────────── */}
       <section className="page-container py-14 md:py-16">
         <InViewSection>
           <SectionHeading
@@ -753,7 +744,7 @@ export function HomePage() {
         <div className="page-container py-14 md:py-16">
           <InViewSection>
             <SectionHeading
-              label="Zašto MaturaPrip"
+              label="Zašto MaturaPro"
               title="Sve što trebaš za maturu"
             />
           </InViewSection>

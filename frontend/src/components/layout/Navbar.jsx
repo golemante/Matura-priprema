@@ -8,6 +8,7 @@ import {
   BarChart2,
   ChevronDown,
   User,
+  GraduationCap,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/utils/cn";
@@ -46,7 +47,6 @@ function UserAvatar({ user, size = "sm" }) {
   );
 }
 
-// ── Profil dropdown ────────────────────────────────────────────────
 function ProfileDropdown({ user, onClose }) {
   const { logout, isPending } = useLogout();
 
@@ -55,7 +55,6 @@ function ProfileDropdown({ user, onClose }) {
 
   return (
     <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl border border-warm-200 shadow-card-lg overflow-hidden z-50 animate-scale-in origin-top-right">
-      {/* User info */}
       <div className="px-4 py-3 border-b border-warm-100">
         <p className="text-sm font-semibold text-warm-900 truncate">
           {displayName}
@@ -63,7 +62,6 @@ function ProfileDropdown({ user, onClose }) {
         <p className="text-xs text-warm-400 truncate mt-0.5">{email}</p>
       </div>
 
-      {/* Links */}
       <div className="py-1.5">
         <Link
           to="/dashboard"
@@ -91,7 +89,6 @@ function ProfileDropdown({ user, onClose }) {
         </Link>
       </div>
 
-      {/* Logout */}
       <div className="border-t border-warm-100 py-1.5">
         <button
           onClick={() => {
@@ -109,8 +106,14 @@ function ProfileDropdown({ user, onClose }) {
   );
 }
 
-// ── Glavna Header komponenta ───────────────────────────────────────
-const navLinks = [{ to: "/", label: "Predmeti" }];
+const PUBLIC_NAV = [
+  { to: "/predmeti", label: "Predmeti", icon: GraduationCap },
+];
+
+const AUTH_NAV = [
+  { to: "/dashboard", label: "Početna", icon: LayoutDashboard },
+  { to: "/rezultati", label: "Statistike", icon: BarChart2 },
+];
 
 export function Header() {
   const location = useLocation();
@@ -122,7 +125,11 @@ export function Header() {
   const token = useAuthStore((s) => s.token);
   const isAuthenticated = !!token;
 
-  // Zatvori dropdown klikom van njega
+  const isActive = (path) => {
+    if (path === "/") return location.pathname === "/";
+    return location.pathname.startsWith(path);
+  };
+
   useEffect(() => {
     function handleClickOutside(e) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -133,49 +140,47 @@ export function Header() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Zatvori mobile menu pri promjeni rute
   useEffect(() => {
     setMobileOpen(false);
     setDropdownOpen(false);
   }, [location.pathname]);
 
+  const desktopLinks = isAuthenticated
+    ? [...PUBLIC_NAV, ...AUTH_NAV]
+    : PUBLIC_NAV;
+
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-warm-200 shadow-[0_1px_0_0_rgb(0_0_0/0.04)]">
       <div className="page-container">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
           <Link
-            to="/"
+            to={isAuthenticated ? "/dashboard" : "/"}
             className="flex items-center gap-2.5 group flex-shrink-0"
           >
             <div className="w-8 h-8 bg-primary-600 rounded-xl flex items-center justify-center group-hover:bg-primary-700 transition-colors shadow-sm">
               <BookOpenCheck size={17} className="text-white" />
             </div>
             <span className="font-bold text-lg tracking-tight text-warm-900">
-              Matura<span className="text-primary-600">Prep</span>
+              Matura<span className="text-primary-600">Pro</span>
             </span>
           </Link>
 
-          {/* Desktop nav + auth */}
           <div className="hidden md:flex items-center gap-1">
-            {/* Nav links - samo za prijavljene */}
-            {isAuthenticated &&
-              navLinks.map(({ to, label }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                    location.pathname === to
-                      ? "bg-primary-50 text-primary-700"
-                      : "text-warm-600 hover:text-warm-900 hover:bg-warm-100",
-                  )}
-                >
-                  {label}
-                </Link>
-              ))}
+            {desktopLinks.map(({ to, label }) => (
+              <Link
+                key={to}
+                to={to}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150",
+                  isActive(to)
+                    ? "bg-primary-50 text-primary-700"
+                    : "text-warm-600 hover:text-warm-900 hover:bg-warm-100",
+                )}
+              >
+                {label}
+              </Link>
+            ))}
 
-            {/* Neprijavljen: Login + Register */}
             {!isAuthenticated && (
               <div className="flex items-center gap-2 ml-2">
                 <Link
@@ -193,7 +198,6 @@ export function Header() {
               </div>
             )}
 
-            {/* Prijavljen: Profil dropdown */}
             {isAuthenticated && (
               <div className="relative ml-2" ref={dropdownRef}>
                 <button
@@ -222,7 +226,6 @@ export function Header() {
             )}
           </div>
 
-          {/* Mobile: auth buttons + hamburger */}
           <div className="md:hidden flex items-center gap-2">
             {isAuthenticated && <UserAvatar user={user} />}
             {!isAuthenticated && (
@@ -236,7 +239,7 @@ export function Header() {
             <button
               className="p-2 rounded-lg text-warm-600 hover:bg-warm-100 transition-colors"
               onClick={() => setMobileOpen((v) => !v)}
-              aria-label="Otvori izbornik"
+              aria-label={mobileOpen ? "Zatvori izbornik" : "Otvori izbornik"}
             >
               {mobileOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
@@ -244,46 +247,45 @@ export function Header() {
         </div>
       </div>
 
-      {/* Mobile nav panel */}
       {mobileOpen && (
         <div className="md:hidden border-t border-warm-200 bg-white animate-fade-in">
           <nav className="page-container py-3 flex flex-col gap-1">
-            {/* Nav links */}
-            {navLinks.map(({ to, label }) => (
+            {PUBLIC_NAV.map(({ to, label, icon: Icon }) => (
               <Link
                 key={to}
                 to={to}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  "px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
-                  location.pathname === to
+                  "flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
+                  isActive(to)
                     ? "bg-primary-50 text-primary-700"
                     : "text-warm-600 hover:text-warm-900 hover:bg-warm-100",
                 )}
               >
+                <Icon size={15} />
                 {label}
               </Link>
             ))}
 
-            {/* Auth-specific mobile links */}
             {isAuthenticated ? (
               <>
-                <Link
-                  to="/dashboard"
-                  onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-colors"
-                >
-                  <LayoutDashboard size={15} />
-                  Početna ploča
-                </Link>
-                <Link
-                  to="/rezultati"
-                  onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-colors"
-                >
-                  <BarChart2 size={15} />
-                  Rezultati
-                </Link>
+                {AUTH_NAV.map(({ to, label, icon: Icon }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
+                      isActive(to)
+                        ? "bg-primary-50 text-primary-700"
+                        : "text-warm-600 hover:text-warm-900 hover:bg-warm-100",
+                    )}
+                  >
+                    <Icon size={15} />
+                    {label}
+                  </Link>
+                ))}
+
                 <Link
                   to="/profil"
                   onClick={() => setMobileOpen(false)}
@@ -292,8 +294,8 @@ export function Header() {
                   <User size={15} />
                   Moj profil
                 </Link>
+
                 <div className="border-t border-warm-100 mt-1 pt-1">
-                  {/* User info u mobilnom */}
                   <div className="px-4 py-2.5 flex items-center gap-3">
                     <UserAvatar user={user} size="md" />
                     <div>
