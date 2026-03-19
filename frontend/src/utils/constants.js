@@ -152,15 +152,18 @@ export const EXAM_YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018];
 
 export const EXAM_SESSIONS = [
   { id: "ljeto", name: "Ljetni rok", order: 1 },
-  { id: "ljetni", name: "Ljetni rok", order: 1 },
   { id: "jesen", name: "Jesenski rok", order: 2 },
-  { id: "jesenski", name: "Jesenski rok", order: 2 },
 ];
 
 export function normalizeSession(session) {
   if (session === "ljeto" || session === "ljetni") return "ljeto";
   if (session === "jesen" || session === "jesenski") return "jesen";
-  return session;
+  return session ?? "";
+}
+
+export function sessionDisplayName(session) {
+  const norm = normalizeSession(session);
+  return EXAM_SESSIONS.find((s) => s.id === norm)?.name ?? session ?? "";
 }
 
 export const DIFFICULTY_LEVELS = [

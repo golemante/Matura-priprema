@@ -1,5 +1,4 @@
-// pages/SubjectSelect.jsx
-import { useState, useMemo, useRef, use } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, HelpCircle, X, Layers, RefreshCw } from "lucide-react";
@@ -9,16 +8,18 @@ import {
   EXAM_SESSIONS,
   DIFFICULTY_LEVELS,
   normalizeSession,
+  sessionDisplayName,
 } from "@/utils/constants";
 import { useExams } from "@/hooks/useExam";
 import { cn } from "@/utils/cn";
-import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { ExamListSkeleton } from "@/components/common/Skeleton";
 
 function transformExam(dbExam) {
-  const session = EXAM_SESSIONS.find((s) => s.id === dbExam.session) ?? {
-    id: dbExam.session,
-    name: dbExam.session,
+  const normId = normalizeSession(dbExam.session);
+  const session = EXAM_SESSIONS.find((s) => s.id === normId) ?? {
+    id: normId,
+    name: sessionDisplayName(dbExam.session),
     order: 99,
   };
 
@@ -36,17 +37,15 @@ function transformExam(dbExam) {
     difficulty,
     component: dbExam.component ?? null,
     title: dbExam.title ?? null,
-    questionCount: dbExam.question_count ?? null, // iz DB trigger-a
+    questionCount: dbExam.question_count ?? null,
     totalPoints: dbExam.total_points ?? null,
     duration: dbExam.duration_minutes,
     communityScore: dbExam.avg_community_score_pct ?? null,
     communityAttempts: dbExam.community_attempts_count ?? 0,
-    // Normalized session za filtriranje i sortiranje
-    _sessionNorm: normalizeSession(dbExam.session),
+    _sessionNorm: normId,
   };
 }
 
-// ── Filter chip ───────────────────────────────────────────────────────────────
 function FilterChip({ active, onClick, children, activeClassName }) {
   return (
     <motion.button
@@ -74,9 +73,10 @@ function FilterChip({ active, onClick, children, activeClassName }) {
   );
 }
 
-// ── Active filters badge ──────────────────────────────────────────────────────
-function ActiveFiltersBadge({ count, filterYear, filterLevel, onReset }) {
-  if (count === 0) return null;
+function ActiveFiltersBadge({ filterYear, filterLevel, onReset }) {
+  const hasFilters = filterYear || filterLevel;
+  if (!hasFilters) return null;
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
@@ -150,15 +150,12 @@ function EmptyState({ onReset }) {
   );
 }
 
-// ── Grupa ispita po godini ────────────────────────────────────────────────────
 function YearGroup({ year, exams, subject }) {
   const navigate = useNavigate();
 
-  // Unutar iste godine sortiraj: ljeto (1) pa jesen (2), unutar roka: osnovna pa viša
   const sorted = [...exams].sort((a, b) => {
     const sOrd = (a.session.order ?? 1) - (b.session.order ?? 1);
     if (sOrd !== 0) return sOrd;
-    // Osnovna (A) prije više (B)
     return a.difficulty.id === "visa" ? 1 : -1;
   });
 
@@ -170,7 +167,6 @@ function YearGroup({ year, exams, subject }) {
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.25 }}
     >
-      {/* Year header */}
       <div className="flex items-center gap-3 mb-3">
         <span className="text-xs font-bold text-warm-500 tabular-nums">
           {year}.
@@ -195,31 +191,26 @@ function YearGroup({ year, exams, subject }) {
   );
 }
 
-// ── SubjectsPage ──────────────────────────────────────────────────────────────
 export function SubjectsPage() {
-  usePageTitle(PAGE_TITLES.subjectSelect);
+  usePageTitle("Odabir ispita");
   const { subjectId } = useParams();
   const [filterYear, setFilterYear] = useState(null);
   const [filterLevel, setFilterLevel] = useState(null);
 
   const subject = SUBJECTS.find((s) => s.id === subjectId);
 
-  // Dohvati ispite s community statistikama
   const { data: rawExams, isLoading, error, refetch } = useExams(subjectId);
 
-  // Transformiraj u enriched format
   const allExams = useMemo(
     () => (rawExams ?? []).map(transformExam),
     [rawExams],
   );
 
-  // Dostupne godine za filter (bez duplikata, silazno)
   const availableYears = useMemo(
     () => [...new Set(allExams.map((e) => e.year))].sort((a, b) => b - a),
     [allExams],
   );
 
-  // Filtriraj
   const filtered = useMemo(() => {
     return allExams.filter((e) => {
       if (filterYear && e.year !== filterYear) return false;
@@ -228,7 +219,6 @@ export function SubjectsPage() {
     });
   }, [allExams, filterYear, filterLevel]);
 
-  // Grupiraj po godini
   const grouped = useMemo(
     () =>
       filtered.reduce((acc, exam) => {
@@ -244,14 +234,12 @@ export function SubjectsPage() {
     .map(Number)
     .sort((a, b) => b - a);
   const hasFilters = filterYear !== null || filterLevel !== null;
-  const activeFilterCount = (filterYear ? 1 : 0) + (filterLevel ? 1 : 0);
 
   function resetFilters() {
     setFilterYear(null);
     setFilterLevel(null);
   }
 
-  // 404
   if (!subject) {
     return (
       <div className="page-container py-20 text-center">
@@ -262,14 +250,14 @@ export function SubjectsPage() {
           Predmet nije pronađen
         </p>
         <p className="text-sm text-warm-500 mb-5">
-          Provjeri URL ili se vrati na početnu.
+          Provjeri URL ili se vrati na predmete.
         </p>
         <Link
-          to="/"
+          to="/predmeti"
           className="inline-flex items-center gap-2 text-sm font-semibold text-primary-600 hover:text-primary-700"
         >
           <ArrowLeft size={14} />
-          Na početnu
+          Svi predmeti
         </Link>
       </div>
     );
@@ -277,10 +265,9 @@ export function SubjectsPage() {
 
   return (
     <div className="page-container py-8 md:py-10 max-w-3xl mx-auto">
-      {/* Header */}
       <div className="mb-6">
         <Link
-          to="/"
+          to="/predmeti"
           className="inline-flex items-center gap-1.5 text-sm text-warm-500 hover:text-warm-800 transition-colors mb-4"
         >
           <ArrowLeft size={14} />
@@ -309,7 +296,6 @@ export function SubjectsPage() {
         </div>
       </div>
 
-      {/* Filter bar */}
       {!isLoading && !error && allExams.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -350,7 +336,6 @@ export function SubjectsPage() {
           <AnimatePresence mode="wait">
             {hasFilters && (
               <ActiveFiltersBadge
-                count={activeFilterCount}
                 filterYear={filterYear}
                 filterLevel={filterLevel}
                 onReset={resetFilters}
@@ -372,7 +357,6 @@ export function SubjectsPage() {
         </motion.div>
       )}
 
-      {/* Content */}
       {isLoading ? (
         <ExamListSkeleton count={2} />
       ) : error ? (

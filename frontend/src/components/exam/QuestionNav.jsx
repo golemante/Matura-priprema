@@ -1,4 +1,3 @@
-// components/exam/QuestionNav.jsx
 import { motion } from "framer-motion";
 import { Send, Flag } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -66,9 +65,11 @@ export function QuestionNav({
   const pct = total > 0 ? Math.round(((answeredCount ?? 0) / total) * 100) : 0;
   const allDone = unanswered === 0;
 
+  const gridCols =
+    total <= 20 ? "grid-cols-4" : total <= 30 ? "grid-cols-5" : "grid-cols-6";
+
   return (
     <div className="bg-white rounded-2xl border border-warm-200 shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-4 sticky top-20 flex flex-col gap-3.5 max-h-[calc(100vh-7rem)]">
-      {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0">
         <h3 className="text-xs font-bold text-warm-600 uppercase tracking-wider">
           Navigacija
@@ -81,7 +82,6 @@ export function QuestionNav({
         )}
       </div>
 
-      {/* Progress */}
       <div className="flex-shrink-0">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs text-warm-500">Odgovoreno</span>
@@ -106,8 +106,12 @@ export function QuestionNav({
         </div>
       </div>
 
-      {/* Grid pitanja */}
-      <div className="grid grid-cols-5 gap-1.5 overflow-y-auto flex-1 content-start pb-0.5 pr-0.5 -mr-0.5">
+      <div
+        className={cn(
+          "grid gap-1.5 overflow-y-auto flex-1 content-start pb-0.5 pr-0.5 -mr-0.5",
+          gridCols,
+        )}
+      >
         {questions.map((q, idx) => (
           <NavButton
             key={q.id}
@@ -121,7 +125,6 @@ export function QuestionNav({
         ))}
       </div>
 
-      {/* Legenda */}
       <div className="flex-shrink-0 pt-3 border-t border-warm-100">
         <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mb-3">
           {[
@@ -147,13 +150,7 @@ export function QuestionNav({
 
         {unanswered > 0 && (
           <p className="text-[10px] text-warm-400 mb-2 text-center">
-            {unanswered}{" "}
-            {unanswered === 1
-              ? "pitanje"
-              : unanswered < 5
-                ? "pitanja"
-                : "pitanja"}{" "}
-            bez odgovora
+            {unanswered} {unanswered === 1 ? "pitanje" : "pitanja"} bez odgovora
           </p>
         )}
 

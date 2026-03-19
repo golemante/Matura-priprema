@@ -1,5 +1,3 @@
-// features/auth/components/AuthLayout.jsx
-// eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
 import { BookOpen, TrendingUp, Award, Zap } from "lucide-react";
 
@@ -20,9 +18,7 @@ const features = [
 export function AuthLayout({ children, mode = "login" }) {
   return (
     <div className="min-h-dvh flex">
-      {/* ── Left panel (desktop only) ── */}
       <div className="hidden lg:flex lg:w-[480px] xl:w-[560px] flex-col relative overflow-hidden bg-warm-900">
-        {/* Subtle grid texture */}
         <div
           className="absolute inset-0 opacity-[0.04]"
           style={{
@@ -31,13 +27,10 @@ export function AuthLayout({ children, mode = "login" }) {
             backgroundSize: "40px 40px",
           }}
         />
-
-        {/* Blue glow top-right */}
         <div className="absolute -top-32 -right-20 w-80 h-80 rounded-full bg-primary-600/20 blur-3xl" />
         <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full bg-primary-800/10 blur-3xl" />
 
         <div className="relative z-10 flex flex-col h-full p-10 xl:p-12">
-          {/* Logo */}
           <div className="flex items-center gap-2.5 mb-auto">
             <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
               <BookOpen size={16} className="text-white" />
@@ -47,7 +40,6 @@ export function AuthLayout({ children, mode = "login" }) {
             </span>
           </div>
 
-          {/* Main copy */}
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
@@ -67,7 +59,6 @@ export function AuthLayout({ children, mode = "login" }) {
             </p>
           </motion.div>
 
-          {/* Feature list */}
           <motion.ul
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -94,7 +85,6 @@ export function AuthLayout({ children, mode = "login" }) {
             ))}
           </motion.ul>
 
-          {/* Stats */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -114,9 +104,7 @@ export function AuthLayout({ children, mode = "login" }) {
         </div>
       </div>
 
-      {/* ── Right panel (form) ── */}
       <div className="flex-1 flex flex-col bg-white">
-        {/* Mobile header */}
         <div className="lg:hidden flex items-center gap-2 p-5 border-b border-warm-200">
           <div className="w-7 h-7 rounded-lg bg-primary-600 flex items-center justify-center">
             <BookOpen size={14} className="text-white" />
@@ -126,7 +114,6 @@ export function AuthLayout({ children, mode = "login" }) {
           </span>
         </div>
 
-        {/* Form area */}
         <div className="flex-1 flex items-center justify-center p-5 sm:p-8">
           <motion.div
             key={mode}

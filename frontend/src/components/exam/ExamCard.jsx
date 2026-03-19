@@ -1,4 +1,3 @@
-// components/exam/ExamCard.jsx
 import { motion } from "framer-motion";
 import {
   Clock,
@@ -7,10 +6,10 @@ import {
   Layers,
   Users,
   Target,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 
-// ── Community score boja ──────────────────────────────────────────────────────
 function communityScoreColor(pct) {
   if (pct === null || pct === undefined) return "text-warm-400";
   if (pct >= 75) return "text-success-600";
@@ -21,10 +20,7 @@ function communityScoreColor(pct) {
 export function ExamCard({ exam, subject, onClick }) {
   const isVisa = exam.difficulty.id === "visa";
 
-  // Generira title ako ga DB nije dao
-  const displayTitle =
-    exam.title ??
-    `${exam.session.name} ${exam.year}. — ${exam.difficulty.short}`;
+  const isNew = exam.communityAttempts === 0 || exam.communityAttempts == null;
 
   return (
     <motion.div
@@ -41,7 +37,6 @@ export function ExamCard({ exam, subject, onClick }) {
           : "border-warm-200 hover:border-warm-300",
       )}
     >
-      {/* Level indicator — left stripe */}
       <div
         className={cn(
           "absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl",
@@ -54,7 +49,6 @@ export function ExamCard({ exam, subject, onClick }) {
       <div className="pl-5 pr-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            {/* Badges row: rok + razina + komponenta */}
             <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
               <span
                 className={cn(
@@ -84,12 +78,10 @@ export function ExamCard({ exam, subject, onClick }) {
               )}
             </div>
 
-            {/* Godina + title */}
             <p className="text-sm font-bold text-warm-900 leading-snug mb-1.5 truncate">
               {exam.year}. — {exam.session.name}
             </p>
 
-            {/* Meta row: pitanja + bodovi + trajanje */}
             <div className="flex items-center gap-3 text-xs text-warm-500 flex-wrap">
               {exam.questionCount != null && (
                 <span className="flex items-center gap-1">
@@ -110,15 +102,20 @@ export function ExamCard({ exam, subject, onClick }) {
             </div>
           </div>
 
-          {/* Right: community score + arrow */}
           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
             <ChevronRight
               size={16}
               className="text-warm-300 group-hover:text-warm-600 group-hover:translate-x-0.5 transition-all"
             />
 
-            {/* Community score */}
-            {exam.communityScore != null && (
+            {isNew ? (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-50 border border-primary-100">
+                <Sparkles size={9} className="text-primary-500" />
+                <span className="text-[10px] font-bold text-primary-600">
+                  Novo
+                </span>
+              </div>
+            ) : (
               <div className="flex flex-col items-end">
                 <span
                   className={cn(
@@ -136,8 +133,7 @@ export function ExamCard({ exam, subject, onClick }) {
           </div>
         </div>
 
-        {/* Community attempts — social proof */}
-        {exam.communityAttempts > 0 && (
+        {!isNew && exam.communityAttempts > 0 && (
           <div className="flex items-center gap-1 mt-3 pt-3 border-t border-warm-100">
             <Users size={10} className="text-warm-300 flex-shrink-0" />
             <span className="text-[11px] text-warm-400">
