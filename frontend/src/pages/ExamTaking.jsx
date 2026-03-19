@@ -1,6 +1,6 @@
 // pages/ExamTaking.jsx
-import { useParams, Link, useBeforeUnload } from "react-router-dom";
-import { useMemo, useState, useCallback } from "react";
+import { useParams, Link } from "react-router-dom";
+import { useMemo, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -723,8 +723,6 @@ export function QuizPage() {
 
   usePageTitle(examMeta ? buildExamTitle(examMeta) : null);
 
-  const isAudioOnly = currentPassage?.contentType === "audio";
-
   const orderedAudioPassages = useMemo(() => {
     const seen = new Set();
     const result = [];
@@ -750,49 +748,15 @@ export function QuizPage() {
     { attemptId: storeAttemptId ?? null },
   );
 
-  const isIntroPlaying = audio.isIntroPlaying;
-
-  useBeforeUnload(
-    useCallback(() => {
-      if (audio.hasAudio && !audio.isDone) {
-        const audioState = audio.getAudioState?.();
-        if (audioState) {
-          const { isDone, trackIndex, currentTimeS } = audioState;
-          const aid = storeAttemptId;
-          if (aid && !isDone) {
-            attemptApi.syncAudioStatus(aid, {
-              isDone,
-              currentTimeS,
-              trackIndex,
-            });
-          }
-        }
-      }
-    }, [audio, storeAttemptId]),
-  );
-
-  const handleSubmit = useCallback(() => {
-    audio.stopAudio();
-    const aid = storeAttemptId;
-    if (aid && audio.hasAudio) {
-      const audioState = audio.getAudioState?.();
-      if (audioState) {
-        attemptApi.syncAudioStatus(aid, {
-          isDone: audioState.isDone,
-          currentTimeS: audioState.currentTimeS,
-          trackIndex: audioState.trackIndex,
-        });
-      }
-    }
-    audio.clearProgress();
-    sessionHandleSubmit();
-  }, [audio, storeAttemptId, sessionHandleSubmit]);
+  const audioStateRef = useRef(audio);
+  audioStateRef.current = audio;
 
   const wrappedHandlePause = useCallback(() => {
     handlePause();
+    const a = audioStateRef.current;
     const aid = storeAttemptId;
-    if (aid && audio.hasAudio && !audio.isDone) {
-      const audioState = audio.getAudioState?.();
+    if (aid && a.hasAudio && !a.isDone) {
+      const audioState = a.getAudioState?.();
       if (audioState) {
         attemptApi.syncAudioStatus(aid, {
           isDone: audioState.isDone,
@@ -801,11 +765,29 @@ export function QuizPage() {
         });
       }
     }
-  }, [handlePause, storeAttemptId, audio]);
+  }, [handlePause, storeAttemptId]);
 
   const wrappedHandleResume = useCallback(() => {
     handleResume();
   }, [handleResume]);
+
+  const handleSubmit = useCallback(() => {
+    const a = audioStateRef.current;
+    a.stopAudio();
+    const aid = storeAttemptId;
+    if (aid && a.hasAudio) {
+      const audioState = a.getAudioState?.();
+      if (audioState) {
+        attemptApi.syncAudioStatus(aid, {
+          isDone: audioState.isDone,
+          currentTimeS: audioState.currentTimeS,
+          trackIndex: audioState.trackIndex,
+        });
+      }
+    }
+    a.clearProgress();
+    sessionHandleSubmit();
+  }, [storeAttemptId, sessionHandleSubmit]);
 
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
@@ -879,6 +861,8 @@ export function QuizPage() {
       </>
     );
   }
+
+  const isAudioOnly = currentPassage?.contentType === "audio";
 
   return (
     <>

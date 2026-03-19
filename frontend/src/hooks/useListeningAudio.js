@@ -62,6 +62,13 @@ function calcProgressPct(queue, trackIdx, currentTime, trackDurationsRuntime) {
   );
 }
 
+const EMPTY_PROGRESS = {
+  trackIndex: 0,
+  trackUrl: null,
+  currentTime: 0,
+  isDone: false,
+};
+
 export function useListeningAudio(
   examId,
   orderedPassages,
@@ -73,30 +80,26 @@ export function useListeningAudio(
 
   const savedProgressRef = useRef(null);
   if (savedProgressRef.current === null && examId) {
-    savedProgressRef.current = audioProgressStorage.load(examId) ?? {
-      trackIndex: 0,
-      trackUrl: null,
-      currentTime: 0,
-      isDone: false,
-    };
+    savedProgressRef.current =
+      audioProgressStorage.load(examId) ?? EMPTY_PROGRESS;
   }
-  const saved = savedProgressRef.current;
+  const saved = savedProgressRef.current ?? EMPTY_PROGRESS;
 
-  const savedTrack = queue[saved?.trackIndex ?? 0] ?? null;
+  const savedTrack = queue[saved.trackIndex] ?? null;
   const seedDuration = savedTrack?.knownDuration ?? 0;
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(saved?.currentTime ?? 0);
+  const [currentTime, setCurrentTime] = useState(saved.currentTime);
   const [duration, setDuration] = useState(seedDuration);
   const [hasError, setHasError] = useState(false);
-  const [isDone, setIsDone] = useState(saved?.isDone ?? false);
+  const [isDone, setIsDone] = useState(saved.isDone);
   const [hasStarted, setHasStarted] = useState(
-    () => (saved?.currentTime ?? 0) > 0 || (saved?.isDone ?? false),
+    () => saved.currentTime > 0 || saved.isDone,
   );
   const [hasBlockedAutoplay, setHasBlockedAutoplay] = useState(false);
   const [isLoadingTrack, setIsLoadingTrack] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(
-    () => queue[saved?.trackIndex ?? 0] ?? null,
+    () => queue[saved.trackIndex] ?? null,
   );
   const [trackSkipWarning, setTrackSkipWarning] = useState(null);
 
@@ -104,11 +107,11 @@ export function useListeningAudio(
   const progressBarRef = useRef(null);
   const rafRef = useRef(null);
 
-  const currentTimeRef = useRef(saved?.currentTime ?? 0);
-  const trackIndexRef = useRef(saved?.trackIndex ?? 0);
+  const currentTimeRef = useRef(saved.currentTime);
+  const trackIndexRef = useRef(saved.trackIndex);
   const isPausedRef = useRef(isPaused);
   const queueRef = useRef(queue);
-  const isDoneRef = useRef(saved?.isDone ?? false);
+  const isDoneRef = useRef(saved.isDone);
   const hasAudioRef = useRef(hasAudio);
   const hasErrorRef = useRef(false);
   const examIdRef = useRef(examId);
@@ -241,8 +244,8 @@ export function useListeningAudio(
         isDone: false,
       });
 
-      setCurrentTrack(queueRef.current[index] ?? null);
       trackIndexRef.current = index;
+      setCurrentTrack(queueRef.current[index] ?? null);
 
       setDuration(queueRef.current[index]?.knownDuration ?? 0);
       setHasError(false);
@@ -257,8 +260,10 @@ export function useListeningAudio(
 
       const doPlay = () => {
         cleanupPendingPlay();
-        setIsLoadingTrack(false);
+
         isLoadingTrackRef.current = false;
+        setIsLoadingTrack(false);
+
         if (isPausedRef.current) return;
 
         if (startTime > 0) {
@@ -316,6 +321,8 @@ export function useListeningAudio(
         pendingTimeoutRef.current = null;
         if (pendingPlayHandlerRef.current === multiEventHandler) {
           cleanupPendingPlay();
+          isLoadingTrackRef.current = false;
+          setIsLoadingTrack(false);
           console.error(
             `[useListeningAudio] Timeout — audio nije spreman za: ${track.url}`,
           );
