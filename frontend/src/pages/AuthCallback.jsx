@@ -4,6 +4,8 @@ import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/store/toastStore";
 import { FullScreenSpinner } from "@/components/common/LoadingSpinner";
 
+const SESSION_TIMEOUT_MS = 10_000;
+
 export function AuthCallbackPage() {
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token);
@@ -16,7 +18,8 @@ export function AuthCallbackPage() {
       toastShown.current = true;
       toast.success("Uspješna prijava!");
     }
-    navigate("/", { replace: true });
+
+    navigate("/dashboard", { replace: true });
   }, [token, navigate]);
 
   useEffect(() => {
@@ -26,7 +29,7 @@ export function AuthCallbackPage() {
         toast.error("Prijava nije uspjela. Pokušaj ponovo.");
         navigate("/login", { replace: true });
       }
-    }, 10_000);
+    }, SESSION_TIMEOUT_MS);
 
     return () => clearTimeout(timeout);
   }, [navigate]);

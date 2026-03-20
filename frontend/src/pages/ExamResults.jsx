@@ -143,7 +143,7 @@ export function ResultsPage() {
         questions: lastResult.questions ?? [],
         answers: lastResult.answers ?? {},
         passages: lastResult.passages ?? {},
-        flagged: lastResult.flagged ?? new Set(),
+        flagged: new Set(lastResult.flagged ?? []),
         elapsedSeconds: lastResult.elapsedSeconds ?? null,
         rpcResult: lastResult.rpcResult ?? null,
         examMeta: lastResult.examMeta ?? null,

@@ -1,4 +1,3 @@
-// store/examStore.js
 import { create } from "zustand";
 
 const INITIAL_STATE = {
@@ -20,7 +19,6 @@ const INITIAL_STATE = {
 export const useExamStore = create((set, get) => ({
   ...INITIAL_STATE,
 
-  // ── Inicijalizacija ────────────────────────────────────────────────────────
   startExam: (examId, questions, passages) =>
     set({
       ...INITIAL_STATE,
@@ -34,13 +32,11 @@ export const useExamStore = create((set, get) => ({
   setExamMeta: (meta) => set({ examMeta: meta }),
   setAttemptId: (id) => set({ attemptId: id }),
 
-  // ── Odgovori ──────────────────────────────────────────────────────────────
   setAnswer: (questionId, letter) =>
     set((s) => ({ answers: { ...s.answers, [questionId]: letter } })),
 
   restoreDraft: (savedAnswers) => set({ answers: { ...(savedAnswers ?? {}) } }),
 
-  // ── Zastavice ─────────────────────────────────────────────────────────────
   toggleFlag: (questionId) =>
     set((s) => {
       const next = new Set(s.flagged);
@@ -48,14 +44,10 @@ export const useExamStore = create((set, get) => ({
       return { flagged: next };
     }),
 
-  // ── Navigacija ────────────────────────────────────────────────────────────
   goToQuestion: (index) => set({ currentIndex: index }),
 
-  // ── Pauza ─────────────────────────────────────────────────────────────────
   pauseExam: () => set({ isPaused: true, pausedAt: Date.now() }),
   resumeExam: () => set({ isPaused: false, pausedAt: null }),
-
-  // ── Predaja ───────────────────────────────────────────────────────────────
 
   submitExam: (rpcResult = null, trustedElapsed = null) => {
     const {
@@ -75,6 +67,8 @@ export const useExamStore = create((set, get) => ({
         ? Math.max(0, Math.round(trustedElapsed))
         : Math.round((submittedAt - (startedAt ?? submittedAt)) / 1000);
 
+    const flaggedArray = Array.from(get().flagged);
+
     set({
       submittedAt,
       lastResult: {
@@ -83,7 +77,7 @@ export const useExamStore = create((set, get) => ({
         answers,
         questions,
         passages,
-        flagged: get().flagged,
+        flagged: flaggedArray,
         examMeta,
         submittedAt,
         elapsedSeconds,
@@ -92,10 +86,8 @@ export const useExamStore = create((set, get) => ({
     });
   },
 
-  // ── Reset ─────────────────────────────────────────────────────────────────
   resetExam: () => set({ ...INITIAL_STATE, flagged: new Set() }),
 
-  // ── Computed ──────────────────────────────────────────────────────────────
   getProgress: () => {
     const { answers, questions } = get();
     const scoreable = questions.filter(

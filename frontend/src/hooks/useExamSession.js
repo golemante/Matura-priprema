@@ -326,6 +326,7 @@ export function useExamSession(examId) {
   );
 
   const [direction, setDirection] = useState(1);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
   const handleGoTo = useCallback(
     (idx) => {
@@ -412,10 +413,7 @@ export function useExamSession(examId) {
       ...optionKeyHandlers,
       f: handleToggleFlag,
       p: () => !submit.isSyncing && submit.handlePause(),
-      "?": () =>
-        toast.info(
-          "Prečaci: ←→ navigacija · slova za odabir · F označi · P pauza",
-        ),
+      "?": () => setShowShortcutsModal(true),
     },
     { ignoreFormElements: true },
   );
@@ -462,6 +460,8 @@ export function useExamSession(examId) {
 
     handleAnswer,
     handleToggleFlag,
+    showShortcutsModal,
+    setShowShortcutsModal,
 
     isSubmitting: submit.isSubmitting,
     isPauseSyncing: submit.isPauseSyncing,

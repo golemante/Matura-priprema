@@ -12,7 +12,7 @@ export function useLogin() {
   return useMutation({
     mutationFn: ({ redirectTo, ...credentials }) => authApi.login(credentials),
     onSuccess: ({ user, token }, variables) => {
-      const redirectTo = variables?.redirectTo ?? "/";
+      const redirectTo = variables?.redirectTo ?? "/dashboard";
       setAuth(user, token);
       toast.success(`Dobrodošao, ${user.name}!`);
       navigate(redirectTo, { replace: true });
@@ -37,7 +37,7 @@ export function useRegister() {
       }
       if (token) setAuth(user, token);
       toast.success(`Dobrodošao, ${user.name}! Račun je kreiran. 🎉`);
-      navigate("/");
+      navigate("/dashboard", { replace: true });
     },
     onError: (err) => toast.error(err.message ?? "Greška pri registraciji"),
   });
