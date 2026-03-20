@@ -3,7 +3,7 @@ import { BookOpenCheck, Search } from "lucide-react";
 import { useState } from "react";
 import { SUBJECTS } from "@/utils/constants";
 import { SubjectCard } from "@/components/subject/SubjectCard";
-import { PageWrapper, PageHeader } from "@/components/layout/PageLayout";
+import { PageWrapper, PageHeader } from "@/components/layout/Wrapper";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 const stagger = {
