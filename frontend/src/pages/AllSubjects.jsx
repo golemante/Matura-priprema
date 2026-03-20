@@ -21,10 +21,10 @@ const cardAnim = {
   },
 };
 
-function AnimatedSubjectCard({ subject }) {
+function AnimatedSubjectCard({ subject, showDescription = true }) {
   return (
     <motion.div variants={cardAnim}>
-      <SubjectCard subject={subject} showDescription />
+      <SubjectCard subject={subject} showDescription={showDescription} />
     </motion.div>
   );
 }
@@ -85,7 +85,7 @@ export function AllSubjectsPage() {
       {!hasResults && (
         <div className="text-center py-16">
           <p className="text-warm-500 font-semibold mb-2">
-            Nema rezultata za "{search}"
+            Nema rezultata za &ldquo;{search}&rdquo;
           </p>
           <button
             onClick={() => setSearch("")}
@@ -106,7 +106,11 @@ export function AllSubjectsPage() {
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
           >
             {popular.map((subject) => (
-              <AnimatedSubjectCard key={subject.id} subject={subject} />
+              <AnimatedSubjectCard
+                key={subject.id}
+                subject={subject}
+                showDescription
+              />
             ))}
           </motion.div>
         </section>
@@ -119,10 +123,14 @@ export function AllSubjectsPage() {
             variants={stagger}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4"
           >
             {other.map((subject) => (
-              <AnimatedSubjectCard key={subject.id} subject={subject} />
+              <AnimatedSubjectCard
+                key={subject.id}
+                subject={subject}
+                showDescription={false}
+              />
             ))}
           </motion.div>
         </section>

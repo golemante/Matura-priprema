@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { PageWrapper, PageHeader } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
-import { UserAvatar } from "@/components/common/UserAvatar";
 import { useCurrentUser } from "@/hooks/useAuth";
 import { useLogout } from "@/hooks/useAuth";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
@@ -62,31 +61,31 @@ export function ProfilePage() {
   const { logout, isPending } = useLogout();
 
   const displayName = user?.name ?? user?.email?.split("@")[0] ?? "Korisnik";
-  const initials = displayName
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+
+  const initials =
+    displayName
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?";
 
   const INFO_ROWS = [
     {
       icon: User,
       label: "Ime profila",
       value: displayName,
-      mono: false,
     },
     {
       icon: Mail,
       label: "Email adresa",
       value: user?.email ?? "Nije dostupno",
-      mono: false,
     },
     {
       icon: CalendarDays,
       label: "Korisnik od",
       value: user?.created_at ? formatDate(user.created_at) : "Nije dostupno",
-      mono: false,
     },
     {
       icon: Shield,
@@ -106,7 +105,7 @@ export function ProfilePage() {
       <div className="max-w-2xl mx-auto space-y-4">
         <motion.div variants={fadeUp} initial="hidden" animate="show">
           <Card className="overflow-hidden">
-            <div className="h-20 sm:h-24 bg-gradient-to-br from-primary-600 via-primary-700 to-indigo-700 relative">
+            <div className="h-20 sm:h-24 bg-gradient-to-br from-primary-600 via-primary-700 to-indigo-700 relative flex-shrink-0">
               <div
                 className="absolute inset-0 opacity-10"
                 style={{
@@ -117,10 +116,10 @@ export function ProfilePage() {
               />
             </div>
 
-            <div className="px-5 pb-5">
-              <div className="flex items-end justify-between -mt-10 sm:-mt-12 mb-4">
-                <div className="relative">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-4 ring-white shadow-md overflow-hidden flex-shrink-0">
+            <div className="px-4 sm:px-5 pb-5">
+              <div className="flex items-end justify-between -mt-9 sm:-mt-12 mb-4 gap-2">
+                <div className="flex-shrink-0 relative">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-4 ring-white shadow-md overflow-hidden">
                     {user?.user_metadata?.avatar_url ? (
                       <img
                         src={user.user_metadata.avatar_url}
@@ -140,7 +139,7 @@ export function ProfilePage() {
                 <button
                   onClick={logout}
                   disabled={isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-error-600 bg-error-50 border border-error-100 hover:bg-error-100 transition-colors disabled:opacity-60"
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-error-600 bg-error-50 border border-error-100 hover:bg-error-100 transition-colors disabled:opacity-60 self-end"
                 >
                   <LogOut size={13} />
                   <span className="hidden xs:inline">
@@ -149,10 +148,10 @@ export function ProfilePage() {
                 </button>
               </div>
 
-              <h2 className="text-lg sm:text-xl font-bold text-warm-900 mb-0.5">
+              <h2 className="text-lg sm:text-xl font-bold text-warm-900 mb-0.5 truncate">
                 {displayName}
               </h2>
-              <p className="text-sm text-warm-500">{user?.email}</p>
+              <p className="text-sm text-warm-500 truncate">{user?.email}</p>
             </div>
           </Card>
         </motion.div>
@@ -167,7 +166,7 @@ export function ProfilePage() {
             {INFO_ROWS.map(({ icon: Icon, label, value, badge }) => (
               <div
                 key={label}
-                className="flex items-center gap-4 px-5 py-3.5 sm:py-4"
+                className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 sm:py-4"
               >
                 <div className="w-8 h-8 rounded-lg bg-warm-100 flex items-center justify-center flex-shrink-0">
                   <Icon size={15} className="text-warm-500" />
@@ -214,7 +213,7 @@ export function ProfilePage() {
                   <Link
                     to={to}
                     className={cn(
-                      "flex items-center gap-4 px-4 py-3.5 rounded-2xl",
+                      "flex items-center gap-3 sm:gap-4 px-4 py-3.5 rounded-2xl",
                       "bg-white border border-warm-200",
                       "hover:border-warm-300 hover:shadow-sm",
                       "transition-all duration-200 group",
@@ -229,8 +228,10 @@ export function ProfilePage() {
                       <Icon size={18} className={color} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-warm-900">{label}</p>
-                      <p className="text-xs text-warm-400">{desc}</p>
+                      <p className="text-sm font-bold text-warm-900 truncate">
+                        {label}
+                      </p>
+                      <p className="text-xs text-warm-400 truncate">{desc}</p>
                     </div>
                     <ChevronRight
                       size={16}

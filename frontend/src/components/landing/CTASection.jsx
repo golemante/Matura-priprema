@@ -69,13 +69,16 @@ export function CTASection() {
             </motion.button>
           </div>
 
-          <div className="flex items-center justify-center gap-6 mt-8">
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mt-8">
             {TRUST.map((text) => (
               <div
                 key={text}
                 className="flex items-center gap-1.5 text-white/70 text-xs"
               >
-                <CheckCircle2 size={12} className="text-white/50" />
+                <CheckCircle2
+                  size={12}
+                  className="text-white/50 flex-shrink-0"
+                />
                 {text}
               </div>
             ))}

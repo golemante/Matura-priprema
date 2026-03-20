@@ -69,7 +69,7 @@ function FilterBar({
   const showSessionFilter = availableSessions.length > 1;
 
   return (
-    <div className="sticky top-14 z-20 bg-warm-100/95 backdrop-blur-sm border-b border-warm-200 py-2.5 mb-5">
+    <div className="sticky top-16 z-20 bg-warm-100/95 backdrop-blur-sm border-b border-warm-200 py-2.5 mb-5">
       <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-1.5 w-max pr-1">
@@ -382,8 +382,8 @@ export function SubjectsPage() {
           >
             <subject.icon size={20} className={subject.color.text} />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-warm-900 tracking-tight">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-warm-900 tracking-tight truncate">
               {subject.name}
             </h1>
             <p className="text-sm text-warm-500">

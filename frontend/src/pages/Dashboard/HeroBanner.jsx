@@ -20,7 +20,7 @@ export function HeroBanner({ user, streak, weekActivity, avgPct }) {
   const maxCount = Math.max(...weekActivity, 1);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-700 via-primary-600 to-indigo-600 p-5 text-white">
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-700 via-primary-600 to-indigo-600 p-4 sm:p-5 text-white">
       <div
         className="absolute inset-0 opacity-10 pointer-events-none"
         style={{
@@ -30,9 +30,11 @@ export function HeroBanner({ user, streak, weekActivity, avgPct }) {
         }}
       />
 
-      <div className="relative flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-primary-200 text-sm font-medium">{greeting},</p>
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-primary-200 text-sm font-medium truncate">
+            {greeting},
+          </p>
           <h1 className="text-xl font-bold mt-0.5 truncate">
             {user?.name ?? "Korisnik"} 👋
           </h1>
@@ -49,7 +51,7 @@ export function HeroBanner({ user, streak, weekActivity, avgPct }) {
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.3, type: "spring" }}
-            className="flex-shrink-0 flex items-center gap-1.5 bg-white/15 border border-white/20 backdrop-blur-sm px-3 py-2 rounded-xl"
+            className="flex-shrink-0 flex items-center gap-1.5 bg-white/15 border border-white/20 backdrop-blur-sm px-2.5 sm:px-3 py-2 rounded-xl"
           >
             <Flame size={15} className="text-orange-300" />
             <div className="text-right">
@@ -71,19 +73,19 @@ export function HeroBanner({ user, streak, weekActivity, avgPct }) {
             >
               <div
                 className={cn(
-                  "w-full aspect-square rounded-lg flex items-center justify-center text-[10px] sm:text-[10px] font-bold transition-colors",
+                  "w-full aspect-square rounded-lg flex items-center justify-center text-[10px] font-bold transition-colors",
                   activityIntensity(count, maxCount),
                   count > 0 ? "text-primary-700" : "text-primary-300",
                 )}
               >
                 {count > 0 ? count : DAYS[i][0]}
               </div>
-              <span className="text-[9px] text-primary-300 leading-none">
+              <span className="text-[9px] text-primary-300 leading-none hidden xs:block">
                 {DAYS[i]}
               </span>
             </div>
           ))}
-          <span className="ml-1 text-[10px] text-primary-300 self-end pb-1 whitespace-nowrap flex-shrink-0 hidden xs:block">
+          <span className="ml-1 text-[10px] text-primary-300 self-end pb-1 whitespace-nowrap flex-shrink-0 hidden sm:block">
             Ova 7 dana
           </span>
         </div>
