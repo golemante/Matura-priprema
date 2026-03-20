@@ -31,9 +31,9 @@ export function HeroBanner({ user, streak, weekActivity, avgPct }) {
       />
 
       <div className="relative flex items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-primary-200 text-sm font-medium">{greeting},</p>
-          <h1 className="text-xl font-bold mt-0.5">
+          <h1 className="text-xl font-bold mt-0.5 truncate">
             {user?.name ?? "Korisnik"} 👋
           </h1>
           {avgPct > 0 && (
@@ -62,24 +62,31 @@ export function HeroBanner({ user, streak, weekActivity, avgPct }) {
         )}
       </div>
 
-      <div className="relative mt-4 flex items-end gap-1.5">
-        {weekActivity.map((count, i) => (
-          <div key={i} className="flex flex-col items-center gap-1">
+      <div className="relative mt-4 overflow-hidden">
+        <div className="flex items-end gap-1 sm:gap-1.5">
+          {weekActivity.map((count, i) => (
             <div
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold transition-colors",
-                activityIntensity(count, maxCount),
-                count > 0 ? "text-primary-700" : "text-primary-300",
-              )}
+              key={i}
+              className="flex flex-col items-center gap-1 flex-1 min-w-0"
             >
-              {count > 0 ? count : DAYS[i][0]}
+              <div
+                className={cn(
+                  "w-full aspect-square rounded-lg flex items-center justify-center text-[10px] sm:text-[10px] font-bold transition-colors",
+                  activityIntensity(count, maxCount),
+                  count > 0 ? "text-primary-700" : "text-primary-300",
+                )}
+              >
+                {count > 0 ? count : DAYS[i][0]}
+              </div>
+              <span className="text-[9px] text-primary-300 leading-none">
+                {DAYS[i]}
+              </span>
             </div>
-            <span className="text-[9px] text-primary-300">{DAYS[i]}</span>
-          </div>
-        ))}
-        <span className="ml-auto text-[10px] text-primary-300 self-end pb-1">
-          Ova 7 dana
-        </span>
+          ))}
+          <span className="ml-1 text-[10px] text-primary-300 self-end pb-1 whitespace-nowrap flex-shrink-0 hidden xs:block">
+            Ova 7 dana
+          </span>
+        </div>
       </div>
     </div>
   );

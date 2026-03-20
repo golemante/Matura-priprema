@@ -30,8 +30,8 @@ function FilterChip({
       whileTap={{ scale: 0.93 }}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl",
-        "text-xs font-bold border transition-all duration-150 select-none",
+        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl flex-shrink-0",
+        "text-xs font-bold border transition-all duration-150 select-none whitespace-nowrap",
         active
           ? cn(activeCls, "shadow-sm")
           : "bg-white border-warm-200 text-warm-500 hover:border-warm-400 hover:text-warm-700",
@@ -70,60 +70,66 @@ function FilterBar({
 
   return (
     <div className="sticky top-14 z-20 bg-warm-100/95 backdrop-blur-sm border-b border-warm-200 py-2.5 mb-5">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {availableYears.map((year) => (
-          <FilterChip
-            key={year}
-            active={filterYear === year}
-            onClick={() => onYear(filterYear === year ? null : year)}
-            activeCls={cn(subject.color.badge, subject.color.border)}
-          >
-            {year}.
-          </FilterChip>
-        ))}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 w-max pr-1">
+            {availableYears.map((year) => (
+              <FilterChip
+                key={year}
+                active={filterYear === year}
+                onClick={() => onYear(filterYear === year ? null : year)}
+                activeCls={cn(subject.color.badge, subject.color.border)}
+              >
+                {year}.
+              </FilterChip>
+            ))}
 
-        <div className="w-px h-4 bg-warm-300 mx-0.5" />
+            <div className="w-px h-4 bg-warm-300 mx-0.5 flex-shrink-0" />
 
-        {showSessionFilter &&
-          availableSessions.map((session) => (
-            <FilterChip
-              key={session.id}
-              active={filterSession === session.id}
-              onClick={() =>
-                onSession(filterSession === session.id ? null : session.id)
-              }
-              activeCls="bg-sky-50 text-sky-700 border-sky-300"
-            >
-              {session.name.replace(" rok", "")}
-            </FilterChip>
-          ))}
+            {showSessionFilter &&
+              availableSessions.map((session) => (
+                <FilterChip
+                  key={session.id}
+                  active={filterSession === session.id}
+                  onClick={() =>
+                    onSession(filterSession === session.id ? null : session.id)
+                  }
+                  activeCls="bg-sky-50 text-sky-700 border-sky-300"
+                >
+                  {session.name.replace(" rok", "")}
+                </FilterChip>
+              ))}
 
-        {showSessionFilter && <div className="w-px h-4 bg-warm-300 mx-0.5" />}
+            {showSessionFilter && (
+              <div className="w-px h-4 bg-warm-300 mx-0.5 flex-shrink-0" />
+            )}
 
-        {DIFFICULTY_LEVELS.map((lvl) => (
-          <FilterChip
-            key={lvl.id}
-            active={filterLevel === lvl.id}
-            onClick={() => onLevel(filterLevel === lvl.id ? null : lvl.id)}
-            activeCls={
-              lvl.id === "visa"
-                ? "bg-amber-50 text-amber-700 border-amber-300"
-                : cn(subject.color.badge, subject.color.border)
-            }
-          >
-            <Layers size={9} />
-            {lvl.short}
-          </FilterChip>
-        ))}
+            {DIFFICULTY_LEVELS.map((lvl) => (
+              <FilterChip
+                key={lvl.id}
+                active={filterLevel === lvl.id}
+                onClick={() => onLevel(filterLevel === lvl.id ? null : lvl.id)}
+                activeCls={
+                  lvl.id === "visa"
+                    ? "bg-amber-50 text-amber-700 border-amber-300"
+                    : cn(subject.color.badge, subject.color.border)
+                }
+              >
+                <Layers size={9} />
+                {lvl.short}
+              </FilterChip>
+            ))}
+          </div>
+        </div>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-shrink-0 pl-2 border-l border-warm-200">
           {hasActiveFilters && (
             <button
               onClick={onReset}
-              className="flex items-center gap-1 text-xs font-bold text-warm-500 hover:text-warm-800 transition-colors"
+              title="Ukloni sve filtre"
+              className="flex items-center gap-1 text-xs font-bold text-warm-400 hover:text-warm-800 transition-colors p-0.5"
             >
-              <X size={11} />
-              Ukloni
+              <X size={13} />
             </button>
           )}
           <span className="text-xs text-warm-400 font-medium tabular-nums whitespace-nowrap">
@@ -134,8 +140,11 @@ function FilterBar({
               )}
             >
               {filteredCount}
-            </span>{" "}
-            / {totalCount}
+            </span>
+            <span className="hidden sm:inline text-warm-400">
+              {" "}
+              / {totalCount}
+            </span>
           </span>
         </div>
       </div>

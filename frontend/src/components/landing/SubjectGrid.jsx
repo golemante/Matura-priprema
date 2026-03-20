@@ -98,7 +98,7 @@ export function OtherSubjectsSection() {
           initial="hidden"
           whileInView="show"
           viewport={{ once: true, margin: "-40px" }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+          className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4"
         >
           {otherSubjects.map((subject) => (
             <AnimatedSubjectCard

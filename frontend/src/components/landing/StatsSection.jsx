@@ -24,12 +24,12 @@ export function StatsSection() {
 
   return (
     <section className="border-y border-warm-200 bg-white">
-      <div className="page-container py-8 md:py-10">
+      <div className="page-container py-6 md:py-10">
         <motion.div
           ref={ref}
           initial="hidden"
           animate={inView ? "show" : "hidden"}
-          className="grid grid-cols-3 gap-4 md:gap-6"
+          className="grid grid-cols-3 gap-2 sm:gap-4 md:gap-6"
         >
           {STATS.map(({ value, label, icon: Icon }, i) => (
             <motion.div
@@ -38,15 +38,17 @@ export function StatsSection() {
               custom={i}
               className="text-center"
             >
-              <div className="flex justify-center mb-2">
-                <div className="w-9 h-9 bg-primary-50 border border-primary-100 rounded-xl flex items-center justify-center">
-                  <Icon size={17} className="text-primary-600" />
+              <div className="flex justify-center mb-1.5 sm:mb-2">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 bg-primary-50 border border-primary-100 rounded-xl flex items-center justify-center">
+                  <Icon size={15} className="text-primary-600 sm:text-[17px]" />
                 </div>
               </div>
-              <div className="text-2xl md:text-3xl font-bold text-warm-900 tracking-tight leading-none mb-1">
+              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-warm-900 tracking-tight leading-none mb-0.5 sm:mb-1">
                 {value}
               </div>
-              <div className="text-xs text-warm-500 font-medium">{label}</div>
+              <div className="text-[10px] sm:text-xs text-warm-500 font-medium leading-tight">
+                {label}
+              </div>
             </motion.div>
           ))}
         </motion.div>
