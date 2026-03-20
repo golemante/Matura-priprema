@@ -1,4 +1,3 @@
-// utils/storage.js
 import { useAuthStore } from "@/store/authStore";
 
 const PREFIX = "matura_";

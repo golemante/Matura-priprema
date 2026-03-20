@@ -105,7 +105,7 @@ export function ProfilePage() {
       <div className="max-w-2xl mx-auto space-y-4">
         <motion.div variants={fadeUp} initial="hidden" animate="show">
           <Card className="overflow-hidden">
-            <div className="h-20 sm:h-24 bg-gradient-to-br from-primary-600 via-primary-700 to-indigo-700 relative flex-shrink-0">
+            <div className="h-20 sm:h-24 bg-gradient-to-br from-primary-600 via-primary-700 to-indigo-700 relative">
               <div
                 className="absolute inset-0 opacity-10"
                 style={{
@@ -117,41 +117,45 @@ export function ProfilePage() {
             </div>
 
             <div className="px-4 sm:px-5 pb-5">
-              <div className="flex items-end justify-between -mt-9 sm:-mt-12 mb-4 gap-2">
-                <div className="flex-shrink-0 relative">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-4 ring-white shadow-md overflow-hidden">
-                    {user?.user_metadata?.avatar_url ? (
-                      <img
-                        src={user.user_metadata.avatar_url}
-                        alt={displayName}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-primary-100 flex items-center justify-center">
-                        <span className="text-xl sm:text-2xl font-black text-primary-700">
-                          {initials}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+              <div className="-mt-9 sm:-mt-12 mb-4">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-4 ring-white shadow-md overflow-hidden">
+                  {user?.user_metadata?.avatar_url ? (
+                    <img
+                      src={user.user_metadata.avatar_url}
+                      alt={displayName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-primary-100 flex items-center justify-center">
+                      <span className="text-xl sm:text-2xl font-black text-primary-700">
+                        {initials}
+                      </span>
+                    </div>
+                  )}
                 </div>
-
-                <button
-                  onClick={logout}
-                  disabled={isPending}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-error-600 bg-error-50 border border-error-100 hover:bg-error-100 transition-colors disabled:opacity-60 self-end"
-                >
-                  <LogOut size={13} />
-                  <span className="hidden xs:inline">
-                    {isPending ? "Odjava..." : "Odjavi se"}
-                  </span>
-                </button>
               </div>
 
               <h2 className="text-lg sm:text-xl font-bold text-warm-900 mb-0.5 truncate">
                 {displayName}
               </h2>
-              <p className="text-sm text-warm-500 truncate">{user?.email}</p>
+              <p className="text-sm text-warm-500 truncate mb-5">
+                {user?.email}
+              </p>
+
+              <button
+                onClick={logout}
+                disabled={isPending}
+                className={cn(
+                  "inline-flex items-center gap-2 px-4 py-2 rounded-xl",
+                  "text-sm font-semibold border transition-all duration-150",
+                  "text-error-600 bg-white border-error-200",
+                  "hover:bg-error-50 hover:border-error-300",
+                  "disabled:opacity-50 disabled:cursor-not-allowed",
+                )}
+              >
+                <LogOut size={15} />
+                {isPending ? "Odjava u tijeku..." : "Odjavi se"}
+              </button>
             </div>
           </Card>
         </motion.div>
