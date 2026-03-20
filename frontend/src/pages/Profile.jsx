@@ -110,8 +110,8 @@ export function ProfilePage() {
             </div>
 
             <div className="px-4 sm:px-5 pb-5">
-              <div className="-mt-8 sm:-mt-10 mb-3">
-                <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-2xl ring-4 ring-white shadow-md overflow-hidden">
+              <div className="-mt-8 sm:-mt-10 mb-3 relative z-10">
+                <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-2xl ring-4 ring-white shadow-md overflow-hidden bg-white">
                   {user?.user_metadata?.avatar_url ? (
                     <img
                       src={user.user_metadata.avatar_url}
