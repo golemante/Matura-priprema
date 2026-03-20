@@ -1,10 +1,5 @@
-import { useState, useMemo } from "react";
-import {
-  useNavigate,
-  useParams,
-  Link,
-  useSearchParams,
-} from "react-router-dom";
+import { useMemo } from "react";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -19,6 +14,7 @@ import { ExamCard } from "@/components/exam/ExamCard";
 import { SUBJECTS, DIFFICULTY_LEVELS, EXAM_SESSIONS } from "@/utils/constants";
 import { transformExam } from "@/utils/examHelpers";
 import { useExams } from "@/hooks/useExam";
+import { useSubjectFilters } from "@/hooks/useSubjectFilters";
 import { cn } from "@/utils/cn";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { ExamListSkeleton } from "@/components/common/Skeleton";
@@ -62,6 +58,7 @@ function FilterBar({
   filterYear,
   filterLevel,
   filterSession,
+  hasActiveFilters,
   totalCount,
   filteredCount,
   onYear,
@@ -69,8 +66,6 @@ function FilterBar({
   onSession,
   onReset,
 }) {
-  const hasFilters =
-    filterYear !== null || filterLevel !== null || filterSession !== null;
   const showSessionFilter = availableSessions.length > 1;
 
   return (
@@ -87,9 +82,7 @@ function FilterBar({
           </FilterChip>
         ))}
 
-        {(showSessionFilter || true) && (
-          <div className="w-px h-4 bg-warm-300 mx-0.5" />
-        )}
+        <div className="w-px h-4 bg-warm-300 mx-0.5" />
 
         {showSessionFilter &&
           availableSessions.map((session) => (
@@ -124,7 +117,7 @@ function FilterBar({
         ))}
 
         <div className="ml-auto flex items-center gap-3">
-          {hasFilters && (
+          {hasActiveFilters && (
             <button
               onClick={onReset}
               className="flex items-center gap-1 text-xs font-bold text-warm-500 hover:text-warm-800 transition-colors"
@@ -137,7 +130,7 @@ function FilterBar({
             <span
               className={cn(
                 "font-bold",
-                hasFilters ? subject.color.text : "text-warm-700",
+                hasActiveFilters ? subject.color.text : "text-warm-700",
               )}
             >
               {filteredCount}
@@ -300,31 +293,17 @@ export function SubjectsPage() {
   usePageTitle("Odabir ispita");
   const { subjectId } = useParams();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const subject = SUBJECTS.find((s) => s.id === subjectId);
 
-  const filterYear = searchParams.get("year")
-    ? Number(searchParams.get("year"))
-    : null;
-  const filterLevel = searchParams.get("level") ?? null;
-  const filterSession = searchParams.get("session") ?? null;
-
-  function setFilter(key, value) {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (value === null) next.delete(key);
-        else next.set(key, String(value));
-        return next;
-      },
-      { replace: true },
-    );
-  }
-
-  function resetFilters() {
-    setSearchParams({}, { replace: true });
-  }
+  const {
+    filterYear,
+    filterLevel,
+    filterSession,
+    hasActiveFilters,
+    setFilter,
+    resetFilters,
+  } = useSubjectFilters();
 
   const { data: rawExams, isLoading, error, refetch } = useExams(subjectId);
 
@@ -370,16 +349,9 @@ export function SubjectsPage() {
     .map(Number)
     .sort((a, b) => b - a);
 
-  const hasActiveFilters =
-    filterYear !== null || filterLevel !== null || filterSession !== null;
-
-  function handleExamSelect(examId) {
-    navigate(`/ispit/${examId}`);
-  }
+  const skeletonCount = Math.min(Math.max(availableYears.length * 2, 4), 8);
 
   if (!subject) return <SubjectNotFound />;
-
-  const skeletonCount = Math.min(Math.max(availableYears.length * 2, 4), 8);
 
   return (
     <div className="page-container py-8 md:py-10 max-w-3xl mx-auto">
@@ -408,7 +380,7 @@ export function SubjectsPage() {
             <p className="text-sm text-warm-500">
               {isLoading
                 ? "Učitavanje ispita..."
-                : `${allExams.length} ${allExams.length === 1 ? "ispit" : allExams.length < 5 ? "ispita" : "ispita"} dostupno`}
+                : `${allExams.length} ispita dostupno`}
             </p>
           </div>
         </div>
@@ -422,6 +394,7 @@ export function SubjectsPage() {
           filterYear={filterYear}
           filterLevel={filterLevel}
           filterSession={filterSession}
+          hasActiveFilters={hasActiveFilters}
           totalCount={allExams.length}
           filteredCount={filtered.length}
           onYear={(v) => setFilter("year", v)}
@@ -458,7 +431,7 @@ export function SubjectsPage() {
                     year={year}
                     exams={groupedByYear[year]}
                     subject={subject}
-                    onExamSelect={handleExamSelect}
+                    onExamSelect={(id) => navigate(`/ispit/${id}`)}
                   />
                 ))}
               </AnimatePresence>

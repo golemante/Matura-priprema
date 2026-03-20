@@ -1,11 +1,10 @@
-import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, BookOpenCheck, Search } from "lucide-react";
+import { BookOpenCheck, Search } from "lucide-react";
 import { useState } from "react";
 import { SUBJECTS } from "@/utils/constants";
-import { PageWrapper, PageHeader } from "@/components/layout/Wrapper";
+import { SubjectCard } from "@/components/subject/SubjectCard";
+import { PageWrapper, PageHeader } from "@/components/layout/PageLayout";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { cn } from "@/utils/cn";
 
 const stagger = {
   hidden: {},
@@ -22,77 +21,10 @@ const cardAnim = {
   },
 };
 
-function SubjectCard({ subject }) {
-  const navigate = useNavigate();
-  const Icon = subject.icon;
-
+function AnimatedSubjectCard({ subject }) {
   return (
     <motion.div variants={cardAnim}>
-      <motion.div
-        onClick={() => navigate(`/predmeti/${subject.id}`)}
-        whileHover={{ y: -3, transition: { duration: 0.18 } }}
-        whileTap={{ scale: 0.98 }}
-        className={cn(
-          "group relative bg-white rounded-2xl border border-warm-200 overflow-hidden cursor-pointer",
-          "shadow-[0_1px_3px_rgba(0,0,0,0.04)]",
-          "hover:shadow-[0_8px_30px_-4px_rgba(45,84,232,0.10)] hover:border-warm-300",
-          "transition-all duration-250",
-        )}
-      >
-        <div
-          className={cn(
-            "absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300",
-            `bg-gradient-to-r ${subject.color.gradient}`,
-          )}
-        />
-
-        <div className="p-5">
-          <div className="flex items-start justify-between mb-4">
-            <div
-              className={cn(
-                "w-12 h-12 rounded-xl flex items-center justify-center border",
-                subject.color.bg,
-                subject.color.border,
-              )}
-            >
-              <Icon size={22} className={subject.color.text} />
-            </div>
-            <span
-              className={cn(
-                "text-[11px] font-bold px-2 py-1 rounded-lg",
-                subject.color.badge,
-              )}
-            >
-              {subject.examCount} ispita
-            </span>
-          </div>
-
-          <h3 className="font-bold text-warm-900 text-base tracking-tight mb-1">
-            {subject.name}
-          </h3>
-          <p className="text-sm text-warm-500 leading-relaxed line-clamp-2 mb-4">
-            {subject.description}
-          </p>
-
-          <div className="flex items-center justify-between">
-            <span
-              className={cn(
-                "text-xs font-bold tracking-wide",
-                subject.color.text,
-              )}
-            >
-              {subject.shortName}
-            </span>
-            <div className="flex items-center gap-1 text-xs font-semibold text-warm-400 group-hover:text-primary-600 transition-colors duration-200">
-              <span>Odaberi ispit</span>
-              <ArrowRight
-                size={13}
-                className="transition-transform duration-200 group-hover:translate-x-1"
-              />
-            </div>
-          </div>
-        </div>
-      </motion.div>
+      <SubjectCard subject={subject} showDescription />
     </motion.div>
   );
 }
@@ -174,7 +106,7 @@ export function AllSubjectsPage() {
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
           >
             {popular.map((subject) => (
-              <SubjectCard key={subject.id} subject={subject} />
+              <AnimatedSubjectCard key={subject.id} subject={subject} />
             ))}
           </motion.div>
         </section>
@@ -190,7 +122,7 @@ export function AllSubjectsPage() {
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
           >
             {other.map((subject) => (
-              <SubjectCard key={subject.id} subject={subject} />
+              <AnimatedSubjectCard key={subject.id} subject={subject} />
             ))}
           </motion.div>
         </section>
