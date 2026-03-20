@@ -1,13 +1,5 @@
-// hooks/useImagePreload.js
 import { useEffect, useRef } from "react";
 
-/**
- * Preloada imageUrl za iduća `ahead` pitanja u pozadini.
- *
- * @param {Array<{ id: string, imageUrl?: string | null }>} questions
- * @param {number} currentIndex
- * @param {{ ahead?: number }}   opts
- */
 export function useImagePreload(questions, currentIndex, { ahead = 3 } = {}) {
   const cacheRef = useRef(new Map());
 

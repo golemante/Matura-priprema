@@ -1,4 +1,3 @@
-// hooks/useKeyPress.js
 import { useEffect, useRef } from "react";
 
 const FORM_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
@@ -14,10 +13,6 @@ function isEditableTarget(target) {
   return false;
 }
 
-/**
- * @param {Record<string, (e: KeyboardEvent) => void>} keyMap
- * @param {{ enabled?: boolean }} options
- */
 export function useKeyPress(keyMap, { enabled = true } = {}) {
   const keyMapRef = useRef(keyMap);
   useEffect(() => {

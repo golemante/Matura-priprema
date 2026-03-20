@@ -1,4 +1,3 @@
-// hooks/useBeforeUnload.js
 import { useEffect } from "react";
 
 export function useBeforeUnload(enabled = true) {

@@ -32,15 +32,17 @@ export function useAttemptData() {
   const attempts = useAttempts();
   const subjectStats = useSubjectStats();
 
+  const refetch = async () => {
+    await Promise.all([attempts.refetch(), subjectStats.refetch()]);
+  };
+
   return {
     attempts: attempts.data ?? [],
     subjectStats: subjectStats.data ?? [],
     isLoading: attempts.isLoading || subjectStats.isLoading,
+    isFetching: attempts.isFetching || subjectStats.isFetching,
     error: attempts.error || subjectStats.error,
-    refetch: () => {
-      attempts.refetch();
-      subjectStats.refetch();
-    },
+    refetch,
     attemptsQuery: attempts,
     subjectStatsQuery: subjectStats,
   };

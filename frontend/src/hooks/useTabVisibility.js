@@ -1,13 +1,6 @@
-// hooks/useTabVisibility.js
 import { useEffect, useRef, useCallback } from "react";
 import { toast } from "@/store/toastStore";
 
-/**
- * Prati izlaske iz taba za vrijeme aktivnog ispita.
- *
- * @param {{ enabled?: boolean, onSwitch?: (count: number) => void }} opts
- * @returns {React.MutableRefObject<{ switchCount: number, totalHiddenMs: number }>}
- */
 export function useTabVisibility({ enabled = true, onSwitch } = {}) {
   const dataRef = useRef({
     switchCount: 0,

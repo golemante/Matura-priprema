@@ -1,4 +1,3 @@
-// hooks/useExam.js
 import { useQuery } from "@tanstack/react-query";
 import { examApi } from "@/api/examApi";
 

@@ -74,11 +74,7 @@ export function ProfilePage() {
       .toUpperCase() || "?";
 
   const INFO_ROWS = [
-    {
-      icon: User,
-      label: "Ime profila",
-      value: displayName,
-    },
+    { icon: User, label: "Ime profila", value: displayName },
     {
       icon: Mail,
       label: "Email adresa",
@@ -89,12 +85,7 @@ export function ProfilePage() {
       label: "Korisnik od",
       value: user?.created_at ? formatDate(user.created_at) : "Nije dostupno",
     },
-    {
-      icon: Shield,
-      label: "Status računa",
-      value: "Aktivan",
-      badge: true,
-    },
+    { icon: Shield, label: "Status računa", value: "Aktivan", badge: true },
   ];
 
   return (
@@ -109,7 +100,7 @@ export function ProfilePage() {
           <Card className="overflow-hidden">
             <div className="h-20 sm:h-24 bg-gradient-to-br from-primary-600 via-primary-700 to-indigo-700 relative">
               <div
-                className="absolute inset-0 opacity-10"
+                className="absolute inset-0 opacity-10 pointer-events-none"
                 style={{
                   backgroundImage:
                     "radial-gradient(circle, #fff 1px, transparent 1px)",
@@ -119,41 +110,40 @@ export function ProfilePage() {
             </div>
 
             <div className="px-4 sm:px-5 pb-5">
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="-mt-9 sm:-mt-11 flex-shrink-0">
-                  <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-2xl ring-4 ring-white shadow-md overflow-hidden">
-                    {user?.user_metadata?.avatar_url ? (
-                      <img
-                        src={user.user_metadata.avatar_url}
-                        alt={displayName}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-primary-100 flex items-center justify-center">
-                        <span className="text-xl sm:text-2xl font-black text-primary-700">
-                          {initials}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-2">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    leftIcon={LogOut}
-                    loading={isPending}
-                    onClick={logout}
-                  >
-                    {isPending ? "Odjava..." : "Odjavi se"}
-                  </Button>
+              <div className="-mt-8 sm:-mt-10 mb-3">
+                <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-2xl ring-4 ring-white shadow-md overflow-hidden">
+                  {user?.user_metadata?.avatar_url ? (
+                    <img
+                      src={user.user_metadata.avatar_url}
+                      alt={displayName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-primary-100 flex items-center justify-center">
+                      <span className="text-xl sm:text-2xl font-black text-primary-700">
+                        {initials}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <h2 className="text-lg sm:text-xl font-bold text-warm-900 mb-0.5 truncate">
-                {displayName}
-              </h2>
+              <div className="flex items-center justify-between gap-3 mb-0.5">
+                <h2 className="text-lg sm:text-xl font-bold text-warm-900 truncate">
+                  {displayName}
+                </h2>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  leftIcon={LogOut}
+                  loading={isPending}
+                  onClick={logout}
+                  className="flex-shrink-0"
+                >
+                  {isPending ? "Odjava..." : "Odjavi se"}
+                </Button>
+              </div>
+
               <p className="text-sm text-warm-500 truncate">{user?.email}</p>
             </div>
           </Card>

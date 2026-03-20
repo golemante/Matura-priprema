@@ -10,12 +10,15 @@ export function useLogin() {
   const navigate = useNavigate();
 
   return useMutation({
-    mutationFn: ({ redirectTo, ...credentials }) => authApi.login(credentials),
+    mutationFn: ({ redirectTo: _r, ...credentials }) =>
+      authApi.login(credentials),
     onSuccess: ({ user, token }, variables) => {
-      const redirectTo = variables?.redirectTo ?? "/dashboard";
       setAuth(user, token);
       toast.success(`Dobrodošao, ${user.name}!`);
-      navigate(redirectTo, { replace: true });
+      const redirectTo = variables?.redirectTo;
+      const safeDest =
+        !redirectTo || redirectTo === "/" ? "/dashboard" : redirectTo;
+      navigate(safeDest, { replace: true });
     },
     onError: (err) => toast.error(err.message ?? "Greška pri prijavi"),
   });

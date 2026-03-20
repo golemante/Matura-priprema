@@ -4,7 +4,13 @@ export function useCountUp(target, duration = 900) {
   const [val, setVal] = useState(0);
 
   useEffect(() => {
-    if (!target) return;
+    if (target == null) return;
+
+    if (target === 0) {
+      setVal(0);
+      return;
+    }
+
     let frame;
     const start = performance.now();
 
