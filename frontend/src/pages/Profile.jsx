@@ -6,7 +6,7 @@ import {
   LayoutDashboard,
   BarChart2,
 } from "lucide-react";
-import { PageWrapper, PageHeader } from "@/components/layout/PageLayout";
+import { PageWrapper, PageHeader } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
 import { UserAvatar } from "@/components/common/UserAvatar";
 import { useCurrentUser } from "@/hooks/useAuth";
