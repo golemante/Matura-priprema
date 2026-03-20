@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Plus, BarChart2 } from "lucide-react";
-import { PageWrapper } from "@/components/layout/PageLayout";
+import { PageWrapper } from "@/components/layout/Wrapper";
 import { Button } from "@/components/common/Button";
 import { useCurrentUser } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
