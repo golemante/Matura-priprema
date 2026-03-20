@@ -33,8 +33,8 @@ export function RegisterPage() {
 
   return (
     <AuthLayout mode="register">
-      <div className="mb-7">
-        <h1 className="text-2xl font-bold text-warm-900 tracking-tight mb-1.5">
+      <div className="mb-6 sm:mb-7">
+        <h1 className="text-2xl sm:text-[26px] font-bold text-warm-900 tracking-tight mb-1.5">
           Kreiraj račun
         </h1>
         <p className="text-sm text-warm-500">
@@ -70,6 +70,7 @@ export function RegisterPage() {
           leftIcon={Mail}
           error={errors.email?.message}
           autoComplete="email"
+          inputMode="email"
           {...formRegister("email")}
         />
 
@@ -97,12 +98,12 @@ export function RegisterPage() {
           disabled={isPending}
           whileTap={{ scale: 0.98 }}
           className={cn(
-            "w-full py-2.5 px-4 rounded-xl text-sm font-semibold text-white",
+            "w-full py-3 px-4 rounded-xl text-sm font-semibold text-white",
             "bg-primary-600 hover:bg-primary-700 active:bg-primary-800",
             "transition-all duration-150 focus-visible:ring-2 focus-visible:ring-primary-200 outline-none",
             "disabled:opacity-60 disabled:cursor-not-allowed",
             "shadow-[0_1px_3px_0_rgb(45_84_232/0.3)]",
-            "flex items-center justify-center gap-2 min-h-[44px]",
+            "flex items-center justify-center gap-2 min-h-[48px]",
           )}
         >
           {isPending ? (
@@ -116,7 +117,7 @@ export function RegisterPage() {
         </motion.button>
       </form>
 
-      <p className="text-xs text-warm-400 text-center mt-6 leading-relaxed">
+      <p className="text-xs text-warm-400 text-center mt-5 leading-relaxed">
         Registracijom prihvaćaš{" "}
         <Link
           to="/uvjeti"

@@ -32,8 +32,8 @@ export function LoginPage() {
 
   return (
     <AuthLayout mode="login">
-      <div className="mb-7">
-        <h1 className="text-2xl font-bold text-warm-900 tracking-tight mb-1.5">
+      <div className="mb-6 sm:mb-7">
+        <h1 className="text-2xl sm:text-[26px] font-bold text-warm-900 tracking-tight mb-1.5">
           Dobro došao natrag
         </h1>
         <p className="text-sm text-warm-500">
@@ -63,6 +63,7 @@ export function LoginPage() {
           leftIcon={Mail}
           error={errors.email?.message}
           autoComplete="email"
+          inputMode="email"
           {...register("email")}
         />
 
@@ -73,10 +74,10 @@ export function LoginPage() {
             autoComplete="current-password"
             {...register("password")}
           />
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-0.5">
             <Link
               to="/zaboravljena-lozinka"
-              className="text-xs text-warm-500 hover:text-primary-600 transition-colors"
+              className="text-xs text-warm-500 hover:text-primary-600 transition-colors py-1"
             >
               Zaboravio/la lozinku?
             </Link>
@@ -88,12 +89,12 @@ export function LoginPage() {
           disabled={isPending}
           whileTap={{ scale: 0.98 }}
           className={cn(
-            "w-full py-2.5 px-4 rounded-xl text-sm font-semibold text-white",
+            "w-full py-3 px-4 rounded-xl text-sm font-semibold text-white",
             "bg-primary-600 hover:bg-primary-700 active:bg-primary-800",
             "transition-all duration-150 focus-visible:ring-2 focus-visible:ring-primary-200 outline-none",
             "disabled:opacity-60 disabled:cursor-not-allowed",
             "shadow-[0_1px_3px_0_rgb(45_84_232/0.3)]",
-            "flex items-center justify-center gap-2 min-h-[44px]",
+            "flex items-center justify-center gap-2 min-h-[48px]",
           )}
         >
           {isPending ? (
