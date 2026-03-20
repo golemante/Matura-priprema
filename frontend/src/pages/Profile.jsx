@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { PageWrapper, PageHeader } from "@/components/layout/Wrapper";
 import { Card } from "@/components/common/Card";
+import { Button } from "@/components/common/Button";
+import { Badge } from "@/components/common/Badge";
 import { useCurrentUser } from "@/hooks/useAuth";
 import { useLogout } from "@/hooks/useAuth";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
@@ -117,45 +119,42 @@ export function ProfilePage() {
             </div>
 
             <div className="px-4 sm:px-5 pb-5">
-              <div className="-mt-9 sm:-mt-12 mb-4">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-4 ring-white shadow-md overflow-hidden">
-                  {user?.user_metadata?.avatar_url ? (
-                    <img
-                      src={user.user_metadata.avatar_url}
-                      alt={displayName}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-primary-100 flex items-center justify-center">
-                      <span className="text-xl sm:text-2xl font-black text-primary-700">
-                        {initials}
-                      </span>
-                    </div>
-                  )}
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="-mt-9 sm:-mt-11 flex-shrink-0">
+                  <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-2xl ring-4 ring-white shadow-md overflow-hidden">
+                    {user?.user_metadata?.avatar_url ? (
+                      <img
+                        src={user.user_metadata.avatar_url}
+                        alt={displayName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-primary-100 flex items-center justify-center">
+                        <span className="text-xl sm:text-2xl font-black text-primary-700">
+                          {initials}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-2">
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    leftIcon={LogOut}
+                    loading={isPending}
+                    onClick={logout}
+                  >
+                    {isPending ? "Odjava..." : "Odjavi se"}
+                  </Button>
                 </div>
               </div>
 
               <h2 className="text-lg sm:text-xl font-bold text-warm-900 mb-0.5 truncate">
                 {displayName}
               </h2>
-              <p className="text-sm text-warm-500 truncate mb-5">
-                {user?.email}
-              </p>
-
-              <button
-                onClick={logout}
-                disabled={isPending}
-                className={cn(
-                  "inline-flex items-center gap-2 px-4 py-2 rounded-xl",
-                  "text-sm font-semibold border transition-all duration-150",
-                  "text-error-600 bg-white border-error-200",
-                  "hover:bg-error-50 hover:border-error-300",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
-                )}
-              >
-                <LogOut size={15} />
-                {isPending ? "Odjava u tijeku..." : "Odjavi se"}
-              </button>
+              <p className="text-sm text-warm-500 truncate">{user?.email}</p>
             </div>
           </Card>
         </motion.div>
@@ -170,7 +169,7 @@ export function ProfilePage() {
             {INFO_ROWS.map(({ icon: Icon, label, value, badge }) => (
               <div
                 key={label}
-                className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 sm:py-4"
+                className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5"
               >
                 <div className="w-8 h-8 rounded-lg bg-warm-100 flex items-center justify-center flex-shrink-0">
                   <Icon size={15} className="text-warm-500" />
@@ -180,10 +179,9 @@ export function ProfilePage() {
                     {label}
                   </p>
                   {badge ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    <Badge variant="success" dot size="sm">
                       {value}
-                    </span>
+                    </Badge>
                   ) : (
                     <p className="text-sm font-medium text-warm-800 truncate">
                       {value}
