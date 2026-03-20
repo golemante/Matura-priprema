@@ -6,36 +6,12 @@ import {
   LayoutDashboard,
   BarChart2,
 } from "lucide-react";
-import { PageWrapper, PageHeader } from "@/components/layout/Wrapper";
+import { PageWrapper, PageHeader } from "@/components/layout/PageLayout";
 import { Card } from "@/components/common/Card";
+import { UserAvatar } from "@/components/common/UserAvatar";
 import { useCurrentUser } from "@/hooks/useAuth";
 import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 import { formatDate } from "@/utils/formatters";
-
-function ProfileAvatar({ user }) {
-  const initials = (user?.name ?? user?.email ?? "?")
-    .split(" ")
-    .map((word) => word[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
-  if (user?.user_metadata?.avatar_url) {
-    return (
-      <img
-        src={user.user_metadata.avatar_url}
-        alt={user?.name ?? "Avatar korisnika"}
-        className="w-20 h-20 rounded-2xl object-cover ring-4 ring-white shadow-md"
-      />
-    );
-  }
-
-  return (
-    <div className="w-20 h-20 rounded-2xl bg-primary-100 text-primary-700 text-2xl font-bold flex items-center justify-center ring-4 ring-white shadow-md">
-      {initials}
-    </div>
-  );
-}
 
 export function ProfilePage() {
   usePageTitle(PAGE_TITLES.profile);
@@ -52,7 +28,7 @@ export function ProfilePage() {
       <div className="max-w-3xl mx-auto space-y-5">
         <Card className="p-5 sm:p-6 border border-warm-200">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
-            <ProfileAvatar user={user} />
+            <UserAvatar user={user} size="xl" shadow />
             <div className="space-y-1">
               <h2 className="text-2xl font-bold text-warm-900">
                 {displayName}

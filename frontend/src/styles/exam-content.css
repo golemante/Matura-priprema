@@ -1,19 +1,8 @@
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* exam-content.css                                                            */
+/* Stilovi specifični za prikaz sadržaja ispita.                               */
+/* Svi @keyframes su u animations.css.                                         */
 /* ─────────────────────────────────────────────────────────────────────────── */
-
-/* ── Animacija za audio waveform ─────────────────────────────────────────── */
-@keyframes waveform {
-  0%,
-  100% {
-    transform: scaleY(0.5);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scaleY(1.3);
-    opacity: 1;
-  }
-}
 
 /* ── passage-content: opći tekst pasaža ─────────────────────────────────── */
 .passage-content {
@@ -139,7 +128,7 @@
   font-style: italic !important;
 }
 
-/* ── passage-article: matching zadaci (Task 1 engl. → person-block) ──────── */
+/* ── passage-article: matching zadaci ────────────────────────────────────── */
 .passage-article .task-instructions {
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;
@@ -218,7 +207,7 @@
   color: #14532d;
 }
 
-/* ── Gap fill: Task 3/4/5 ────────────────────────────────────────────────── */
+/* ── Gap fill ────────────────────────────────────────────────────────────── */
 .passage-content .task-instructions {
   margin-bottom: 1rem;
   padding: 0.625rem 0.875rem;
@@ -272,16 +261,6 @@
   border-radius: 3px;
   padding: 0 5px;
   animation: gap-pulse 1.8s ease-in-out infinite;
-}
-
-@keyframes gap-pulse {
-  0%,
-  100% {
-    background: rgba(219, 234, 254, 0.6);
-  }
-  50% {
-    background: rgba(219, 234, 254, 1);
-  }
 }
 
 .inline-gap-passage p {

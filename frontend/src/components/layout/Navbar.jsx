@@ -14,38 +14,7 @@ import { useState, useRef, useEffect } from "react";
 import { cn } from "@/utils/cn";
 import { useAuthStore } from "@/store/authStore";
 import { useLogout } from "@/hooks/useAuth";
-
-function UserAvatar({ user, size = "sm" }) {
-  const initials = (user?.name ?? user?.email ?? "?")
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
-  const sizeClass = size === "sm" ? "w-8 h-8 text-xs" : "w-9 h-9 text-sm";
-
-  if (user?.user_metadata?.avatar_url) {
-    return (
-      <img
-        src={user.user_metadata.avatar_url}
-        alt={user.name}
-        className={cn("rounded-full object-cover ring-2 ring-white", sizeClass)}
-      />
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        "rounded-full bg-primary-100 text-primary-700 font-bold flex items-center justify-center ring-2 ring-white",
-        sizeClass,
-      )}
-    >
-      {initials}
-    </div>
-  );
-}
+import { UserAvatar } from "@/components/common/UserAvatar";
 
 function ProfileDropdown({ user, onClose }) {
   const { logout, isPending } = useLogout();
@@ -206,7 +175,7 @@ export function Header() {
                   aria-expanded={dropdownOpen}
                   aria-haspopup="true"
                 >
-                  <UserAvatar user={user} />
+                  <UserAvatar user={user} size="sm" />
                   <ChevronDown
                     size={14}
                     className={cn(
@@ -227,7 +196,7 @@ export function Header() {
           </div>
 
           <div className="md:hidden flex items-center gap-2">
-            {isAuthenticated && <UserAvatar user={user} />}
+            {isAuthenticated && <UserAvatar user={user} size="sm" />}
             {!isAuthenticated && (
               <Link
                 to="/login"

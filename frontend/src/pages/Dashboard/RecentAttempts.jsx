@@ -1,11 +1,57 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, TrendingUp, Clock } from "lucide-react";
+import { ArrowRight, ChevronRight, TrendingUp } from "lucide-react";
 import { SUBJECTS } from "@/utils/constants";
 import { Sparkline } from "@/components/common/Sparkline";
 import { Card } from "@/components/common/Card";
 import { getPctBg, getPctColor, daysAgoLabel } from "@/utils/statsHelpers";
 import { cn } from "@/utils/cn";
+
+function TrendPanel({ recentAttempts }) {
+  const sparkData = [...recentAttempts]
+    .reverse()
+    .slice(0, 10)
+    .map((a) => a.score_pct ?? 0);
+  if (sparkData.length < 2) return null;
+
+  const latest = sparkData[sparkData.length - 1] ?? 0;
+  const prev = sparkData[sparkData.length - 2] ?? null;
+  const delta = prev != null ? latest - prev : null;
+  const up = delta != null && delta >= 0;
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 bg-warm-50 rounded-xl border border-warm-200 mb-3">
+      <div>
+        <p className="text-xs font-bold text-warm-500 mb-0.5">
+          Trend (zadnjih {sparkData.length})
+        </p>
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "text-lg font-black tabular-nums",
+              getPctColor(latest),
+            )}
+          >
+            {latest}%
+          </span>
+          {delta != null && (
+            <span
+              className={cn(
+                "text-xs font-bold flex items-center gap-0.5",
+                up ? "text-green-600" : "text-red-500",
+              )}
+            >
+              <TrendingUp size={11} className={up ? "" : "rotate-180"} />
+              {delta > 0 ? "+" : ""}
+              {delta}%
+            </span>
+          )}
+        </div>
+      </div>
+      <Sparkline data={sparkData} />
+    </div>
+  );
+}
 
 function AttemptItem({ attempt, index }) {
   const navigate = useNavigate();
@@ -88,54 +134,6 @@ function AttemptItem({ attempt, index }) {
         />
       </div>
     </motion.div>
-  );
-}
-
-import { ChevronRight } from "lucide-react";
-
-function TrendPanel({ recentAttempts }) {
-  const sparkData = [...recentAttempts]
-    .reverse()
-    .slice(0, 10)
-    .map((a) => a.score_pct ?? 0);
-  if (sparkData.length < 2) return null;
-
-  const latest = sparkData[sparkData.length - 1] ?? 0;
-  const prev = sparkData[sparkData.length - 2] ?? null;
-  const delta = prev != null ? latest - prev : null;
-  const up = delta != null && delta >= 0;
-
-  return (
-    <div className="flex items-center justify-between px-4 py-3 bg-warm-50 rounded-xl border border-warm-200 mb-3">
-      <div>
-        <p className="text-xs font-bold text-warm-500 mb-0.5">
-          Trend (zadnjih {sparkData.length})
-        </p>
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "text-lg font-black tabular-nums",
-              getPctColor(latest),
-            )}
-          >
-            {latest}%
-          </span>
-          {delta != null && (
-            <span
-              className={cn(
-                "text-xs font-bold flex items-center gap-0.5",
-                up ? "text-green-600" : "text-red-500",
-              )}
-            >
-              <TrendingUp size={11} className={up ? "" : "rotate-180"} />
-              {delta > 0 ? "+" : ""}
-              {delta}%
-            </span>
-          )}
-        </div>
-      </div>
-      <Sparkline data={sparkData} />
-    </div>
   );
 }
 

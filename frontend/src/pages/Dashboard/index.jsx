@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Plus, BarChart2 } from "lucide-react";
-import { PageWrapper } from "@/components/layout/Wrapper";
+import { PageWrapper } from "@/components/layout/PageLayout";
 import { Button } from "@/components/common/Button";
 import { useCurrentUser } from "@/hooks/useAuth";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -9,12 +9,13 @@ import { HeroBanner } from "./HeroBanner";
 import { StatCards } from "./StatCards";
 import { RecentAttempts } from "./RecentAttempts";
 import { SubjectProgress } from "./SubjectProgress";
+import { FocusCard } from "./FocusCard";
 import {
   InProgressBanner,
   EmptyDashboard,
   DashboardError,
   DashboardSkeleton,
-} from "./misc";
+} from "./DashboardStates";
 
 export function Dashboard() {
   usePageTitle("Početna ploča");
@@ -28,7 +29,6 @@ export function Dashboard() {
     stats,
     weekActivity,
     recentAttempts,
-    bestSubjectId,
     isLoading,
     error,
     refetch,
@@ -41,6 +41,7 @@ export function Dashboard() {
         <DashboardSkeleton />
       </PageWrapper>
     );
+
   if (error)
     return (
       <PageWrapper>
@@ -59,6 +60,8 @@ export function Dashboard() {
 
       {inProgress && <InProgressBanner attempt={inProgress} />}
 
+      {!isEmpty && <FocusCard subjectStats={subjectStats} />}
+
       {isEmpty ? (
         <EmptyDashboard />
       ) : (
@@ -73,10 +76,7 @@ export function Dashboard() {
               />
             </div>
             <div>
-              <SubjectProgress
-                subjectStats={subjectStats}
-                bestSubjectId={bestSubjectId}
-              />
+              <SubjectProgress subjectStats={subjectStats} />
             </div>
           </div>
 

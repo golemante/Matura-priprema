@@ -31,15 +31,6 @@ export function useDashboard() {
     [completed],
   );
 
-  const bestSubjectId = useMemo(() => {
-    if (!subjectStats.length) return null;
-    return (
-      [...subjectStats].sort(
-        (a, b) => (b.best_score_pct ?? 0) - (a.best_score_pct ?? 0),
-      )[0]?.subject_id ?? null
-    );
-  }, [subjectStats]);
-
   return {
     attempts,
     completed,
@@ -48,7 +39,6 @@ export function useDashboard() {
     stats,
     weekActivity,
     recentAttempts,
-    bestSubjectId,
     isLoading,
     error,
     refetch,

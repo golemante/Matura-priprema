@@ -1,12 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, Star, BarChart2 } from "lucide-react";
+import { ArrowRight, BarChart2 } from "lucide-react";
 import { SUBJECTS } from "@/utils/constants";
 import { Card } from "@/components/common/Card";
 import { getPctColor, getPctBarColor } from "@/utils/statsHelpers";
 import { cn } from "@/utils/cn";
 
-function SubjectRow({ stat, isBest }) {
+function SubjectRow({ stat }) {
   const navigate = useNavigate();
   const subject = SUBJECTS.find((s) => s.id === stat.subject_id);
   if (!subject) return null;
@@ -32,13 +32,6 @@ function SubjectRow({ stat, isBest }) {
         <span className="text-sm font-semibold text-warm-800 flex-1 truncate group-hover:text-warm-900 transition-colors">
           {subject.shortName}
         </span>
-
-        {isBest && (
-          <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-0.5 flex-shrink-0">
-            <Star size={9} />
-            Top
-          </span>
-        )}
 
         <span
           className={cn(
@@ -86,18 +79,21 @@ function SubjectRow({ stat, isBest }) {
   );
 }
 
-export function SubjectProgress({ subjectStats, bestSubjectId }) {
+export function SubjectProgress({ subjectStats }) {
   const navigate = useNavigate();
 
   const sorted = [...subjectStats]
-    .sort((a, b) => (b.attempts_count ?? 0) - (a.attempts_count ?? 0))
+    .sort((a, b) => (a.avg_score_pct ?? 0) - (b.avg_score_pct ?? 0))
     .slice(0, 6);
 
   return (
     <Card className="p-5">
-      <p className="text-xs font-bold text-warm-500 uppercase tracking-wider mb-4">
-        Po predmetima
-      </p>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-bold text-warm-500 uppercase tracking-wider">
+          Po predmetima
+        </p>
+        <span className="text-[10px] text-warm-400">najslabiji gore</span>
+      </div>
 
       {!sorted.length ? (
         <div className="text-center py-8">
@@ -113,11 +109,7 @@ export function SubjectProgress({ subjectStats, bestSubjectId }) {
       ) : (
         <div>
           {sorted.map((stat) => (
-            <SubjectRow
-              key={stat.subject_id}
-              stat={stat}
-              isBest={stat.subject_id === bestSubjectId}
-            />
+            <SubjectRow key={stat.subject_id} stat={stat} />
           ))}
         </div>
       )}
