@@ -7,14 +7,11 @@ import { cn } from "@/utils/cn";
 
 function OptionText({ text, selected }) {
   if (!text) return null;
-
   const isPureMath = text.trim().startsWith("$") && !text.includes("<");
-
   const cls = cn(
     "text-sm flex-1 text-left leading-snug",
     selected ? "font-semibold text-primary-900" : "font-medium text-warm-800",
   );
-
   return isPureMath ? (
     <MathText text={text} className={cls} />
   ) : (
@@ -35,35 +32,37 @@ function OptionButton({ option, selected, onSelect, disabled }) {
       onClick={handleClick}
       disabled={disabled}
       className={cn(
-        "w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-150 text-left group",
+        "w-full min-w-0 flex items-center gap-3 px-4 py-3 rounded-xl border-2",
+        "transition-all duration-100 text-left group",
         selected
           ? [
               "border-primary-500 bg-primary-50",
-              "shadow-[0_0_0_3px_rgba(45,84,232,0.12)]",
+              "shadow-[0_0_0_3px_rgba(45,84,232,0.10)]",
             ]
           : !disabled
             ? [
                 "border-warm-200 bg-white",
                 "hover:border-primary-300 hover:bg-warm-50",
                 "hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)]",
+                "active:scale-[0.99]",
               ]
-            : "border-warm-200 bg-warm-50 opacity-60",
+            : "border-warm-200 bg-warm-50 cursor-default",
         hasImage && "flex-col items-start gap-2",
       )}
     >
-      <div className="flex items-center gap-3 w-full">
+      <div className="flex items-center gap-3 w-full min-w-0">
         <div
           className={cn(
             "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
-            "text-xs font-bold transition-all duration-150 border-2",
+            "text-xs font-bold border-2 transition-colors duration-100",
             selected
               ? "bg-primary-600 border-primary-600 text-white"
               : !disabled
                 ? [
-                    "border-warm-300 text-warm-600",
+                    "border-warm-300 text-warm-500",
                     "group-hover:border-primary-400 group-hover:text-primary-600",
                   ]
-                : "border-warm-200 text-warm-400",
+                : "border-warm-200 text-warm-300",
           )}
           aria-hidden="true"
         >
@@ -74,7 +73,11 @@ function OptionButton({ option, selected, onSelect, disabled }) {
           )}
         </div>
 
-        {!hasImage && <OptionText text={option.text} selected={selected} />}
+        {!hasImage && (
+          <div className="min-w-0 flex-1">
+            <OptionText text={option.text} selected={selected} />
+          </div>
+        )}
       </div>
 
       {hasImage && (
@@ -83,7 +86,7 @@ function OptionButton({ option, selected, onSelect, disabled }) {
             src={option.image_url}
             alt={`Opcija ${option.letter.toUpperCase()}`}
             className={cn(
-              "max-h-44 w-auto rounded-xl object-contain border border-warm-200",
+              "max-h-44 max-w-full w-auto rounded-xl object-contain border border-warm-200",
               selected && "border-primary-300 shadow-sm",
             )}
             loading="lazy"
@@ -110,7 +113,7 @@ function QuestionImage({ imageUrl, label }) {
       <img
         src={imageUrl}
         alt={label ?? "Skica pitanja"}
-        className="max-w-full max-h-64 rounded-xl border border-warm-200 shadow-sm object-contain"
+        className="max-w-full max-h-64 rounded-xl object-contain border border-warm-200 shadow-sm"
         loading="eager"
       />
     </div>
@@ -130,13 +133,14 @@ export function QuestionDisplay({
 
   const isParent = question.questionType === "fill_blank_mc";
   const displayLabel = question.positionLabel ?? String((index ?? 0) + 1);
+  const hasImage = !!question.imageUrl;
 
   return (
-    <div className="bg-white rounded-2xl border border-warm-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-4">
+    <div className="w-full min-w-0 bg-white rounded-2xl border border-warm-200 shadow-sm overflow-hidden">
+      <div className="px-4 sm:px-5 py-4">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-warm-400 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-warm-400 uppercase tracking-wider">
               Pitanje {displayLabel}
             </span>
             {question.sectionLabel && (
@@ -144,9 +148,9 @@ export function QuestionDisplay({
                 {question.sectionLabel}
               </span>
             )}
-            {question.points > 1 && (
+            {question.points != null && question.points > 1 && (
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-primary-50 text-primary-600">
-                {question.points} {question.points === 1 ? "bod" : "boda"}
+                {question.points} {question.points < 5 ? "boda" : "bodova"}
               </span>
             )}
           </div>
@@ -155,17 +159,14 @@ export function QuestionDisplay({
             <button
               onClick={onFlag}
               aria-label={
-                isFlagged ? "Ukloni zastavicu" : "Označi pitanje zastavicom"
-              }
-              aria-pressed={isFlagged}
-              title={
                 isFlagged ? "Ukloni zastavicu" : "Označi za kasniji pregled"
               }
+              aria-pressed={isFlagged}
               className={cn(
-                "p-1.5 rounded-lg transition-all duration-150",
+                "flex-shrink-0 p-1.5 rounded-lg transition-colors duration-100",
                 isFlagged
                   ? "text-amber-600 bg-amber-100 hover:bg-amber-200"
-                  : "text-warm-300 hover:text-amber-600 hover:bg-amber-50",
+                  : "text-warm-300 hover:text-amber-500 hover:bg-amber-50",
                 isPaused && "opacity-40 pointer-events-none",
               )}
             >
@@ -179,7 +180,7 @@ export function QuestionDisplay({
           className={cn(
             "text-warm-900 leading-relaxed",
             isParent ? "text-base font-semibold" : "text-sm",
-            question.imageUrl ? "mb-2" : "mb-5",
+            hasImage ? "mb-2" : "mb-4",
           )}
         />
 
@@ -191,7 +192,12 @@ export function QuestionDisplay({
         <InlineTextBlock html={question.inlineText} />
 
         {!isParent && question.options?.length > 0 && (
-          <div className="space-y-2 mt-4">
+          <div
+            className={cn(
+              "space-y-2",
+              hasImage || question.inlineText ? "mt-3" : "mt-2",
+            )}
+          >
             {question.options.map((option) => (
               <OptionButton
                 key={option.id ?? option.letter}
