@@ -1,38 +1,19 @@
-// components/common/SafeHtml.jsx
 import { useMemo } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import { sanitizeInline, containsHtml } from "@/utils/sanitize";
 import { cn } from "@/utils/cn";
 
-// Lazy import KaTeX — samo kad je potreban
-let katexLoaded = false;
-let renderToString = null;
-
-function getKatex() {
-  if (katexLoaded) return renderToString;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const katex = require("katex");
-    renderToString = katex.renderToString;
-    katexLoaded = true;
-  } catch {
-    katexLoaded = true; // ne pokušavaj više puta
-  }
-  return renderToString;
-}
-
-// ── LaTeX parser + replacer ───────────────────────────────────────────────────
-// Regex koji hvata $$...$$ (block) i $...$ (inline) LaTeX
 const LATEX_REGEX = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g;
 
 function replaceLatexWithHtml(text) {
-  const katex = getKatex();
-  if (!katex || !text.includes("$")) return text;
+  if (!text || !text.includes("$")) return text;
 
   return text.replace(LATEX_REGEX, (match) => {
     const isBlock = match.startsWith("$$") && match.endsWith("$$");
     const formula = isBlock ? match.slice(2, -2) : match.slice(1, -1);
     try {
-      return katex(formula.trim(), {
+      return katex.renderToString(formula.trim(), {
         throwOnError: false,
         displayMode: isBlock,
         output: "html",
@@ -43,15 +24,6 @@ function replaceLatexWithHtml(text) {
   });
 }
 
-// ── Glavni SafeHtml ───────────────────────────────────────────────────────────
-
-/**
- * @param {object} props
- * @param {string} props.html        - Tekst koji može sadržavati HTML i/ili LaTeX
- * @param {string} [props.className] - Tailwind klase
- * @param {boolean} [props.inline]   - Renderira kao <span> umjesto <div>
- * @param {'inline'|'passage'|'footnote'} [props.context] - Sanitizacijski profil
- */
 export function SafeHtml({
   html,
   className,
@@ -61,15 +33,12 @@ export function SafeHtml({
   const sanitized = useMemo(() => {
     if (!html || typeof html !== "string") return "";
 
-    // 1. Ako NEMA HTML-a i NEMA LaTeX-a → plain text (najbrže)
     if (!containsHtml(html) && !html.includes("$")) {
-      return null; // signal za plain text render
+      return null;
     }
 
-    // 2. Zamijeni LaTeX s KaTeX HTML-om
     const withKatex = replaceLatexWithHtml(html);
 
-    // 3. Sanitiziraj rezultat
     return sanitizeInline(withKatex);
   }, [html, context]);
 

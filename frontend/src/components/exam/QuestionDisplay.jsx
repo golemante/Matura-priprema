@@ -2,7 +2,23 @@ import { useCallback } from "react";
 import { motion } from "framer-motion";
 import { Flag, Check } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
+import { MathText } from "@/components/math/MathRenderer";
 import { cn } from "@/utils/cn";
+
+function OptionText({ text, selected }) {
+  const isPureMath = text?.trim().startsWith("$") && !text.includes("<");
+
+  const cls = cn(
+    "text-sm flex-1 text-left leading-snug",
+    selected ? "font-semibold text-primary-900" : "font-medium text-warm-800",
+  );
+
+  return isPureMath ? (
+    <MathText text={text} className={cls} />
+  ) : (
+    <SafeHtml html={text} inline className={cls} />
+  );
+}
 
 function OptionButton({ option, selected, onSelect, disabled }) {
   const handleClick = useCallback(() => {
@@ -33,7 +49,7 @@ function OptionButton({ option, selected, onSelect, disabled }) {
         hasImage && "flex-col items-start gap-2",
       )}
     >
-      <div className={cn("flex items-center gap-3 w-full", hasImage && "")}>
+      <div className="flex items-center gap-3 w-full">
         <div
           className={cn(
             "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
@@ -56,17 +72,8 @@ function OptionButton({ option, selected, onSelect, disabled }) {
           )}
         </div>
 
-        {!hasImage && (
-          <SafeHtml
-            html={option.text}
-            inline
-            className={cn(
-              "text-sm flex-1 text-left leading-snug",
-              selected
-                ? "font-semibold text-primary-900"
-                : "font-medium text-warm-800",
-            )}
-          />
+        {!hasImage && option.text && (
+          <OptionText text={option.text} selected={selected} />
         )}
       </div>
 
@@ -77,7 +84,7 @@ function OptionButton({ option, selected, onSelect, disabled }) {
             alt={`Opcija ${option.letter.toUpperCase()}`}
             className={cn(
               "max-h-44 w-auto rounded-xl object-contain border border-warm-200",
-              selected && "border-primary-300",
+              selected && "border-primary-300 shadow-sm",
             )}
             loading="lazy"
           />
