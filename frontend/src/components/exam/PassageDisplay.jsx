@@ -1,9 +1,9 @@
-// components/exam/PassageDisplay.jsx
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   PassageSafeHtml,
   FootnoteSafeHtml,
+  SafeHtml,
 } from "@/components/common/SafeHtml";
 import { cn } from "@/utils/cn";
 
@@ -66,6 +66,11 @@ function FootnoteList({ footnotes }) {
   );
 }
 
+function MetaText({ html, className }) {
+  if (!html) return null;
+  return <SafeHtml html={html} inline className={className} />;
+}
+
 export function PassageDisplay({ passage, className }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -76,9 +81,9 @@ export function PassageDisplay({ passage, className }) {
   const typeKey = passage.contentType ?? "other";
   const cfg = CONTENT_TYPES[typeKey] ?? CONTENT_TYPES.other;
 
+  const hasTitle = !!passage.title;
   const hasAuthor = !!passage.author;
   const hasSource = !!passage.source;
-  const hasTitle = !!passage.title;
 
   return (
     <div
@@ -107,16 +112,23 @@ export function PassageDisplay({ passage, className }) {
             </span>
 
             {hasTitle && (
-              <p className="text-xs font-bold text-warm-900 leading-snug">
-                {passage.title}
-              </p>
+              <MetaText
+                html={passage.title}
+                className="block text-xs font-bold text-warm-900 leading-snug"
+              />
             )}
 
             {(hasAuthor || hasSource) && (
               <p className="text-[11px] text-warm-500 leading-snug">
-                {[hasAuthor && passage.author, hasSource && passage.source]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {hasAuthor && (
+                  <MetaText html={passage.author} className="inline" />
+                )}
+                {hasAuthor && hasSource && (
+                  <span className="mx-1 opacity-50">·</span>
+                )}
+                {hasSource && (
+                  <MetaText html={passage.source} className="inline italic" />
+                )}
               </p>
             )}
           </div>
@@ -161,7 +173,6 @@ export function PassageDisplay({ passage, className }) {
                 typeKey === "article" && "passage-article",
               )}
             />
-
             <FootnoteList footnotes={passage.footnotes} />
           </div>
         </div>
