@@ -5,25 +5,32 @@ import { QuestionReview } from "@/components/results/QuestionReview";
 import { cn } from "@/utils/cn";
 
 function SectionProgressBar({ pct }) {
-  if (pct === null) return <div className="h-1 bg-warm-100 rounded-full" />;
-
   const barColor =
-    pct >= 75 ? "bg-green-500" : pct >= 50 ? "bg-amber-400" : "bg-red-400";
+    pct === null
+      ? ""
+      : pct >= 75
+        ? "bg-green-500"
+        : pct >= 50
+          ? "bg-amber-400"
+          : "bg-red-400";
 
   return (
     <div className="h-1 bg-warm-200 rounded-full overflow-hidden">
-      <motion.div
-        className={cn("h-full rounded-full", barColor)}
-        initial={{ width: 0 }}
-        animate={{ width: `${pct}%` }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-      />
+      {pct !== null && (
+        <motion.div
+          className={cn("h-full rounded-full", barColor)}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        />
+      )}
     </div>
   );
 }
 
 function SectionScore({ correct, total, pct }) {
-  if (pct === null) return null;
+  if (pct === null)
+    return <span className="text-[10px] text-warm-400">{total} pit.</span>;
 
   const textColor =
     pct >= 75
@@ -69,9 +76,12 @@ export function SectionReview({
   const filtered = useMemo(() => {
     switch (filter) {
       case "wrong":
-        return allScoreable.filter(
-          (q) => answers[q.id] && !answerKey?.[q.id]?.isCorrect,
-        );
+        return allScoreable.filter((q) => {
+          if (!answers[q.id]) return false;
+          const info = answerKey?.[q.id];
+          if (!info?.correctOption) return false;
+          return answers[q.id] !== info.correctOption;
+        });
       case "skipped":
         return allScoreable.filter((q) => !answers[q.id]);
       case "flagged":
@@ -85,7 +95,10 @@ export function SectionReview({
 
   const correctInSection = loadingKey
     ? null
-    : allScoreable.filter((q) => answerKey?.[q.id]?.isCorrect).length;
+    : allScoreable.filter((q) => {
+        const info = answerKey?.[q.id];
+        return info?.correctOption && answers[q.id] === info.correctOption;
+      }).length;
 
   const pctSection =
     !loadingKey && correctInSection !== null && allScoreable.length > 0
@@ -93,14 +106,13 @@ export function SectionReview({
       : null;
 
   return (
-    <div className="mb-2.5">
+    <div className="mb-2">
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "w-full flex items-center gap-3 px-4 py-3",
-          "bg-warm-50 hover:bg-warm-100 border border-warm-200",
-          open ? "rounded-t-xl border-b-transparent" : "rounded-xl",
-          "transition-colors text-left",
+          "w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3",
+          "bg-warm-50 hover:bg-warm-100 border border-warm-200 transition-colors text-left",
+          open ? "rounded-t-xl border-b-0" : "rounded-xl",
         )}
         aria-expanded={open}
       >
@@ -117,8 +129,7 @@ export function SectionReview({
           </div>
           <SectionProgressBar pct={pctSection} />
         </div>
-
-        <div className="flex-shrink-0 text-warm-400">
+        <div className="flex-shrink-0 text-warm-400 ml-1">
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </div>
       </button>
@@ -130,10 +141,7 @@ export function SectionReview({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
-            className={cn(
-              "overflow-hidden border border-t-0 border-warm-200 rounded-b-xl",
-              "bg-white px-3 pt-2 pb-3 space-y-2",
-            )}
+            className="overflow-hidden border border-t-0 border-warm-200 rounded-b-xl bg-white px-2.5 sm:px-3 pt-2 pb-2.5 space-y-1.5"
           >
             {filtered.map((q, idx) => (
               <QuestionReview
