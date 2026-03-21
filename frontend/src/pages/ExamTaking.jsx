@@ -64,8 +64,7 @@ function GlobalAudioBar({ audio }) {
 
   const track = audio.currentTrack;
   const isIntro = track?.type === "intro";
-  const { isDone, isPlaying, hasStarted, hasBlockedAutoplay, manualStart } =
-    audio;
+  const { isDone, isPlaying, hasBlockedAutoplay, manualStart } = audio;
 
   if (audio.hasError) {
     return (
@@ -114,7 +113,6 @@ function GlobalAudioBar({ audio }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      {/* Track skip warning */}
       {audio.trackSkipWarning && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
           <AlertCircle size={12} className="text-amber-500 flex-shrink-0" />
@@ -131,7 +129,6 @@ function GlobalAudioBar({ audio }) {
           isIntro ? "bg-amber-50 border-amber-200" : "bg-sky-50 border-sky-200",
         )}
       >
-        {/* RAF-only progress bar */}
         <div className={cn("h-1", isIntro ? "bg-amber-100" : "bg-sky-100")}>
           <div
             ref={audio.progressBarRef}
@@ -194,7 +191,7 @@ function GlobalAudioBar({ audio }) {
           )}
           {!audio.isLoadingTrack &&
             !isIntro &&
-            hasStarted &&
+            audio.hasStarted &&
             !isPlaying &&
             !isDone &&
             !hasBlockedAutoplay && (
@@ -577,8 +574,6 @@ function MobileNavDrawer({
                   onGoTo(i);
                   onClose();
                 }}
-                onSubmit={onSubmit}
-                answeredCount={answeredCount}
               />
             </div>
             <div className="p-4 border-t border-warm-200">
@@ -912,31 +907,33 @@ export function QuizPage() {
               </div>
             )}
 
-            {/* Desna kolona: pitanje */}
-            <div className="flex-1 min-w-0 flex flex-col gap-4">
-              <AnimatePresence custom={direction} mode="wait">
-                <motion.div
-                  key={current?.id}
-                  custom={direction}
-                  variants={slideVariants}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{ duration: 0.16, ease: "easeInOut" }}
-                >
-                  <QuestionDisplay
-                    question={current}
-                    selectedAnswer={answers[current?.id] ?? null}
-                    isFlagged={isCurrentFlagged}
-                    onAnswer={handleAnswer}
-                    onFlag={handleToggleFlag}
-                    index={currentIndex}
-                    isPaused={isPaused}
-                  />
-                </motion.div>
-              </AnimatePresence>
+            <div className="flex-1 min-w-0 flex flex-col">
+              <div className="flex-1 lg:overflow-y-auto lg:max-h-[calc(100dvh-14rem)] lg:pr-0.5">
+                <AnimatePresence custom={direction} mode="wait">
+                  <motion.div
+                    key={current?.id}
+                    custom={direction}
+                    variants={slideVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    transition={{ duration: 0.16, ease: "easeInOut" }}
+                  >
+                    <QuestionDisplay
+                      question={current}
+                      selectedAnswer={answers[current?.id] ?? null}
+                      isFlagged={isCurrentFlagged}
+                      onAnswer={handleAnswer}
+                      onFlag={handleToggleFlag}
+                      index={currentIndex}
+                      isPaused={isPaused}
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              </div>
 
-              <div className="hidden lg:flex items-center justify-between gap-3 mt-auto pt-1">
+              {/* Desktop prev/next — uvijek na istoj udaljenosti ispod pitanja */}
+              <div className="hidden lg:flex items-center justify-between gap-3 mt-4 pt-4 border-t border-warm-200 flex-shrink-0">
                 <Button
                   variant="secondary"
                   leftIcon={ArrowLeft}
@@ -969,21 +966,22 @@ export function QuizPage() {
               </div>
             </div>
 
-            {/* Nav sidebar — samo desktop */}
             <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
-              <QuestionNav
-                questions={questions}
-                answers={answers}
-                flagged={flagged}
-                currentIndex={currentIndex}
-                onGoTo={handleGoTo}
-                onSubmit={() => setShowSubmitModal(true)}
-                answeredCount={answeredCount}
-              />
+              {/* sticky wrapper — nav ostaje vidljiv pri skrollu */}
+              <div className="sticky top-[4.5rem]">
+                <QuestionNav
+                  questions={questions}
+                  answers={answers}
+                  flagged={flagged}
+                  currentIndex={currentIndex}
+                  onGoTo={handleGoTo}
+                />
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Mobile bottom nav bar */}
         {!isPaused && (
           <MobileBottomBar
             currentIndex={currentIndex}
