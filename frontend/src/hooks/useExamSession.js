@@ -1,4 +1,3 @@
-// hooks/useExamSession.js
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useExamStore } from "@/store/examStore";
@@ -8,25 +7,14 @@ import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { useTabVisibility } from "@/hooks/useTabVisibility";
 import { useImagePreload } from "@/hooks/useImagePreload";
 import { draftStorage } from "@/utils/storage";
+import { debounce } from "@/utils/helpers";
 import { toast } from "@/store/toastStore";
 import { attemptApi } from "@/api/attemptApi";
 import { useExamInit } from "@/hooks/useExamInit";
 import { useExamSubmit } from "@/hooks/useExamSubmit";
 import { useSessionLock } from "@/hooks/useSessionLock";
 
-function debounce(fn, ms) {
-  let id;
-  const d = (...args) => {
-    clearTimeout(id);
-    id = setTimeout(() => fn(...args), ms);
-  };
-  d.flush = (...args) => {
-    clearTimeout(id);
-    fn(...args);
-  };
-  d.cancel = () => clearTimeout(id);
-  return d;
-}
+const POLL_MAX_MS = 6_000;
 
 export function useExamSession(examId) {
   const {
@@ -142,7 +130,10 @@ export function useExamSession(examId) {
   const init = useExamInit(examId, { enabled: initEnabled });
 
   const timerAppliedRef = useRef(false);
-  const POLL_MAX_MS = 6000;
+
+  useEffect(() => {
+    timerAppliedRef.current = false;
+  }, [examId]);
 
   const isPausedRef = useRef(isPaused);
   useEffect(() => {
@@ -206,16 +197,18 @@ export function useExamSession(examId) {
       if (tryApply()) clearInterval(id);
     }, 100);
     return () => clearInterval(id);
-  }, [durationSeconds, init.timerSyncRef, onResumeTimer]);
+  }, [durationSeconds, init.timerSyncRef, onResumeTimer, examId]); // P2-3: examId dodan
 
   const debouncedSaveDraftRef = useRef(null);
   if (!debouncedSaveDraftRef.current) {
     debouncedSaveDraftRef.current = debounce((nextAnswers) => {
+      const currentExamId = useExamStore.getState().examId;
+      if (!currentExamId) return;
       const aid =
         useExamStore.getState().attemptId ??
-        draftStorage.load(examId)?.attemptId ??
+        draftStorage.load(currentExamId)?.attemptId ??
         null;
-      draftStorage.save(examId, nextAnswers, aid);
+      draftStorage.save(currentExamId, nextAnswers, aid);
     }, 750);
   }
   useEffect(() => () => debouncedSaveDraftRef.current?.cancel(), []);
@@ -298,7 +291,6 @@ export function useExamSession(examId) {
         });
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

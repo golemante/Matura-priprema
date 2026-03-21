@@ -1,4 +1,3 @@
-// hooks/useSessionLock.js
 import { useState, useEffect, useRef, useCallback } from "react";
 
 const LOCK_PREFIX = "matura_session_lock_";
@@ -37,9 +36,7 @@ function clearLock(examId, tabId) {
     if (existing?.tabId === tabId) {
       localStorage.removeItem(LOCK_PREFIX + examId);
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 export function useSessionLock(examId) {
@@ -160,7 +157,6 @@ export function useSessionLock(examId) {
       channelRef.current?.close();
       channelRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId]);
 
   return { isBlockedByOtherTab, isCheckingLock };

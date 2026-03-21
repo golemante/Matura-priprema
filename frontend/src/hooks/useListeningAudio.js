@@ -1,4 +1,3 @@
-// hooks/useListeningAudio.js
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { audioProgressStorage } from "@/utils/storage";
 import { formatTime } from "@/utils/formatters";
@@ -80,6 +79,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
   const iosWatchdogRef = useRef(null);
   const pendingPlayHandlerRef = useRef(null);
   const pendingTimeoutRef = useRef(null);
+
+  const playTriggeredRef = useRef(false);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -292,6 +293,33 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     }
   }, [playTrackAtIndex]);
 
+  const triggerPlay = useCallback(() => {
+    const audio = audioRef.current;
+    if (
+      !audio ||
+      isDoneRef.current ||
+      hasErrorRef.current ||
+      isPausedRef.current
+    )
+      return;
+    if (!audio.src || audio.src === window.location.href) return;
+    if (!audio.paused) return;
+
+    playTriggeredRef.current = true;
+    setHasBlockedAutoplay(false);
+
+    audio.play().catch((err) => {
+      playTriggeredRef.current = false;
+      if (err.name !== "AbortError") {
+        setHasBlockedAutoplay(true);
+      }
+    });
+  }, []);
+
+  const triggerPause = useCallback(() => {
+    audioRef.current?.pause();
+  }, []);
+
   useEffect(() => {
     if (!hasAudio) return;
     if (initDoneRef.current === examId) return;
@@ -332,6 +360,11 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     if (isPaused) {
       audio?.pause();
     } else {
+      if (playTriggeredRef.current) {
+        playTriggeredRef.current = false;
+        return;
+      }
+
       const canAttemptResume =
         hasAudioRef.current &&
         !isDoneRef.current &&
@@ -532,6 +565,8 @@ export function useListeningAudio(examId, orderedPassages, isPaused) {
     trackSkipWarning,
     manualStart,
     stopAudio,
+    triggerPlay,
+    triggerPause,
     currentTime,
     duration,
     formattedTime: formatTime(currentTime),

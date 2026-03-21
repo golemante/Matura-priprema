@@ -21,8 +21,6 @@ export const shuffleArray = (arr) => {
 export const truncate = (str, n) =>
   str.length > n ? `${str.slice(0, n)}...` : str;
 
-// ── Grupiraj pitanja po sekcijama ─────────────────────────────────────────────
-// Vraća { "I. Čitanje": [q, q, ...], "II. Književnost": [...], ... }
 export const groupQuestionsBySection = (questions) =>
   questions.reduce((acc, q) => {
     const key = q.sectionLabel ?? "Ostalo";
@@ -31,11 +29,23 @@ export const groupQuestionsBySection = (questions) =>
     return acc;
   }, {});
 
-// ── Broji odgovorena pitanja (ignoriraj fill_blank_mc parent) ─────────────────
 export const countAnswered = (answers, questions) =>
   questions.filter((q) => q.questionType !== "fill_blank_mc" && answers[q.id])
     .length;
 
-// ── Broji scoreabilna pitanja (bez fill_blank_mc parent) ─────────────────────
 export const countScoreable = (questions) =>
   questions.filter((q) => q.questionType !== "fill_blank_mc").length;
+
+export function debounce(fn, ms) {
+  let id;
+  const d = (...args) => {
+    clearTimeout(id);
+    id = setTimeout(() => fn(...args), ms);
+  };
+  d.flush = (...args) => {
+    clearTimeout(id);
+    fn(...args);
+  };
+  d.cancel = () => clearTimeout(id);
+  return d;
+}

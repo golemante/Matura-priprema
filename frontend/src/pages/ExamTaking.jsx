@@ -109,11 +109,16 @@ export function QuizPage() {
   }, [questions, passages]);
 
   const audio = useListeningAudio(examId, orderedAudioPassages, isPaused);
+
   const audioStateRef = useRef(audio);
   audioStateRef.current = audio;
 
   const wrappedHandlePause = useCallback(() => handlePause(), [handlePause]);
-  const wrappedHandleResume = useCallback(() => handleResume(), [handleResume]);
+
+  const wrappedHandleResume = useCallback(() => {
+    audioStateRef.current.triggerPlay?.();
+    handleResume();
+  }, [handleResume]);
 
   const handleSubmit = useCallback(() => {
     const a = audioStateRef.current;
@@ -359,7 +364,7 @@ export function QuizPage() {
           {isPaused && (
             <PausedOverlay
               key="paused-overlay"
-              onResume={handleResume}
+              onResume={wrappedHandleResume}
               isSyncing={isSyncing}
             />
           )}

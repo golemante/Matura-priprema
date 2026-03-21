@@ -1,5 +1,4 @@
-// hooks/useExamSubmit.js
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useShallow } from "zustand/react/shallow";
 import { useExamStore } from "@/store/examStore";
@@ -39,8 +38,14 @@ export function useExamSubmit(
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   const pausePromiseRef = useRef(null);
-
   const pauseInFlightRef = useRef(false);
+
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handlePause = useCallback(async () => {
     if (isPaused || isPauseSyncing) return;
@@ -61,14 +66,14 @@ export function useExamSubmit(
       const p = attemptApi
         .pause(aid, elapsed, currentAnswers)
         .catch((err) => {
-          console.warn("[handlePause] DB sync failed:", err);
+          console.warn("[handlePause] DB sync pao:", err);
           toast.warning(
             "Pauziranje nije sinkronizirano s poslužiteljem. Odgovori su lokalno sačuvani.",
           );
         })
         .finally(() => {
           pauseInFlightRef.current = false;
-          setIsPauseSyncing(false);
+          if (isMountedRef.current) setIsPauseSyncing(false);
           if (pausePromiseRef.current === p) {
             pausePromiseRef.current = "done";
           }
@@ -98,9 +103,7 @@ export function useExamSubmit(
     if (pending && pending !== "done") {
       try {
         await pending;
-      } catch {
-        // pause pao — resume_attempt prihvaća i in_progress status
-      }
+      } catch {}
     }
     pausePromiseRef.current = null;
 
@@ -129,7 +132,7 @@ export function useExamSubmit(
         }
       })
       .catch((err) => {
-        console.warn("[handleResume] DB sync failed:", err);
+        console.warn("[handleResume] DB sync pao:", err);
         toast.warning(
           "Nastavak nije sinkroniziran s poslužiteljem. Timer može biti minimalno netočan.",
         );
@@ -146,9 +149,7 @@ export function useExamSubmit(
     if (pending && pending !== "done") {
       try {
         await pending;
-      } catch {
-        // pause pao — finish_attempt prihvaća i 'in_progress' i 'paused'
-      }
+      } catch {}
     }
     pausePromiseRef.current = null;
 
@@ -159,9 +160,7 @@ export function useExamSubmit(
     if (creationRef && creationRef !== "done") {
       try {
         await creationRef;
-      } catch {
-        // nastavi — pokušat ćemo last-chance create ispod
-      }
+      } catch {}
     }
 
     let aid = attemptIdRef.current;
@@ -188,7 +187,7 @@ export function useExamSubmit(
     }
 
     if (!aid) {
-      setIsSubmitting(false);
+      if (isMountedRef.current) setIsSubmitting(false);
       saveDraft?.(currentAnswers, { immediate: true });
       toast.error(
         "Predaja nije moguća — problem s vezom. Odgovori su sačuvani lokalno. Provjeri internet i pokušaj ponovo.",
@@ -230,7 +229,7 @@ export function useExamSubmit(
         );
       }
     } finally {
-      setIsSubmitting(false);
+      if (isMountedRef.current) setIsSubmitting(false);
     }
   }, [
     isSubmitting,

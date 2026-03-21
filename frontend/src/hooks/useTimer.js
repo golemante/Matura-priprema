@@ -1,12 +1,7 @@
-// hooks/useTimer.js
 import { useState, useEffect, useCallback, useRef } from "react";
 
 const DEFAULT_WARNING_AT = 600;
 
-/**
- * @param {number|null} initialSeconds
- * @param {{ onExpire?: () => void, onWarning?: () => void, warningAt?: number }} options
- */
 export function useTimer(initialSeconds, options = {}) {
   const { onExpire, onWarning, warningAt = DEFAULT_WARNING_AT } = options;
 
