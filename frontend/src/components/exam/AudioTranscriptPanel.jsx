@@ -1,4 +1,3 @@
-// components/exam/AudioTranscriptPanel.jsx
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, FileText } from "lucide-react";

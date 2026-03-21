@@ -1,8 +1,13 @@
 import { useMemo } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { sanitizeInline, containsHtml } from "@/utils/sanitize";
 import { cn } from "@/utils/cn";
+import {
+  sanitizeInline,
+  sanitizePassage,
+  sanitizeFootnote,
+  containsHtml,
+} from "@/utils/sanitize";
 
 const LATEX_REGEX = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g;
 
@@ -19,28 +24,20 @@ function replaceLatexWithHtml(text) {
         output: "html",
       });
     } catch {
-      return `<code class="katex-error">${formula}</code>`;
+      return `<code class="katex-error text-red-500 text-xs">${formula}</code>`;
     }
   });
 }
 
-export function SafeHtml({
-  html,
-  className,
-  inline = false,
-  context = "inline",
-}) {
+export function SafeHtml({ html, className, inline = false }) {
   const sanitized = useMemo(() => {
     if (!html || typeof html !== "string") return "";
 
-    if (!containsHtml(html) && !html.includes("$")) {
-      return null;
-    }
+    if (!containsHtml(html) && !html.includes("$")) return null;
 
     const withKatex = replaceLatexWithHtml(html);
-
     return sanitizeInline(withKatex);
-  }, [html, context]);
+  }, [html]);
 
   const Tag = inline ? "span" : "div";
 
@@ -56,8 +53,6 @@ export function SafeHtml({
   );
 }
 
-import { sanitizePassage } from "@/utils/sanitize";
-
 export function PassageSafeHtml({ html, className }) {
   const sanitized = useMemo(() => {
     if (!html) return "";
@@ -72,8 +67,6 @@ export function PassageSafeHtml({ html, className }) {
     />
   );
 }
-
-import { sanitizeFootnote } from "@/utils/sanitize";
 
 export function FootnoteSafeHtml({ html, className }) {
   const sanitized = useMemo(() => {

@@ -6,7 +6,9 @@ import { MathText } from "@/components/math/MathRenderer";
 import { cn } from "@/utils/cn";
 
 function OptionText({ text, selected }) {
-  const isPureMath = text?.trim().startsWith("$") && !text.includes("<");
+  if (!text) return null;
+
+  const isPureMath = text.trim().startsWith("$") && !text.includes("<");
 
   const cls = cn(
     "text-sm flex-1 text-left leading-snug",
@@ -72,9 +74,7 @@ function OptionButton({ option, selected, onSelect, disabled }) {
           )}
         </div>
 
-        {!hasImage && option.text && (
-          <OptionText text={option.text} selected={selected} />
-        )}
+        {!hasImage && <OptionText text={option.text} selected={selected} />}
       </div>
 
       {hasImage && (
@@ -146,7 +146,7 @@ export function QuestionDisplay({
             )}
             {question.points > 1 && (
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-primary-50 text-primary-600">
-                {question.points} boda
+                {question.points} {question.points === 1 ? "bod" : "boda"}
               </span>
             )}
           </div>

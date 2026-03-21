@@ -1,4 +1,3 @@
-// components/results/QuestionReview.jsx
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -10,7 +9,18 @@ import {
   Lightbulb,
 } from "lucide-react";
 import { SafeHtml } from "@/components/common/SafeHtml";
+import { MathText } from "@/components/math/MathRenderer";
 import { cn } from "@/utils/cn";
+
+function OptionText({ text, className }) {
+  if (!text) return null;
+  const isPureMath = text.trim().startsWith("$") && !text.includes("<");
+  return isPureMath ? (
+    <MathText text={text} className={className} />
+  ) : (
+    <SafeHtml html={text} inline className={className} />
+  );
+}
 
 function OptionSkeleton({ count = 4 }) {
   return (
@@ -24,13 +34,7 @@ function OptionSkeleton({ count = 4 }) {
           <div
             className={cn(
               "h-3 rounded bg-warm-200",
-              i === 0
-                ? "w-3/5"
-                : i === 1
-                  ? "w-2/3"
-                  : i === 2
-                    ? "w-1/2"
-                    : "w-4/5",
+              ["w-3/5", "w-2/3", "w-1/2", "w-4/5"][i % 4],
             )}
           />
         </div>
@@ -91,7 +95,6 @@ export function QuestionReview({
         borderCls,
       )}
     >
-      {/* ── Header (uvijek vidljiv) ─────────────────────────────────────────── */}
       <button
         onClick={() => setExpanded((e) => !e)}
         className="w-full flex items-start gap-3 px-4 py-3.5 text-left hover:bg-black/[0.02] transition-colors"
@@ -114,7 +117,6 @@ export function QuestionReview({
           />
         </div>
 
-        {/* Odabrani / točni badge */}
         <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
           {chosenLetter && (
             <span
@@ -143,7 +145,6 @@ export function QuestionReview({
         </div>
       </button>
 
-      {/* ── Expanded detalji ───────────────────────────────────────────────── */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
@@ -154,7 +155,6 @@ export function QuestionReview({
             className="overflow-hidden"
           >
             <div className="px-4 pb-4 space-y-3 border-t border-warm-100 pt-3">
-              {/* Passage badge */}
               {passage && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
                   <BookOpen
@@ -167,7 +167,6 @@ export function QuestionReview({
                 </div>
               )}
 
-              {/* Opcije ili skeleton */}
               {loadingKey ? (
                 <OptionSkeleton count={question.options?.length ?? 4} />
               ) : (
@@ -177,6 +176,7 @@ export function QuestionReview({
                       const letter = opt.letter ?? opt.id;
                       const isCorrectOpt = letter === correctLetter;
                       const isUserPick = letter === chosenLetter;
+                      const hasImage = !!opt.image_url;
 
                       return (
                         <div
@@ -188,49 +188,67 @@ export function QuestionReview({
                               : isUserPick && !isCorrectOpt
                                 ? "bg-red-50 border-red-200"
                                 : "bg-white border-warm-100",
+                            hasImage && "flex-col",
                           )}
                         >
-                          {/* Letter badge */}
-                          <span
-                            className={cn(
-                              "flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center",
-                              "text-[10px] font-black border",
-                              isCorrectOpt
-                                ? "bg-green-600 text-white border-green-600"
-                                : isUserPick
-                                  ? "bg-red-400 text-white border-red-400"
-                                  : "bg-warm-100 text-warm-500 border-warm-200",
-                            )}
-                          >
-                            {letter.toUpperCase()}
-                          </span>
+                          <div className="flex items-start gap-2.5 w-full">
+                            <span
+                              className={cn(
+                                "flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center",
+                                "text-[10px] font-black border",
+                                isCorrectOpt
+                                  ? "bg-green-600 text-white border-green-600"
+                                  : isUserPick
+                                    ? "bg-red-400 text-white border-red-400"
+                                    : "bg-warm-100 text-warm-500 border-warm-200",
+                              )}
+                            >
+                              {letter.toUpperCase()}
+                            </span>
 
-                          {/* Option text */}
-                          <SafeHtml
-                            html={opt.text}
-                            inline
-                            className={cn(
-                              "flex-1 leading-snug",
-                              isCorrectOpt
-                                ? "text-green-900 font-medium"
-                                : isUserPick && !isCorrectOpt
-                                  ? "text-red-800 line-through opacity-75"
-                                  : "text-warm-600",
+                            {!hasImage && (
+                              <OptionText
+                                text={opt.text}
+                                className={cn(
+                                  "flex-1 leading-snug",
+                                  isCorrectOpt
+                                    ? "text-green-900 font-medium"
+                                    : isUserPick && !isCorrectOpt
+                                      ? "text-red-800 line-through opacity-75"
+                                      : "text-warm-600",
+                                )}
+                              />
                             )}
-                          />
 
-                          {/* Status ikona */}
-                          {isCorrectOpt && (
-                            <CheckCircle2
-                              size={14}
-                              className="text-green-600 flex-shrink-0 mt-0.5"
-                            />
-                          )}
-                          {isUserPick && !isCorrectOpt && (
-                            <XCircle
-                              size={14}
-                              className="text-red-400 flex-shrink-0 mt-0.5"
-                            />
+                            <div className="flex-shrink-0 ml-auto">
+                              {isCorrectOpt && (
+                                <CheckCircle2
+                                  size={14}
+                                  className="text-green-600"
+                                />
+                              )}
+                              {isUserPick && !isCorrectOpt && (
+                                <XCircle size={14} className="text-red-400" />
+                              )}
+                            </div>
+                          </div>
+
+                          {hasImage && (
+                            <div className="pl-7 w-full">
+                              <img
+                                src={opt.image_url}
+                                alt={`Opcija ${letter.toUpperCase()}`}
+                                className={cn(
+                                  "max-h-36 w-auto rounded-lg object-contain border",
+                                  isCorrectOpt
+                                    ? "border-green-300"
+                                    : isUserPick && !isCorrectOpt
+                                      ? "border-red-200 opacity-70"
+                                      : "border-warm-200",
+                                )}
+                                loading="lazy"
+                              />
+                            </div>
                           )}
                         </div>
                       );
@@ -239,7 +257,6 @@ export function QuestionReview({
                 )
               )}
 
-              {/* Objašnjenje */}
               {explanation && (
                 <div className="flex items-start gap-2.5 p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
                   <Lightbulb
