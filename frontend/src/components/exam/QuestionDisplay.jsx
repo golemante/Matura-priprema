@@ -1,4 +1,3 @@
-// components/exam/QuestionDisplay.jsx
 import { useCallback } from "react";
 import { motion } from "framer-motion";
 import { Flag, Check } from "lucide-react";
@@ -9,6 +8,8 @@ function OptionButton({ option, selected, onSelect, disabled }) {
   const handleClick = useCallback(() => {
     if (!disabled) onSelect?.(option.letter);
   }, [disabled, onSelect, option.letter]);
+
+  const hasImage = !!option.image_url;
 
   return (
     <motion.button
@@ -29,40 +30,59 @@ function OptionButton({ option, selected, onSelect, disabled }) {
                 "hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)]",
               ]
             : "border-warm-200 bg-warm-50 opacity-60",
+        hasImage && "flex-col items-start gap-2",
       )}
     >
-      <div
-        className={cn(
-          "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-          "text-xs font-bold transition-all duration-150 border-2",
-          selected
-            ? "bg-primary-600 border-primary-600 text-white"
-            : !disabled
-              ? [
-                  "border-warm-300 text-warm-600",
-                  "group-hover:border-primary-400 group-hover:text-primary-600",
-                ]
-              : "border-warm-200 text-warm-400",
-        )}
-        aria-hidden="true"
-      >
-        {selected ? (
-          <Check size={13} strokeWidth={3} />
-        ) : (
-          option.letter.toUpperCase()
+      <div className={cn("flex items-center gap-3 w-full", hasImage && "")}>
+        <div
+          className={cn(
+            "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
+            "text-xs font-bold transition-all duration-150 border-2",
+            selected
+              ? "bg-primary-600 border-primary-600 text-white"
+              : !disabled
+                ? [
+                    "border-warm-300 text-warm-600",
+                    "group-hover:border-primary-400 group-hover:text-primary-600",
+                  ]
+                : "border-warm-200 text-warm-400",
+          )}
+          aria-hidden="true"
+        >
+          {selected ? (
+            <Check size={13} strokeWidth={3} />
+          ) : (
+            option.letter.toUpperCase()
+          )}
+        </div>
+
+        {!hasImage && (
+          <SafeHtml
+            html={option.text}
+            inline
+            className={cn(
+              "text-sm flex-1 text-left leading-snug",
+              selected
+                ? "font-semibold text-primary-900"
+                : "font-medium text-warm-800",
+            )}
+          />
         )}
       </div>
 
-      <SafeHtml
-        html={option.text}
-        inline
-        className={cn(
-          "text-sm flex-1 text-left leading-snug",
-          selected
-            ? "font-semibold text-primary-900"
-            : "font-medium text-warm-800",
-        )}
-      />
+      {hasImage && (
+        <div className="w-full pl-11">
+          <img
+            src={option.image_url}
+            alt={`Opcija ${option.letter.toUpperCase()}`}
+            className={cn(
+              "max-h-44 w-auto rounded-xl object-contain border border-warm-200",
+              selected && "border-primary-300",
+            )}
+            loading="lazy"
+          />
+        </div>
+      )}
     </motion.button>
   );
 }
@@ -72,6 +92,20 @@ function InlineTextBlock({ html }) {
   return (
     <div className="my-3 px-4 py-3 bg-warm-50 border border-warm-200 rounded-xl">
       <SafeHtml html={html} className="text-sm text-warm-700 leading-relaxed" />
+    </div>
+  );
+}
+
+function QuestionImage({ imageUrl, label }) {
+  if (!imageUrl) return null;
+  return (
+    <div className="my-4 flex justify-center">
+      <img
+        src={imageUrl}
+        alt={label ?? "Skica pitanja"}
+        className="max-w-full max-h-64 rounded-xl border border-warm-200 shadow-sm object-contain"
+        loading="eager"
+      />
     </div>
   );
 }
@@ -136,9 +170,15 @@ export function QuestionDisplay({
         <SafeHtml
           html={question.text}
           className={cn(
-            "text-warm-900 leading-relaxed mb-5",
+            "text-warm-900 leading-relaxed",
             isParent ? "text-base font-semibold" : "text-sm",
+            question.imageUrl ? "mb-2" : "mb-5",
           )}
+        />
+
+        <QuestionImage
+          imageUrl={question.imageUrl}
+          label={`Skica za pitanje ${displayLabel}`}
         />
 
         <InlineTextBlock html={question.inlineText} />
