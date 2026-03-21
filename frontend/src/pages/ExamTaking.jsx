@@ -131,19 +131,10 @@ export function QuizPage() {
   const backLink = `/predmeti/${subjectId}`;
   const examTitle = buildExamTitle(examMeta);
 
-  const hasTextPassage = useMemo(
-    () =>
-      questions.some((q) => {
-        if (!q.passageId) return false;
-        const p = passages[q.passageId];
-        return p && p.contentType !== "audio" && !!p.content;
-      }),
-    [questions, passages],
-  );
-
-  const isAudioOnly = currentPassage?.contentType === "audio";
-
-  const showPassageColumn = hasTextPassage;
+  const showPassageColumn =
+    !!currentPassage &&
+    currentPassage.contentType !== "audio" &&
+    !!currentPassage.content;
 
   const audioElement = (
     <audio
@@ -237,7 +228,6 @@ export function QuizPage() {
           onConfirm={confirmRestoreDraft}
           onDiscard={discardDraft}
         />
-
         <MobileNavDrawer
           show={mobileNavOpen}
           onClose={() => setMobileNavOpen(false)}
@@ -266,12 +256,10 @@ export function QuizPage() {
               >
                 {audio.hasAudio && <AudioBar audio={audio} />}
 
-                {currentPassage && !isAudioOnly && (
-                  <PassageDisplay
-                    passage={currentPassage}
-                    className="lg:flex-1 lg:overflow-hidden"
-                  />
-                )}
+                <PassageDisplay
+                  passage={currentPassage}
+                  className="lg:flex-1 lg:overflow-hidden"
+                />
               </div>
             )}
 
