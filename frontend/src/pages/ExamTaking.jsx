@@ -183,7 +183,6 @@ function GlobalAudioBar({ audio }) {
               pričekaj
             </span>
           )}
-
           {audio.isLoadingTrack && (
             <span className="text-[10px] text-warm-400 font-medium flex-shrink-0">
               učitava...
@@ -295,12 +294,10 @@ function ExamTopBar({
   isPaused,
   isPauseSyncing,
   isSyncing,
-  isSubmitting,
   onPause,
   onResume,
   answeredCount,
   totalVisible,
-  onSubmit,
   onOpenNav,
 }) {
   return (
@@ -429,6 +426,8 @@ function ExamEmptyState({ backLink, examMeta }) {
   );
 }
 
+// ─── SubmitModal ──────────────────────────────────────────────────────────────
+// Pozicioniran u JSX korijenu QuizPage — kao fixed overlay dobar je gdje god je.
 function SubmitModal({
   open,
   onClose,
@@ -522,6 +521,7 @@ function DraftModal({ open, onConfirm, onDiscard }) {
   );
 }
 
+// ─── MobileNavDrawer ──────────────────────────────────────────────────────────
 function MobileNavDrawer({
   show,
   onClose,
@@ -532,9 +532,13 @@ function MobileNavDrawer({
   onGoTo,
   onSubmit,
   answeredCount,
+  totalVisible,
   isSyncing,
   isSubmitting,
 }) {
+  const unanswered = totalVisible - answeredCount;
+  const allAnswered = unanswered === 0;
+
   return (
     <AnimatePresence>
       {show && (
@@ -564,6 +568,7 @@ function MobileNavDrawer({
                 <X size={16} className="text-warm-500" />
               </button>
             </div>
+
             <div className="flex-1 overflow-y-auto p-4">
               <QuestionNav
                 questions={questions}
@@ -576,7 +581,15 @@ function MobileNavDrawer({
                 }}
               />
             </div>
-            <div className="p-4 border-t border-warm-200">
+
+            {/* Submit button u draweru — odvojen od QuestionNav */}
+            <div className="p-4 border-t border-warm-200 space-y-2">
+              {!allAnswered && (
+                <p className="text-[11px] text-warm-400 text-center">
+                  {unanswered} {unanswered === 1 ? "pitanje" : "pitanja"} bez
+                  odgovora
+                </p>
+              )}
               <button
                 onClick={onSubmit}
                 disabled={isSyncing || isSubmitting}
@@ -584,7 +597,9 @@ function MobileNavDrawer({
                   "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all",
                   isSyncing || isSubmitting
                     ? "bg-warm-200 text-warm-400 cursor-not-allowed"
-                    : "bg-primary-600 text-white hover:bg-primary-700",
+                    : allAnswered
+                      ? "bg-green-600 text-white hover:bg-green-700"
+                      : "bg-warm-900 text-white hover:bg-black",
                 )}
               >
                 {isSubmitting ? (
@@ -592,13 +607,11 @@ function MobileNavDrawer({
                 ) : (
                   <Send size={15} />
                 )}
-                <span>
-                  {isSubmitting
-                    ? "Predaje se..."
-                    : isSyncing
-                      ? "Sinkronizacija..."
-                      : "Predaj ispit"}
-                </span>
+                {isSubmitting
+                  ? "Predaje se..."
+                  : isSyncing
+                    ? "Sinkronizacija..."
+                    : "Predaj ispit"}
               </button>
             </div>
           </motion.div>
@@ -608,6 +621,7 @@ function MobileNavDrawer({
   );
 }
 
+// ─── MobileBottomBar ──────────────────────────────────────────────────────────
 function MobileBottomBar({
   currentIndex,
   totalVisible,
@@ -671,6 +685,55 @@ function MobileBottomBar({
   );
 }
 
+// ─── DesktopSubmitButton ─────────────────────────────────────────────────────
+// Uvijek vidljiv na desktopu ispod QuestionNav u desnom sidebaru.
+// Mijenja boju kad su sva pitanja odgovorena.
+function DesktopSubmitButton({
+  onSubmit,
+  answeredCount,
+  totalVisible,
+  isSyncing,
+  isSubmitting,
+}) {
+  const unanswered = totalVisible - answeredCount;
+  const allAnswered = unanswered === 0;
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {!allAnswered && (
+        <p className="text-[10px] text-warm-400 text-center tabular-nums">
+          {unanswered} {unanswered === 1 ? "pitanje" : "pitanja"} bez odgovora
+        </p>
+      )}
+      <button
+        onClick={onSubmit}
+        disabled={isSyncing || isSubmitting}
+        className={cn(
+          "w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl",
+          "text-xs font-bold transition-all duration-200",
+          isSyncing || isSubmitting
+            ? "bg-warm-200 text-warm-400 cursor-not-allowed"
+            : allAnswered
+              ? "bg-green-600 text-white hover:bg-green-700 shadow-sm"
+              : "bg-warm-900 text-white hover:bg-black",
+        )}
+      >
+        {isSubmitting ? (
+          <Loader2 size={13} className="animate-spin" />
+        ) : (
+          <Send size={12} />
+        )}
+        {isSubmitting
+          ? "Predaje se..."
+          : isSyncing
+            ? "Sinkronizacija..."
+            : "Predaj ispit"}
+      </button>
+    </div>
+  );
+}
+
+// ─── QuizPage ─────────────────────────────────────────────────────────────────
 export function QuizPage() {
   const { examId } = useParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -735,17 +798,11 @@ export function QuizPage() {
   }, [questions, passages]);
 
   const audio = useListeningAudio(examId, orderedAudioPassages, isPaused);
-
   const audioStateRef = useRef(audio);
   audioStateRef.current = audio;
 
-  const wrappedHandlePause = useCallback(() => {
-    handlePause();
-  }, [handlePause]);
-
-  const wrappedHandleResume = useCallback(() => {
-    handleResume();
-  }, [handleResume]);
+  const wrappedHandlePause = useCallback(() => handlePause(), [handlePause]);
+  const wrappedHandleResume = useCallback(() => handleResume(), [handleResume]);
 
   const handleSubmit = useCallback(() => {
     const a = audioStateRef.current;
@@ -753,6 +810,11 @@ export function QuizPage() {
     a.clearProgress();
     sessionHandleSubmit();
   }, [sessionHandleSubmit]);
+
+  const openSubmitModal = useCallback(
+    () => setShowSubmitModal(true),
+    [setShowSubmitModal],
+  );
 
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
@@ -770,52 +832,42 @@ export function QuizPage() {
     />
   );
 
-  if (isCheckingLock) {
+  if (isCheckingLock)
     return (
       <>
         {audioElement}
         <ExamSkeleton showPassage={false} />
       </>
     );
-  }
-
-  if (isBlockedByOtherTab) {
+  if (isBlockedByOtherTab)
     return (
       <>
         {audioElement}
         <BlockedByTabScreen backLink={backLink} />
       </>
     );
-  }
-
-  if (fetchError) {
+  if (fetchError)
     return (
       <>
         {audioElement}
         <ExamErrorState error={fetchError} backLink={backLink} />
       </>
     );
-  }
-
-  if (isLoading || !isInitialized) {
+  if (isLoading || !isInitialized)
     return (
       <>
         {audioElement}
         <ExamSkeleton showPassage={false} />
       </>
     );
-  }
-
-  if (questions.length === 0) {
+  if (questions.length === 0)
     return (
       <>
         {audioElement}
         <ExamEmptyState backLink={backLink} examMeta={examMeta} />
       </>
     );
-  }
-
-  if (!current) {
+  if (!current)
     return (
       <>
         {audioElement}
@@ -825,7 +877,6 @@ export function QuizPage() {
         />
       </>
     );
-  }
 
   const isAudioOnly = currentPassage?.contentType === "audio";
 
@@ -841,15 +892,14 @@ export function QuizPage() {
           isPaused={isPaused}
           isPauseSyncing={isPauseSyncing}
           isSyncing={isSyncing}
-          isSubmitting={isSubmitting}
           onPause={wrappedHandlePause}
           onResume={wrappedHandleResume}
           answeredCount={answeredCount}
           totalVisible={totalVisible}
-          onSubmit={() => setShowSubmitModal(true)}
           onOpenNav={() => setMobileNavOpen(true)}
         />
 
+        {/* Modali — fixed overlay, pozicija u JSX nije bitna */}
         <SubmitModal
           open={showSubmitModal}
           onClose={() => setShowSubmitModal(false)}
@@ -864,6 +914,7 @@ export function QuizPage() {
           onConfirm={confirmRestoreDraft}
           onDiscard={discardDraft}
         />
+
         <MobileNavDrawer
           show={mobileNavOpen}
           onClose={() => setMobileNavOpen(false)}
@@ -872,15 +923,17 @@ export function QuizPage() {
           flagged={flagged}
           currentIndex={currentIndex}
           onGoTo={handleGoTo}
-          onSubmit={() => setShowSubmitModal(true)}
+          onSubmit={openSubmitModal}
           answeredCount={answeredCount}
+          totalVisible={totalVisible}
           isSyncing={isSyncing}
           isSubmitting={isSubmitting}
         />
 
+        {/* ── Glavni sadržaj ───────────────────────────────────────── */}
         <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
           <div className="flex flex-col lg:flex-row gap-5 h-full">
-            {/* Lijeva kolona: audio bar + passage */}
+            {/* Lijeva kolona: audio + passage */}
             {hasAnyPassage && (
               <div
                 className={cn(
@@ -891,7 +944,6 @@ export function QuizPage() {
                 )}
               >
                 <GlobalAudioBar audio={audio} />
-
                 {currentPassage && !isAudioOnly ? (
                   <PassageDisplay
                     passage={currentPassage}
@@ -907,6 +959,7 @@ export function QuizPage() {
               </div>
             )}
 
+            {/* Srednja kolona: pitanje + desktop prev/next */}
             <div className="flex-1 min-w-0 flex flex-col">
               <div className="flex-1 lg:overflow-y-auto lg:max-h-[calc(100dvh-14rem)] lg:pr-0.5">
                 <AnimatePresence custom={direction} mode="wait">
@@ -932,7 +985,7 @@ export function QuizPage() {
                 </AnimatePresence>
               </div>
 
-              {/* Desktop prev/next — uvijek na istoj udaljenosti ispod pitanja */}
+              {/* Desktop prev/next — uvijek na istoj udaljenosti */}
               <div className="hidden lg:flex items-center justify-between gap-3 mt-4 pt-4 border-t border-warm-200 flex-shrink-0">
                 <Button
                   variant="secondary"
@@ -942,32 +995,25 @@ export function QuizPage() {
                 >
                   Prethodno
                 </Button>
-                <div className="flex items-center gap-2.5">
-                  {isLastVisible ? (
-                    <Button
-                      variant="primary"
-                      leftIcon={isSubmitting ? undefined : Send}
-                      onClick={() => setShowSubmitModal(true)}
-                      disabled={isSyncing}
-                      loading={isSubmitting}
-                    >
-                      {isSubmitting ? "Predaje se..." : "Predaj ispit"}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="primary"
-                      rightIcon={ArrowRight}
-                      onClick={handleNext}
-                    >
-                      Sljedeće
-                    </Button>
-                  )}
-                </div>
+                <Button
+                  variant="primary"
+                  rightIcon={isLastVisible ? undefined : ArrowRight}
+                  leftIcon={isLastVisible && !isSubmitting ? Send : undefined}
+                  onClick={isLastVisible ? openSubmitModal : handleNext}
+                  disabled={isSyncing}
+                  loading={isLastVisible && isSubmitting}
+                >
+                  {isLastVisible
+                    ? isSubmitting
+                      ? "Predaje se..."
+                      : "Predaj ispit"
+                    : "Sljedeće"}
+                </Button>
               </div>
             </div>
 
+            {/* Desna kolona: QuestionNav + submit button (samo desktop) */}
             <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
-              {/* sticky wrapper — nav ostaje vidljiv pri skrollu */}
               <div className="sticky top-[4.5rem]">
                 <QuestionNav
                   questions={questions}
@@ -976,12 +1022,20 @@ export function QuizPage() {
                   currentIndex={currentIndex}
                   onGoTo={handleGoTo}
                 />
+                {/* Submit button ispod nava — uvijek dostupan na desktopu */}
+                <DesktopSubmitButton
+                  onSubmit={openSubmitModal}
+                  answeredCount={answeredCount}
+                  totalVisible={totalVisible}
+                  isSyncing={isSyncing}
+                  isSubmitting={isSubmitting}
+                />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Mobile bottom nav bar */}
+        {/* Mobile bottom bar */}
         {!isPaused && (
           <MobileBottomBar
             currentIndex={currentIndex}
@@ -992,7 +1046,7 @@ export function QuizPage() {
             onNext={handleNext}
             onOpenNav={() => setMobileNavOpen(true)}
             answeredCount={answeredCount}
-            onSubmit={() => setShowSubmitModal(true)}
+            onSubmit={openSubmitModal}
           />
         )}
 

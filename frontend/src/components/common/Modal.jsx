@@ -1,6 +1,4 @@
-// components/common/Modal.jsx
 import { useEffect, useRef } from "react";
-// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -22,7 +20,6 @@ export function Modal({
 }) {
   const ref = useRef(null);
 
-  // Escape key
   useEffect(() => {
     if (!open) return;
     const fn = (e) => e.key === "Escape" && onClose?.();
@@ -30,7 +27,6 @@ export function Modal({
     return () => document.removeEventListener("keydown", fn);
   }, [open, onClose]);
 
-  // Scroll lock
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => {

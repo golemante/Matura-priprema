@@ -37,8 +37,8 @@ function OptionButton({ option, selected, onSelect, disabled }) {
       onClick={handleClick}
       disabled={disabled}
       className={cn(
-        "w-full flex gap-3 px-4 py-3.5 rounded-xl border-2 transition-all duration-150 text-left group",
-        "items-start",
+        "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2",
+        "transition-all duration-150 text-left group",
         selected
           ? [
               "border-primary-500 bg-primary-50",
@@ -54,17 +54,11 @@ function OptionButton({ option, selected, onSelect, disabled }) {
         hasImage && "flex-col items-start gap-2",
       )}
     >
-      <div
-        className={cn(
-          "flex items-start gap-3 w-full",
-          hasImage && "items-center",
-        )}
-      >
+      <div className="flex items-center gap-3 w-full">
         <div
           className={cn(
             "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
             "text-xs font-bold transition-all duration-150 border-2",
-            "mt-0.5",
             selected
               ? "bg-primary-600 border-primary-600 text-white"
               : !disabled
