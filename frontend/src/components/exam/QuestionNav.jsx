@@ -2,6 +2,13 @@ import { motion } from "framer-motion";
 import { Flag } from "lucide-react";
 import { cn } from "@/utils/cn";
 
+function labelFontSize(label) {
+  const len = String(label).length;
+  if (len <= 2) return "text-[12px]";
+  if (len <= 4) return "text-[10px]";
+  return "text-[9px]";
+}
+
 function NavButton({
   question,
   idx,
@@ -18,16 +25,18 @@ function NavButton({
 
   return (
     <motion.button
-      whileTap={{ scale: 0.85 }}
+      whileTap={{ scale: 0.88 }}
       onClick={() => onGoTo(idx)}
       aria-current={isCurrent ? "step" : undefined}
       aria-label={`Pitanje ${label}${isAnswered ? ", odgovoreno" : ""}${isFlagged ? ", označeno" : ""}`}
       title={`Pitanje ${label}`}
       className={cn(
-        "w-full aspect-square rounded-lg text-[11px] font-bold transition-all duration-100 relative",
-        "min-h-[28px]",
+        "w-full min-h-[30px] rounded-lg font-bold transition-all duration-100",
+        "relative inline-flex items-center justify-center leading-none",
+        "px-0.5 py-1",
+        labelFontSize(label),
         isCurrent
-          ? "bg-primary-600 text-white shadow-sm ring-2 ring-primary-300 ring-offset-1"
+          ? "bg-primary-600 text-white shadow-[0_2px_8px_rgba(45,84,232,0.40)]"
           : isAnswered && isFlagged
             ? "bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200"
             : isAnswered
@@ -40,7 +49,7 @@ function NavButton({
       {label}
       {isFlagged && !isCurrent && (
         <span
-          className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 border-2 border-white"
+          className="absolute -top-[3px] -right-[3px] w-[7px] h-[7px] rounded-full bg-amber-500 border border-white"
           aria-hidden="true"
         />
       )}
@@ -52,7 +61,7 @@ const LEGEND = [
   { cls: "bg-primary-600", label: "Trenutno" },
   { cls: "bg-primary-100 border border-primary-200", label: "Odgovoreno" },
   { cls: "bg-amber-50 border border-amber-300", label: "Označeno" },
-  { cls: "bg-warm-50 border border-warm-200", label: "Nije odgovoreno" },
+  { cls: "bg-warm-50 border border-warm-200", label: "Nije odg." },
 ];
 
 export function QuestionNav({
@@ -68,8 +77,16 @@ export function QuestionNav({
 
   const flaggedCount = flagged?.size ?? 0;
 
-  const gridCols =
-    visibleCount <= 25
+  const hasLongLabels = questions.some(
+    (q) =>
+      q.questionType !== "fill_blank_mc" && (q.positionLabel ?? "").length > 3,
+  );
+
+  const gridCols = hasLongLabels
+    ? visibleCount <= 30
+      ? "grid-cols-4"
+      : "grid-cols-5"
+    : visibleCount <= 25
       ? "grid-cols-5"
       : visibleCount <= 40
         ? "grid-cols-6"
@@ -91,7 +108,7 @@ export function QuestionNav({
 
       <div
         className={cn(
-          "grid gap-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-warm-300 scrollbar-track-transparent",
+          "grid gap-1 overflow-y-auto scrollbar-thin scrollbar-thumb-warm-300 scrollbar-track-transparent",
           gridCols,
         )}
         style={{ maxHeight: "min(55vh, 400px)" }}
