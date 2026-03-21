@@ -16,7 +16,6 @@ function TopBarSkeleton() {
           <div className="flex-1 sm:hidden" />
           <Bone className="h-8 w-24 rounded-lg flex-shrink-0" />
           <Bone className="h-8 w-20 rounded-lg flex-shrink-0" />
-          <Bone className="h-8 w-24 rounded-lg flex-shrink-0 hidden lg:block" />
           <Bone className="h-8 w-8 rounded-lg flex-shrink-0 lg:hidden" />
         </div>
       </div>
@@ -103,27 +102,19 @@ function PassageSkeleton() {
 
 function NavSkeleton() {
   return (
-    <div className="bg-white rounded-2xl border border-warm-200 shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-4 sticky top-20 flex flex-col gap-3.5">
+    <div className="bg-white rounded-2xl border border-warm-200 shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <Bone className="h-3.5 w-20" />
         <Bone className="h-3.5 w-8" />
       </div>
 
-      <div>
-        <div className="flex justify-between mb-1.5">
-          <Bone className="h-3 w-16" />
-          <Bone className="h-3 w-8" />
-        </div>
-        <Bone className="h-1.5 w-full rounded-full" />
-      </div>
-
-      <div className="grid grid-cols-5 gap-1.5">
+      <div className="grid grid-cols-5 gap-1">
         {Array.from({ length: 25 }).map((_, i) => (
-          <Bone key={i} className="aspect-square rounded-lg" />
+          <Bone key={i} className="h-[30px] rounded-lg" />
         ))}
       </div>
 
-      <div className="pt-3 border-t border-warm-100">
+      <div className="pt-2.5 border-t border-warm-100">
         <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="flex items-center gap-1.5">
@@ -133,15 +124,13 @@ function NavSkeleton() {
           ))}
         </div>
       </div>
-
-      <Bone className="h-10 w-full rounded-xl" />
     </div>
   );
 }
 
 function BottomNavSkeleton() {
   return (
-    <div className="flex items-center justify-between mt-4">
+    <div className="flex items-center justify-between mt-4 pt-4 border-t border-warm-200">
       <Bone className="h-10 w-28 rounded-xl" />
       <Bone className="h-10 w-28 rounded-xl" />
     </div>

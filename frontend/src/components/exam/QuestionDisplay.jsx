@@ -11,12 +11,14 @@ function OptionText({ text, selected }) {
   const isPureMath = text.trim().startsWith("$") && !text.includes("<");
 
   const cls = cn(
-    "text-sm flex-1 text-left leading-snug",
+    "text-sm flex-1 text-left leading-snug min-w-0",
     selected ? "font-semibold text-primary-900" : "font-medium text-warm-800",
   );
 
   return isPureMath ? (
-    <MathText text={text} className={cls} />
+    <span className="flex-1 min-w-0 overflow-x-auto">
+      <MathText text={text} className={cls} />
+    </span>
   ) : (
     <SafeHtml html={text} inline className={cls} />
   );
@@ -35,7 +37,8 @@ function OptionButton({ option, selected, onSelect, disabled }) {
       onClick={handleClick}
       disabled={disabled}
       className={cn(
-        "w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all duration-150 text-left group",
+        "w-full flex gap-3 px-4 py-3.5 rounded-xl border-2 transition-all duration-150 text-left group",
+        "items-start",
         selected
           ? [
               "border-primary-500 bg-primary-50",
@@ -51,11 +54,17 @@ function OptionButton({ option, selected, onSelect, disabled }) {
         hasImage && "flex-col items-start gap-2",
       )}
     >
-      <div className="flex items-center gap-3 w-full">
+      <div
+        className={cn(
+          "flex items-start gap-3 w-full",
+          hasImage && "items-center",
+        )}
+      >
         <div
           className={cn(
             "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
             "text-xs font-bold transition-all duration-150 border-2",
+            "mt-0.5",
             selected
               ? "bg-primary-600 border-primary-600 text-white"
               : !disabled
