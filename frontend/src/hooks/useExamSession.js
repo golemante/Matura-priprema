@@ -197,7 +197,7 @@ export function useExamSession(examId) {
       if (tryApply()) clearInterval(id);
     }, 100);
     return () => clearInterval(id);
-  }, [durationSeconds, init.timerSyncRef, onResumeTimer, examId]); // P2-3: examId dodan
+  }, [durationSeconds, init.timerSyncRef, onResumeTimer, examId]);
 
   const debouncedSaveDraftRef = useRef(null);
   if (!debouncedSaveDraftRef.current) {
@@ -398,17 +398,14 @@ export function useExamSession(examId) {
     }, {});
   }, [questions, currentIndex, isPaused, handleAnswer]);
 
-  useKeyPress(
-    {
-      ArrowRight: () => !isPaused && handleNext(),
-      ArrowLeft: () => !isPaused && handlePrev(),
-      ...optionKeyHandlers,
-      f: handleToggleFlag,
-      p: () => !submit.isSyncing && submit.handlePause(),
-      "?": () => setShowShortcutsModal(true),
-    },
-    { ignoreFormElements: true },
-  );
+  useKeyPress({
+    ArrowRight: () => !isPaused && handleNext(),
+    ArrowLeft: () => !isPaused && handlePrev(),
+    ...optionKeyHandlers,
+    f: handleToggleFlag,
+    p: () => !submit.isSyncing && submit.handlePause(),
+    "?": () => setShowShortcutsModal(true),
+  });
 
   useBeforeUnload(questions.length > 0 && !submittedAt);
   useImagePreload(questions, currentIndex, { ahead: 3 });

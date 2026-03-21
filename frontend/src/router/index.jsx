@@ -123,11 +123,11 @@ export const router = createBrowserRouter([
 
       {
         path: "rezultati/pokusaj/:attemptId",
-        element: withSuspense(<ResultsPage />),
+        element: (
+          <ProtectedRoute>{withSuspense(<ResultsPage />)}</ProtectedRoute>
+        ),
       },
 
-      // DEPRECATED: /rezultati/:examId — redirect na /rezultati
-      // Ostaje privremeno zbog backward compat, ali ne koristimo aktivno
       {
         path: "rezultati/:examId",
         element: <Navigate to="/rezultati" replace />,

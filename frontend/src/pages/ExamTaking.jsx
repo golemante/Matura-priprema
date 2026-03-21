@@ -10,6 +10,7 @@ import { QuestionNav } from "@/components/exam/QuestionNav";
 import { AudioBar } from "@/components/exam/AudioBar";
 import { ExamTopBar } from "@/components/exam/ExamTopBar";
 import { SubmitModal, DraftModal } from "@/components/exam/ExamModals";
+import { KeyboardShortcutsModal } from "@/components/exam/KeyboardShortcutsModal";
 import {
   ExamErrorState,
   ExamEmptyState,
@@ -85,6 +86,8 @@ export function QuizPage() {
     handlePause,
     handleResume,
     timer,
+    showShortcutsModal,
+    setShowShortcutsModal,
     isBlockedByOtherTab,
     isCheckingLock,
   } = useExamSession(examId);
@@ -217,6 +220,11 @@ export function QuizPage() {
           answeredCount={answeredCount}
           totalVisible={totalVisible}
           onOpenNav={() => setMobileNavOpen(true)}
+        />
+
+        <KeyboardShortcutsModal
+          open={showShortcutsModal}
+          onClose={() => setShowShortcutsModal(false)}
         />
 
         <SubmitModal
