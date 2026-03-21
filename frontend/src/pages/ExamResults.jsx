@@ -1,4 +1,3 @@
-// pages/ExamResults.jsx
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -25,8 +24,6 @@ import { usePageTitle, PAGE_TITLES } from "@/hooks/usePageTitle";
 import { AudioTranscriptPanel } from "@/components/exam/AudioTranscriptPanel";
 import { cn } from "@/utils/cn";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function useConfetti(active) {
   useEffect(() => {
     if (!active) return;
@@ -40,8 +37,6 @@ function useConfetti(active) {
     });
   }, [active]);
 }
-
-// ─── Small UI components ──────────────────────────────────────────────────────
 
 function ExamBreadcrumb({ subject, examMeta, backLink }) {
   return (
@@ -145,7 +140,6 @@ function EmptyFilter({ filter }) {
   );
 }
 
-// Info strip shown when flagged data is unavailable (results loaded from DB history)
 function FlaggedUnavailableNote() {
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-warm-50 border border-warm-200 rounded-lg text-xs text-warm-500 mb-3">
@@ -219,16 +213,13 @@ function ReviewHeader({
   );
 }
 
-// ─── Sticky bottom CTA bar ────────────────────────────────────────────────────
 function StickyBottomBar({ onBack, onRetry, onNewExam, canRetry }) {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 pointer-events-none">
-      {/* Fade gradient */}
       <div className="h-8 bg-gradient-to-t from-white via-white/60 to-transparent" />
 
       <div className="bg-white/95 backdrop-blur-sm border-t border-warm-200 shadow-[0_-4px_24px_rgba(0,0,0,0.07)] pointer-events-auto">
         <div className="max-w-2xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3">
-          {/* Mobile */}
           <div className="flex sm:hidden items-center gap-2 h-12">
             <button
               onClick={onBack}
@@ -257,7 +248,6 @@ function StickyBottomBar({ onBack, onRetry, onNewExam, canRetry }) {
             </div>
           </div>
 
-          {/* Desktop */}
           <div className="hidden sm:flex items-center justify-between gap-3">
             <Button
               variant="ghost"
@@ -294,7 +284,6 @@ function StickyBottomBar({ onBack, onRetry, onNewExam, canRetry }) {
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
 export function ResultsPage() {
   usePageTitle(PAGE_TITLES.examResults ?? "Rezultati");
 
@@ -311,7 +300,6 @@ export function ResultsPage() {
     (!examIdParam || lastResult.examId === examIdParam) &&
     (!attemptIdParam || lastResult.attemptId === attemptIdParam);
 
-  // ── Remote data (when navigating to old result by URL) ───────────────────
   const {
     data: attemptData,
     isLoading: loadingAttempt,
@@ -341,7 +329,6 @@ export function ResultsPage() {
     ? lastResult?.attemptId
     : (attemptData?.id ?? attemptIdParam);
 
-  // ── Answer key ───────────────────────────────────────────────────────────
   const {
     data: answerKey,
     isLoading: loadingKey,
@@ -357,7 +344,6 @@ export function ResultsPage() {
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   });
 
-  // ── Refresh ──────────────────────────────────────────────────────────────
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
@@ -373,7 +359,6 @@ export function ResultsPage() {
     }
   }, [retryKey, refetchAttempt, refetchExam, hasStoreResult]);
 
-  // ── Resolved data ────────────────────────────────────────────────────────
   const resolvedData = useMemo(() => {
     if (hasStoreResult && lastResult) {
       return {
@@ -406,7 +391,7 @@ export function ResultsPage() {
       questions: examContent.questions ?? [],
       answers: restoredAnswers,
       passages: examContent.passages ?? {},
-      flagged: new Set(), // Not persisted in DB
+      flagged: new Set(),
       elapsedSeconds: attemptData.elapsed_seconds ?? null,
       rpcResult: {
         score_pct: attemptData.score_pct,
@@ -421,11 +406,10 @@ export function ResultsPage() {
         ).length,
       },
       examMeta: attemptData.exam ?? examContent.exam ?? null,
-      hasFlagged: false, // Flagged data is not persisted – always false for old attempts
+      hasFlagged: false,
     };
   }, [hasStoreResult, lastResult, attemptData, examContent]);
 
-  // ── Action handlers ──────────────────────────────────────────────────────
   const handleRetry = useCallback(() => {
     const examId = resolvedData?.examId;
     if (!examId) return;
@@ -444,12 +428,10 @@ export function ResultsPage() {
     navigate("/predmeti/" + (subjectId ?? ""));
   }, [resolvedData, resetExam, navigate]);
 
-  // Confetti on good score
   useConfetti(
     resolvedData !== null && (resolvedData.rpcResult?.score_pct ?? 0) >= 75,
   );
 
-  // ── Guard states ─────────────────────────────────────────────────────────
   if (!hasStoreResult && !attemptIdParam) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-10">
@@ -504,7 +486,6 @@ export function ResultsPage() {
     );
   }
 
-  // ── Derived values ───────────────────────────────────────────────────────
   const {
     questions,
     answers,
@@ -532,8 +513,6 @@ export function ResultsPage() {
   ];
   const scoreable = questions.filter((q) => q.questionType !== "fill_blank_mc");
 
-  // *** FIX: filterCounts.wrong uses letter comparison, NOT answerInfo.isCorrect ***
-  // Also: don't count as "wrong" while key is still loading (avoid confusing high number)
   const filterCounts = {
     all: scoreable.length,
     wrong: !answerKey
@@ -571,7 +550,6 @@ export function ResultsPage() {
     }
   });
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
       <div className="max-w-2xl mx-auto px-3 sm:px-6 py-6 sm:py-8 pb-32 sm:pb-28">
@@ -581,7 +559,6 @@ export function ResultsPage() {
           backLink={backLink}
         />
 
-        {/* Score */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -601,17 +578,14 @@ export function ResultsPage() {
           )}
         </motion.div>
 
-        {/* Answer key error */}
         <AnimatePresence>
           {keyError && (
             <AnswerKeyError onRetry={retryKey} isFetching={fetchingKey} />
           )}
         </AnimatePresence>
 
-        {/* Audio transcripts */}
         <AudioTranscriptPanel passages={passages} />
 
-        {/* Review section */}
         <ReviewHeader
           filter={filter}
           setFilter={setFilter}
@@ -622,12 +596,10 @@ export function ResultsPage() {
           isFetching={fetchingKey}
         />
 
-        {/* Flagged unavailable note (only when loading from DB) */}
         {!hasFlagged && !hasStoreResult && filter !== "flagged" && (
           <FlaggedUnavailableNote />
         )}
 
-        {/* Questions */}
         <AnimatePresence mode="wait">
           {loadingKey && !answerKey ? (
             <motion.div
