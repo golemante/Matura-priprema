@@ -59,7 +59,8 @@ function parseExamError(error) {
 }
 
 // ─── GlobalAudioBar ───────────────────────────────────────────────────────────
-function GlobalAudioBar({ audio }) {
+// compact prop: uži prikaz kada je bar izvan passage kolone (standalone audio)
+function GlobalAudioBar({ audio, compact = false }) {
   if (!audio.hasAudio) return null;
 
   const track = audio.currentTrack;
@@ -68,7 +69,7 @@ function GlobalAudioBar({ audio }) {
 
   if (audio.hasError) {
     return (
-      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 font-medium">
         <AlertCircle size={13} className="flex-shrink-0" />
         Audio nije dostupan
       </div>
@@ -77,7 +78,12 @@ function GlobalAudioBar({ audio }) {
 
   if (isDone) {
     return (
-      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-green-50 border border-green-200">
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-xl bg-green-50 border border-green-200",
+          compact && "text-xs",
+        )}
+      >
         <Headphones size={13} className="text-green-500 flex-shrink-0" />
         <span className="text-xs text-green-700 font-semibold">
           Sve snimke završene
@@ -89,7 +95,7 @@ function GlobalAudioBar({ audio }) {
   if (hasBlockedAutoplay && !isPlaying) {
     return (
       <div className="rounded-xl border border-sky-200 bg-sky-50 overflow-hidden">
-        <div className="px-3.5 py-2.5 flex items-center gap-2.5">
+        <div className="px-3 py-2.5 flex items-center gap-2.5">
           <Headphones size={13} className="text-sky-500 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-sky-700 truncate">
@@ -101,7 +107,7 @@ function GlobalAudioBar({ audio }) {
           </div>
           <button
             onClick={manualStart}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white transition-colors active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white transition-colors active:scale-95 flex-shrink-0"
           >
             <Play size={11} />
             Pokreni
@@ -118,7 +124,7 @@ function GlobalAudioBar({ audio }) {
           <AlertCircle size={12} className="text-amber-500 flex-shrink-0" />
           <p className="text-[11px] text-amber-700 leading-snug">
             <span className="font-semibold">"{audio.trackSkipWarning}"</span>{" "}
-            nije mogla biti učitana — preskočeno na sljedeću snimku.
+            nije mogla biti učitana — preskočena.
           </p>
         </div>
       )}
@@ -129,6 +135,7 @@ function GlobalAudioBar({ audio }) {
           isIntro ? "bg-amber-50 border-amber-200" : "bg-sky-50 border-sky-200",
         )}
       >
+        {/* Progress traka */}
         <div className={cn("h-1", isIntro ? "bg-amber-100" : "bg-sky-100")}>
           <div
             ref={audio.progressBarRef}
@@ -137,7 +144,12 @@ function GlobalAudioBar({ audio }) {
           />
         </div>
 
-        <div className="px-3.5 py-2.5 flex items-center gap-2.5">
+        <div
+          className={cn(
+            "flex items-center gap-2.5",
+            compact ? "px-3 py-2" : "px-3.5 py-2.5",
+          )}
+        >
           <Headphones
             size={13}
             className={cn(
@@ -146,6 +158,7 @@ function GlobalAudioBar({ audio }) {
             )}
           />
 
+          {/* Waveform animacija */}
           {isPlaying && (
             <span className="flex gap-px items-end h-3 flex-shrink-0">
               {[7, 11, 8, 11, 7].map((h, i) => (
@@ -165,7 +178,8 @@ function GlobalAudioBar({ audio }) {
           <div className="flex-1 min-w-0">
             <p
               className={cn(
-                "text-xs font-semibold truncate",
+                "font-semibold truncate",
+                compact ? "text-[11px]" : "text-xs",
                 isIntro ? "text-amber-700" : "text-sky-700",
               )}
             >
@@ -198,11 +212,11 @@ function GlobalAudioBar({ audio }) {
                 pauzirano
               </span>
             )}
-
           {audio.duration > 0 && (
             <span
               className={cn(
-                "text-[10px] tabular-nums font-medium flex-shrink-0",
+                "tabular-nums font-medium flex-shrink-0",
+                compact ? "text-[10px]" : "text-[10px]",
                 isIntro ? "text-amber-500" : "text-sky-500",
               )}
             >
@@ -311,39 +325,26 @@ function ExamTopBar({
           >
             <ArrowLeft size={18} />
           </Link>
-
           <p className="text-sm font-semibold text-warm-700 truncate hidden sm:block flex-1 min-w-0">
             {examTitle}
           </p>
-
           <div className="hidden md:flex items-center gap-2.5 flex-1 max-w-[200px]">
             <ProgressBar value={answeredCount} max={totalVisible} />
             <span className="text-xs text-warm-400 tabular-nums whitespace-nowrap">
               {answeredCount}/{totalVisible}
             </span>
           </div>
-
           <div className="flex-1 sm:hidden" />
-
           {isPauseSyncing && (
             <span className="hidden sm:flex items-center gap-1 text-xs text-warm-400 flex-shrink-0">
               <Loader2 size={11} className="animate-spin" />
               <span className="hidden md:inline">Sinkronizacija...</span>
             </span>
           )}
-
           <ExamTimer {...timer} />
-
           <button
             onClick={isPaused ? onResume : onPause}
             disabled={isSyncing}
-            title={
-              isPauseSyncing
-                ? "Čekaj sinkronizaciju s poslužiteljem..."
-                : isPaused
-                  ? "Nastavi ispit"
-                  : "Pauziraj ispit"
-            }
             className={cn(
               "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
               isSyncing && "opacity-60 cursor-not-allowed",
@@ -369,7 +370,6 @@ function ExamTopBar({
                   : "Pauza"}
             </span>
           </button>
-
           <button
             onClick={onOpenNav}
             className="lg:hidden flex-shrink-0 p-2 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition-colors"
@@ -426,8 +426,6 @@ function ExamEmptyState({ backLink, examMeta }) {
   );
 }
 
-// ─── SubmitModal ──────────────────────────────────────────────────────────────
-// Pozicioniran u JSX korijenu QuizPage — kao fixed overlay dobar je gdje god je.
 function SubmitModal({
   open,
   onClose,
@@ -521,7 +519,6 @@ function DraftModal({ open, onConfirm, onDiscard }) {
   );
 }
 
-// ─── MobileNavDrawer ──────────────────────────────────────────────────────────
 function MobileNavDrawer({
   show,
   onClose,
@@ -568,7 +565,6 @@ function MobileNavDrawer({
                 <X size={16} className="text-warm-500" />
               </button>
             </div>
-
             <div className="flex-1 overflow-y-auto p-4">
               <QuestionNav
                 questions={questions}
@@ -581,8 +577,6 @@ function MobileNavDrawer({
                 }}
               />
             </div>
-
-            {/* Submit button u draweru — odvojen od QuestionNav */}
             <div className="p-4 border-t border-warm-200 space-y-2">
               {!allAnswered && (
                 <p className="text-[11px] text-warm-400 text-center">
@@ -621,7 +615,6 @@ function MobileNavDrawer({
   );
 }
 
-// ─── MobileBottomBar ──────────────────────────────────────────────────────────
 function MobileBottomBar({
   currentIndex,
   totalVisible,
@@ -640,7 +633,7 @@ function MobileBottomBar({
           onClick={onPrev}
           disabled={!hasPrev}
           className={cn(
-            "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors min-w-0 flex-shrink-0",
+            "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors flex-shrink-0",
             !hasPrev
               ? "text-warm-300 cursor-not-allowed"
               : "text-warm-700 hover:bg-warm-100 active:bg-warm-200",
@@ -649,7 +642,6 @@ function MobileBottomBar({
           <ArrowLeft size={16} />
           <span className="hidden xs:inline text-xs">Preth.</span>
         </button>
-
         <button
           onClick={onOpenNav}
           className="flex-1 flex items-center justify-center gap-2.5 py-2 rounded-xl bg-warm-100 hover:bg-warm-200 active:bg-warm-300 transition-colors"
@@ -662,7 +654,6 @@ function MobileBottomBar({
             · {answeredCount} odg.
           </span>
         </button>
-
         {isLast ? (
           <button
             onClick={onSubmit}
@@ -685,9 +676,6 @@ function MobileBottomBar({
   );
 }
 
-// ─── DesktopSubmitButton ─────────────────────────────────────────────────────
-// Uvijek vidljiv na desktopu ispod QuestionNav u desnom sidebaru.
-// Mijenja boju kad su sva pitanja odgovorena.
 function DesktopSubmitButton({
   onSubmit,
   answeredCount,
@@ -697,7 +685,6 @@ function DesktopSubmitButton({
 }) {
   const unanswered = totalVisible - answeredCount;
   const allAnswered = unanswered === 0;
-
   return (
     <div className="mt-2 space-y-1.5">
       {!allAnswered && (
@@ -819,10 +806,24 @@ export function QuizPage() {
   const subjectId = examMeta?.subject_id ?? examId?.split("-")[0];
   const backLink = `/predmeti/${subjectId}`;
 
-  const hasAnyPassage = useMemo(
-    () => questions.some((q) => q.passageId),
-    [questions],
+  // Postoji li ijedna pasaža s tekstualnim sadržajem (nije audio type)
+  // Određuje hoće li biti prikazana lijeva kolona za pasaže
+  const hasTextPassage = useMemo(
+    () =>
+      questions.some((q) => {
+        if (!q.passageId) return false;
+        const p = passages[q.passageId];
+        return p && p.contentType !== "audio" && !!p.content;
+      }),
+    [questions, passages],
   );
+
+  // Trenutna pasaža je audio type (ispit slušanja za trenutno pitanje)
+  const isAudioOnly = currentPassage?.contentType === "audio";
+
+  // Lijeva kolona: postoji samo ako ima tekst pasaža
+  // Audio pasaže nemaju lijevu kolonu — audio bar ide iznad pitanja
+  const showPassageColumn = hasTextPassage;
 
   const audioElement = (
     <audio
@@ -878,8 +879,6 @@ export function QuizPage() {
       </>
     );
 
-  const isAudioOnly = currentPassage?.contentType === "audio";
-
   return (
     <>
       {audioElement}
@@ -899,7 +898,6 @@ export function QuizPage() {
           onOpenNav={() => setMobileNavOpen(true)}
         />
 
-        {/* Modali — fixed overlay, pozicija u JSX nije bitna */}
         <SubmitModal
           open={showSubmitModal}
           onClose={() => setShowSubmitModal(false)}
@@ -914,7 +912,6 @@ export function QuizPage() {
           onConfirm={confirmRestoreDraft}
           onDiscard={discardDraft}
         />
-
         <MobileNavDrawer
           show={mobileNavOpen}
           onClose={() => setMobileNavOpen(false)}
@@ -930,37 +927,47 @@ export function QuizPage() {
           isSubmitting={isSubmitting}
         />
 
-        {/* ── Glavni sadržaj ───────────────────────────────────────── */}
         <div className="flex-1 page-container py-5 pb-20 lg:pb-5">
           <div className="flex flex-col lg:flex-row gap-5 h-full">
-            {/* Lijeva kolona: audio + passage */}
-            {hasAnyPassage && (
+            {/* ── Lijeva kolona: passage (samo za ispit čitanja) ── */}
+            {showPassageColumn && (
               <div
                 className={cn(
-                  "lg:w-[42%] xl:w-[38%] flex-shrink-0",
+                  "lg:flex-shrink-0",
+                  // Širina kolone — umjerenija nego ranije za bolju proporciju
+                  "lg:w-[40%] xl:w-[36%]",
                   "lg:sticky lg:top-[4.5rem] lg:self-start",
+                  // Max-height na desktopu — PassageDisplay unutra scrolla
                   "lg:max-h-[calc(100dvh-5.5rem)]",
                   "flex flex-col gap-3",
                 )}
               >
-                <GlobalAudioBar audio={audio} />
-                {currentPassage && !isAudioOnly ? (
+                {/* Audio bar iznad pasaže (ako postoji audio + tekst) */}
+                {audio.hasAudio && <GlobalAudioBar audio={audio} />}
+
+                {/* Pasaža s tekstom — zauzima ostatak visine kolone */}
+                {currentPassage && !isAudioOnly && (
                   <PassageDisplay
                     passage={currentPassage}
+                    // flex-1: popunjava slobodnu visinu u koloni
+                    // overflow-hidden: unutarnji scroll radi u PassageDisplayu
                     className="lg:flex-1 lg:overflow-hidden"
                   />
-                ) : !isAudioOnly ? (
-                  <div className="hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-warm-300 bg-warm-50/80 min-h-[180px]">
-                    <p className="text-xs text-warm-400 font-medium text-center px-4">
-                      Ovo pitanje nema polazni tekst
-                    </p>
-                  </div>
-                ) : null}
+                )}
               </div>
             )}
 
-            {/* Srednja kolona: pitanje + desktop prev/next */}
+            {/* ── Srednja kolona: pitanje ───────────────────────── */}
             <div className="flex-1 min-w-0 flex flex-col">
+              {/* Audio bar iznad pitanja — samo za čisti ispit slušanja
+                  (nema tekst pasaže, audio bar nije u lijevoj koloni) */}
+              {!showPassageColumn && audio.hasAudio && (
+                <div className="mb-3">
+                  <GlobalAudioBar audio={audio} compact />
+                </div>
+              )}
+
+              {/* Scrollable pitanje na desktopu */}
               <div className="flex-1 lg:overflow-y-auto lg:max-h-[calc(100dvh-14rem)] lg:pr-0.5">
                 <AnimatePresence custom={direction} mode="wait">
                   <motion.div
@@ -1012,7 +1019,7 @@ export function QuizPage() {
               </div>
             </div>
 
-            {/* Desna kolona: QuestionNav + submit button (samo desktop) */}
+            {/* ── Desna kolona: QuestionNav + submit (samo desktop) ── */}
             <div className="hidden lg:block lg:w-56 xl:w-64 flex-shrink-0">
               <div className="sticky top-[4.5rem]">
                 <QuestionNav
@@ -1022,7 +1029,6 @@ export function QuizPage() {
                   currentIndex={currentIndex}
                   onGoTo={handleGoTo}
                 />
-                {/* Submit button ispod nava — uvijek dostupan na desktopu */}
                 <DesktopSubmitButton
                   onSubmit={openSubmitModal}
                   answeredCount={answeredCount}
@@ -1035,7 +1041,6 @@ export function QuizPage() {
           </div>
         </div>
 
-        {/* Mobile bottom bar */}
         {!isPaused && (
           <MobileBottomBar
             currentIndex={currentIndex}

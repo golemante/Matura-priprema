@@ -1,6 +1,6 @@
 // components/exam/PassageDisplay.jsx
-import { useState, useRef } from "react";
-import { ChevronDown, BookOpen } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   PassageSafeHtml,
   FootnoteSafeHtml,
@@ -13,49 +13,49 @@ const CONTENT_TYPES = {
     bg: "bg-purple-50",
     badge: "bg-purple-100 text-purple-700",
     border: "border-purple-200",
+    divider: "border-purple-200",
   },
   prose: {
     label: "Proza",
     bg: "bg-amber-50",
     badge: "bg-amber-100 text-amber-700",
     border: "border-amber-200",
+    divider: "border-amber-200",
   },
   drama: {
     label: "Dramski tekst",
     bg: "bg-blue-50",
     badge: "bg-blue-100 text-blue-700",
     border: "border-blue-200",
+    divider: "border-blue-200",
   },
   article: {
     label: "Članak",
     bg: "bg-emerald-50",
     badge: "bg-emerald-100 text-emerald-700",
     border: "border-emerald-200",
+    divider: "border-emerald-200",
   },
   essay: {
     label: "Esej",
     bg: "bg-orange-50",
     badge: "bg-orange-100 text-amber-700",
     border: "border-orange-200",
-  },
-  audio: {
-    label: "Ispit slušanja",
-    bg: "bg-sky-50",
-    badge: "bg-sky-100 text-sky-700",
-    border: "border-sky-200",
+    divider: "border-orange-200",
   },
   other: {
     label: "Tekst",
     bg: "bg-warm-50",
     badge: "bg-warm-100 text-warm-600",
     border: "border-warm-200",
+    divider: "border-warm-200",
   },
 };
 
 function FootnoteList({ footnotes }) {
   if (!Array.isArray(footnotes) || footnotes.length === 0) return null;
   return (
-    <div className="mt-3 pt-3 border-t border-warm-200 space-y-1">
+    <div className="mt-3 pt-3 border-t border-warm-200 space-y-1.5">
       {footnotes.map((fn, i) => (
         <p key={i} className="text-xs text-warm-500 leading-relaxed">
           <sup className="font-semibold mr-0.5">{fn.marker}</sup>
@@ -66,73 +66,104 @@ function FootnoteList({ footnotes }) {
   );
 }
 
-export function PassageDisplay({ passage }) {
+export function PassageDisplay({ passage, className }) {
   const [collapsed, setCollapsed] = useState(false);
-  const contentRef = useRef(null);
 
   if (!passage) return null;
+  if (passage.contentType === "audio") return null;
+  if (!passage.content) return null;
 
   const typeKey = passage.contentType ?? "other";
-  const typeConfig = CONTENT_TYPES[typeKey] ?? CONTENT_TYPES.other;
-  const isAudioOnly = typeKey === "audio";
-  const hasText = !isAudioOnly && !!passage.content;
+  const cfg = CONTENT_TYPES[typeKey] ?? CONTENT_TYPES.other;
 
-  if (isAudioOnly) return null;
+  const hasAuthor = !!passage.author;
+  const hasSource = !!passage.source;
+  const hasTitle = !!passage.title;
 
   return (
     <div
       className={cn(
-        "rounded-xl border flex flex-col",
-        typeConfig.bg,
-        typeConfig.border,
+        "flex flex-col rounded-xl border overflow-hidden bg-white",
+        cfg.border,
+        className,
       )}
     >
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-inherit">
-        <BookOpen size={13} className="text-warm-400 flex-shrink-0" />
-        <span className="text-xs font-semibold text-warm-700 flex-1 truncate">
-          {passage.title ?? (isAudioOnly ? "Ispit slušanja" : "Polazni tekst")}
-        </span>
-        <span
-          className={cn(
-            "text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0",
-            typeConfig.badge,
-          )}
-        >
-          {typeConfig.label}
-        </span>
+      <div
+        className={cn(
+          "flex-shrink-0 px-4 py-2.5 border-b",
+          cfg.bg,
+          cfg.divider,
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0 space-y-1">
+            <span
+              className={cn(
+                "inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md",
+                cfg.badge,
+              )}
+            >
+              {cfg.label}
+            </span>
 
-        {!isAudioOnly && hasText && (
+            {hasTitle && (
+              <p className="text-xs font-bold text-warm-900 leading-snug">
+                {passage.title}
+              </p>
+            )}
+
+            {(hasAuthor || hasSource) && (
+              <p className="text-[11px] text-warm-500 leading-snug">
+                {[hasAuthor && passage.author, hasSource && passage.source]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            )}
+          </div>
+
           <button
             onClick={() => setCollapsed((c) => !c)}
-            className="flex items-center gap-1 text-xs text-warm-500 hover:text-warm-700 transition-colors flex-shrink-0 ml-2 lg:hidden"
+            aria-label={collapsed ? "Prikaži tekst" : "Sakrij tekst"}
+            className={cn(
+              "flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg",
+              "text-[11px] font-medium text-warm-500",
+              "hover:bg-black/5 transition-colors lg:hidden",
+            )}
           >
             <span>{collapsed ? "Prikaži" : "Sakrij"}</span>
             <ChevronDown
-              size={14}
-              className={cn("transition-transform", collapsed && "-rotate-90")}
+              size={12}
+              className={cn(
+                "transition-transform duration-200",
+                collapsed && "-rotate-90",
+              )}
             />
           </button>
-        )}
+        </div>
       </div>
 
       {!collapsed && (
         <div
           className={cn(
-            "px-4 py-3 space-y-3",
-            "max-h-64 overflow-y-auto",
-            "lg:max-h-none lg:flex-1 lg:overflow-y-auto",
+            "overflow-y-auto",
+            "scrollbar-thin scrollbar-thumb-warm-300 scrollbar-track-transparent",
+            "max-h-56",
+            "lg:flex-1 lg:max-h-none",
           )}
         >
-          {hasText && (
-            <div ref={contentRef}>
-              <PassageSafeHtml
-                html={passage.content}
-                contentType={typeKey}
-                className="passage-content"
-              />
-              <FootnoteList footnotes={passage.footnotes} />
-            </div>
-          )}
+          <div className="px-4 py-3">
+            <PassageSafeHtml
+              html={passage.content}
+              className={cn(
+                "passage-content",
+                typeKey === "poem" && "passage-poem",
+                typeKey === "drama" && "passage-drama",
+                typeKey === "article" && "passage-article",
+              )}
+            />
+
+            <FootnoteList footnotes={passage.footnotes} />
+          </div>
         </div>
       )}
     </div>
